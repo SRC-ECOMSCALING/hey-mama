@@ -16,9 +16,17 @@ export const isNative =
 
 // Base URL of the backend. Empty string => same-origin (web dev / web prod).
 // For native builds set VITE_API_BASE_URL=https://your-backend at build time.
-export const API_BASE_URL = (
-  (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? ""
-).replace(/\/$/, "");
+// Normalizes the value: trims a trailing slash and prepends https:// when the
+// scheme is missing (e.g. "my-app.up.railway.app").
+function normalizeBaseUrl(raw: string | undefined): string {
+  const value = (raw ?? "").trim().replace(/\/$/, "");
+  if (!value) return "";
+  return /^https?:\/\//i.test(value) ? value : `https://${value}`;
+}
+
+export const API_BASE_URL = normalizeBaseUrl(
+  import.meta.env.VITE_API_BASE_URL as string | undefined,
+);
 
 // Resolve an API path to a full URL.
 export function apiUrl(path: string): string {

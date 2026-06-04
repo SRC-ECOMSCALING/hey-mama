@@ -24,6 +24,9 @@ export default defineConfig({
     },
   },
   root: path.resolve(import.meta.dirname, "client"),
+  // Load .env from the project dir (where .env lives), not the client root,
+  // so VITE_* vars (API base URL, Stripe, Google Maps) are exposed to the client.
+  envDir: import.meta.dirname,
   build: {
     outDir: path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,
