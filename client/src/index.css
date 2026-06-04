@@ -1,0 +1,187 @@
+/* Uppy styles */
+@import "https://releases.transloadit.com/uppy/v3.24.0/uppy.min.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: hsl(0, 0%, 100%);
+  --foreground: hsl(20, 14.3%, 4.1%);
+  --muted: hsl(60, 4.8%, 95.9%);
+  --muted-foreground: hsl(25, 5.3%, 44.7%);
+  --popover: hsl(0, 0%, 100%);
+  --popover-foreground: hsl(20, 14.3%, 4.1%);
+  --card: hsl(0, 0%, 100%);
+  --card-foreground: hsl(20, 14.3%, 4.1%);
+  --border: hsl(20, 5.9%, 90%);
+  --input: hsl(20, 5.9%, 90%);
+  --primary: hsl(207, 90%, 54%);
+  --primary-foreground: hsl(211, 100%, 99%);
+  --secondary: hsl(60, 4.8%, 95.9%);
+  --secondary-foreground: hsl(24, 9.8%, 10%);
+  --accent: hsl(60, 4.8%, 95.9%);
+  --accent-foreground: hsl(24, 9.8%, 10%);
+  --destructive: hsl(0, 84.2%, 60.2%);
+  --destructive-foreground: hsl(60, 9.1%, 97.8%);
+  --ring: hsl(20, 14.3%, 4.1%);
+  --radius: 0.5rem;
+  
+  /* MomConnect custom colors */
+  --primary-pink: hsl(331, 64%, 82%);
+  --primary-blue: hsl(194, 52%, 72%);
+  --secondary-rose: hsl(351, 100%, 94%);
+  --secondary-alice: hsl(207, 100%, 95%);
+  --accent-coral: hsl(351, 100%, 81%);
+  --accent-powder: hsl(194, 65%, 75%);
+  --warm-gray: hsl(210, 17%, 98%);
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply font-sans antialiased text-foreground bg-background;
+    background: linear-gradient(to bottom right, var(--secondary-rose), var(--secondary-alice));
+  }
+}
+
+@layer utilities {
+  .primary-pink {
+    background-color: var(--primary-pink);
+  }
+  
+  .primary-blue {
+    background-color: var(--primary-blue);
+  }
+  
+  .secondary-rose {
+    background-color: var(--secondary-rose);
+  }
+  
+  .secondary-alice {
+    background-color: var(--secondary-alice);
+  }
+  
+  .accent-coral {
+    background-color: var(--accent-coral);
+  }
+  
+  .accent-powder {
+    background-color: var(--accent-powder);
+  }
+  
+  .warm-gray {
+    background-color: var(--warm-gray);
+  }
+  
+  .text-primary-pink {
+    color: var(--primary-pink);
+  }
+  
+  .text-primary-blue {
+    color: var(--primary-blue);
+  }
+  
+  .text-accent-coral {
+    color: var(--accent-coral);
+  }
+  
+  .text-accent-powder {
+    color: var(--accent-powder);
+  }
+  
+  .border-primary-pink {
+    border-color: var(--primary-pink);
+  }
+  
+  .border-primary-blue {
+    border-color: var(--primary-blue);
+  }
+  
+  /* Line clamp utility for text truncation */
+  .line-clamp-3 {
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+}
+
+/* Hide Google Maps POI markers and labels */
+.gm-style .gm-style-pbc {
+  display: none !important;
+}
+
+/* Hide Google Maps default POI markers (pins/icons) */
+.gm-style img[src*="spotlight"] {
+  display: none !important;
+}
+
+.gm-style img[src*="place"] {
+  display: none !important;
+}
+
+/* Hide POI info windows and popups from default markers */
+.gm-style button[aria-label*="Close"]:not([data-testid]) {
+  display: none !important;
+}
+
+/* Hide transit icons */
+.gm-style img[src*="transit"] {
+  display: none !important;
+}
+
+/* Floating hearts animation */
+@keyframes floatUp {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.5);
+  }
+  20% {
+    opacity: 1;
+  }
+  80% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -150px) scale(1);
+  }
+}
+
+@keyframes floatUpLeft {
+  0% {
+    opacity: 0;
+    transform: translate(calc(-50% - 30px), -50%) scale(0.5);
+  }
+  20% {
+    opacity: 1;
+  }
+  80% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(calc(-50% - 40px), -150px) scale(1);
+  }
+}
+
+@keyframes floatUpRight {
+  0% {
+    opacity: 0;
+    transform: translate(calc(-50% + 30px), -50%) scale(0.5);
+  }
+  20% {
+    opacity: 1;
+  }
+  80% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(calc(-50% + 40px), -150px) scale(1);
+  }
+}

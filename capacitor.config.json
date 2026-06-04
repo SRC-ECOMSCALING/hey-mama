@@ -1,0 +1,10 @@
+{
+  "appId": "com.heymama.app",
+  "appName": "HeyMama!",
+  "webDir": "dist/public",
+  "plugins": {
+    "SplashScreen": {
+      "launchAutoHide": false
+    }
+  }
+}
