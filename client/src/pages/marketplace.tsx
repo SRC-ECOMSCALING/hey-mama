@@ -309,7 +309,7 @@ export default function Marketplace() {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <div className="bg-white border-b border-gray-200 sticky top-0 z-10">
+      <div className="bg-white border-b border-gray-200 sticky top-0 z-10 safe-top">
         <div className="px-4 py-4">
           <h1 className="text-2xl font-bold text-gray-900 mb-4">{t("marketplace")}</h1>
           
@@ -795,7 +795,7 @@ export default function Marketplace() {
 
         {/* Add Button - Top Right */}
         <Button
-          className="fixed top-4 right-4 h-10 w-10 rounded-full text-white shadow-lg z-50"
+          className="fixed right-4 h-10 w-10 rounded-full text-white shadow-lg z-50 top-[calc(1rem_+_env(safe-area-inset-top))]"
           size="icon"
           onClick={() => setShowChoiceDialog(true)}
           data-testid="button-open-add-choice"

@@ -159,6 +159,14 @@ export default function Login() {
               </Button>
             </Link>
           </div>
+
+          <div className="mt-4 text-center">
+            <Link href="/privacy">
+              <Button variant="link" className="p-0 h-auto text-xs font-normal text-muted-foreground hover:text-gray-700" data-testid="link-privacy">
+                Privacy
+              </Button>
+            </Link>
+          </div>
         </CardContent>
       </Card>
     </div>

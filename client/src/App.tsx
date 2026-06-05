@@ -20,6 +20,7 @@ import Register from "@/pages/register";
 import Notifications from "@/pages/notifications";
 import Settings from "@/pages/settings";
 import Admin from "@/pages/admin";
+import Privacy from "@/pages/privacy";
 import { LanguageProvider } from "@/contexts/LanguageContext";
 
 function Router() {
@@ -41,6 +42,7 @@ function Router() {
   if (!isAuthenticated) {
     return (
       <Switch>
+        <Route path="/privacy" component={Privacy} />
         <Route path="/register" component={Register} />
         <Route path="/login" component={Login} />
         <Route path="/" component={Login} />
@@ -65,6 +67,7 @@ function Router() {
       <Route path="/profile/edit" component={ProfileEdit} />
       <Route path="/settings" component={Settings} />
       <Route path="/notifications" component={Notifications} />
+      <Route path="/privacy" component={Privacy} />
       <Route component={NotFound} />
     </Switch>
   );

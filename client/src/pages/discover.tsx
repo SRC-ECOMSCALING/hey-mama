@@ -380,7 +380,7 @@ export default function Discover() {
       {/* Map Content */}
       <main className="relative h-[calc(100vh-80px)] overflow-hidden bg-white">
         {/* Header - Floating on top of map */}
-        <header className="absolute top-4 left-4 right-4 bg-white shadow-lg rounded-2xl z-50">
+        <header className="absolute left-4 right-4 bg-white shadow-lg rounded-2xl z-50 top-[calc(1rem_+_env(safe-area-inset-top))]">
           <div className="flex items-center justify-between p-4">
             <Button
               variant="ghost"

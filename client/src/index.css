@@ -48,6 +48,22 @@
   }
 }
 
+/* --- Native safe areas (Capacitor) ------------------------------------- */
+/* Sticky page headers: pad the top by the device safe-area inset so they sit
+   below the status bar / notch instead of being overlapped. The header's
+   background fills the inset area, so it stays clean while scrolling. */
+header.sticky {
+  padding-top: env(safe-area-inset-top);
+}
+
+/* Utility classes to opt other elements into the safe-area insets. */
+.safe-top {
+  padding-top: env(safe-area-inset-top);
+}
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
 @layer utilities {
   .primary-pink {
     background-color: var(--primary-pink);
