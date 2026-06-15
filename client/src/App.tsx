@@ -21,6 +21,7 @@ import Notifications from "@/pages/notifications";
 import Settings from "@/pages/settings";
 import Admin from "@/pages/admin";
 import Privacy from "@/pages/privacy";
+import MarketChat from "@/pages/market-chat";
 import { LanguageProvider } from "@/contexts/LanguageContext";
 
 function Router() {
@@ -59,6 +60,7 @@ function Router() {
       <Route path="/locations" component={Locations} />
       <Route path="/messages" component={Messages} />
       <Route path="/chat/:matchId" component={Chat} />
+      <Route path="/market-chat/:itemId/:otherUserId" component={MarketChat} />
       <Route path="/matches" component={Matches} />
       <Route path="/marketplace" component={Marketplace} />
       <Route path="/marketplace/add" component={AddProduct} />

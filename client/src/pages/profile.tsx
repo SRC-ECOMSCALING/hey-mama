@@ -28,9 +28,21 @@ export default function Profile() {
   }
 
   if (!profile) {
+    // Legacy accounts may exist without a profile row: offer to create it
+    // instead of dead-ending (saving from the edit page creates the profile).
     return (
-      <div className="flex items-center justify-center h-screen">
+      <div className="flex flex-col items-center justify-center h-screen gap-4 px-6 text-center">
         <p className="text-gray-600">{t("profileNotFound")}</p>
+        <Button
+          className="bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-600 hover:to-purple-700 text-white"
+          onClick={() => setLocation("/profile/edit")}
+          data-testid="button-complete-profile"
+        >
+          Completa il tuo profilo
+        </Button>
+        <Button variant="ghost" onClick={() => setLocation("/")} data-testid="button-go-home">
+          Torna alla home
+        </Button>
       </div>
     );
   }
@@ -68,7 +80,7 @@ export default function Profile() {
       </header>
 
       {/* Profile Content */}
-      <div className="p-6 pb-20">
+      <div className="p-6 pb-nav">
         <div className="text-center mb-8">
           {profile.photoUrls && profile.photoUrls.length > 0 ? (
             <img

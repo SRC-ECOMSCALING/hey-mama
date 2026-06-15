@@ -64,6 +64,15 @@ header.sticky {
   padding-bottom: env(safe-area-inset-bottom);
 }
 
+/* Bottom spacing for pages that show the floating bottom navigation:
+   1rem gap + ~4rem bar height + 2rem breathing room, plus the device inset. */
+.pb-nav {
+  padding-bottom: calc(7rem + env(safe-area-inset-bottom));
+}
+.mb-nav {
+  margin-bottom: calc(7rem + env(safe-area-inset-bottom));
+}
+
 @layer utilities {
   .primary-pink {
     background-color: var(--primary-pink);

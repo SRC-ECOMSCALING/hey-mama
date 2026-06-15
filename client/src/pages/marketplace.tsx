@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { getMarketPrefs, setMarketPrefs, type MarketPrefs } from "@/lib/marketPrefs";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { useForm } from "react-hook-form";
@@ -12,7 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { Heart, Search, Filter, Euro, MapPin, ExternalLink, Plus, Clock, ChevronLeft, ChevronRight, X, Edit, Trash2, Loader2, Info } from "lucide-react";
+import { Heart, Search, Filter, Euro, MapPin, ExternalLink, Plus, Clock, ChevronLeft, ChevronRight, X, Edit, Trash2, Loader2, Info, SlidersHorizontal, ShoppingBag, Wrench, Tag, HandCoins } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import Navigation from "@/components/navigation";
 import { useToast } from "@/hooks/use-toast";
@@ -79,6 +80,28 @@ export default function Marketplace() {
   const [showChoiceDialog, setShowChoiceDialog] = useState(false);
   const [showUserInfoModal, setShowUserInfoModal] = useState(false);
   const [selectedUserProfile, setSelectedUserProfile] = useState<Profile | null>(null);
+
+  // Marketplace onboarding preferences: when missing (first access), a setup
+  // screen asks for city / interest / buy-or-sell, then opens the right view.
+  const [prefs, setPrefs] = useState<MarketPrefs | null>(() => getMarketPrefs());
+  const [showSetup, setShowSetup] = useState(() => getMarketPrefs() === null);
+  const [draftCity, setDraftCity] = useState(() => getMarketPrefs()?.city ?? "");
+  const [draftInterest, setDraftInterest] = useState<"items" | "services" | null>(() => getMarketPrefs()?.interest ?? null);
+  const [draftMode, setDraftMode] = useState<"buy" | "sell" | null>(() => getMarketPrefs()?.mode ?? null);
+  const [mainTab, setMainTab] = useState<string>(() => (getMarketPrefs()?.interest === "services" ? "services" : "marketplace"));
+  const [marketSubTab, setMarketSubTab] = useState<string>(() => (getMarketPrefs()?.mode === "sell" ? "my-products" : "items"));
+
+  const applyPrefs = (next: MarketPrefs) => {
+    setMarketPrefs(next);
+    setPrefs(next);
+    setMainTab(next.interest === "services" ? "services" : "marketplace");
+    setMarketSubTab(next.mode === "sell" ? "my-products" : "items");
+    setShowSetup(false);
+  };
+
+  const clearCityFilter = () => {
+    if (prefs) applyPrefs({ ...prefs, city: "" });
+  };
   const { toast } = useToast();
   const { t } = useLanguage();
   
@@ -216,11 +239,13 @@ export default function Marketplace() {
     queryKey: ["/api/services/looking-for"],
   });
 
+  const cityFilter = prefs?.city.trim().toLowerCase() ?? "";
   const filteredItems = items
-    .filter(item => 
+    .filter(item =>
       (item.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       item.description.toLowerCase().includes(searchQuery.toLowerCase())) &&
-      item.sellerId !== user?.id
+      item.sellerId !== user?.id &&
+      (!cityFilter || (item.location || "").toLowerCase().includes(cityFilter))
     )
     .sort((a, b) => {
       switch (sortBy) {
@@ -308,78 +333,245 @@ export default function Marketplace() {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      {/* First-access setup: choose city / interest / buy-or-sell */}
+      {showSetup && (
+        <div className="fixed inset-0 z-[60] bg-gradient-to-br from-pink-50 via-white to-purple-50 overflow-y-auto safe-top">
+          <div className="max-w-md mx-auto px-6 py-10 pb-16">
+            <div className="text-center mb-8">
+              <div className="w-16 h-16 mx-auto mb-4 rounded-2xl flex items-center justify-center shadow-lg" style={{ background: "linear-gradient(to right, var(--primary-pink), var(--accent-coral))" }}>
+                <ShoppingBag className="w-8 h-8 text-white" />
+              </div>
+              <h2 className="text-2xl font-bold text-gray-900 mb-1">Benvenuta nel Market!</h2>
+              <p className="text-sm text-gray-500">
+                Dicci cosa cerchi e ti mostriamo subito la pagina giusta. Potrai cambiare queste preferenze quando vuoi.
+              </p>
+            </div>
+
+            {/* Posizione */}
+            <div className="mb-6">
+              <p className="text-sm font-semibold text-gray-900 mb-2">📍 Dove ti trovi?</p>
+              <div className="relative">
+                <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Input
+                  placeholder="Città (opzionale, es. Novara)"
+                  value={draftCity}
+                  onChange={(e) => setDraftCity(e.target.value)}
+                  className="pl-11 h-12 rounded-2xl bg-white border-gray-200"
+                  data-testid="input-setup-city"
+                />
+              </div>
+              <p className="text-xs text-gray-400 mt-1.5">Vedrai prima gli annunci della tua zona. Lascia vuoto per tutte le città.</p>
+            </div>
+
+            {/* Interesse */}
+            <div className="mb-6">
+              <p className="text-sm font-semibold text-gray-900 mb-2">Cosa ti interessa?</p>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  onClick={() => setDraftInterest("items")}
+                  className={`rounded-2xl border-2 p-4 text-left transition-all ${
+                    draftInterest === "items" ? "border-pink-400 bg-pink-50 shadow-sm" : "border-gray-200 bg-white hover:border-gray-300"
+                  }`}
+                  data-testid="setup-interest-items"
+                >
+                  <Tag className={`w-6 h-6 mb-2 ${draftInterest === "items" ? "text-pink-500" : "text-gray-400"}`} />
+                  <p className="font-semibold text-sm text-gray-900">Oggetti</p>
+                  <p className="text-xs text-gray-500">Passeggini, vestiti, giochi…</p>
+                </button>
+                <button
+                  onClick={() => setDraftInterest("services")}
+                  className={`rounded-2xl border-2 p-4 text-left transition-all ${
+                    draftInterest === "services" ? "border-pink-400 bg-pink-50 shadow-sm" : "border-gray-200 bg-white hover:border-gray-300"
+                  }`}
+                  data-testid="setup-interest-services"
+                >
+                  <Wrench className={`w-6 h-6 mb-2 ${draftInterest === "services" ? "text-pink-500" : "text-gray-400"}`} />
+                  <p className="font-semibold text-sm text-gray-900">Servizi</p>
+                  <p className="text-xs text-gray-500">Babysitting, ripetizioni…</p>
+                </button>
+              </div>
+            </div>
+
+            {/* Compra o vendi */}
+            <div className="mb-8">
+              <p className="text-sm font-semibold text-gray-900 mb-2">Vuoi comprare o vendere?</p>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  onClick={() => setDraftMode("buy")}
+                  className={`rounded-2xl border-2 p-4 text-left transition-all ${
+                    draftMode === "buy" ? "border-pink-400 bg-pink-50 shadow-sm" : "border-gray-200 bg-white hover:border-gray-300"
+                  }`}
+                  data-testid="setup-mode-buy"
+                >
+                  <ShoppingBag className={`w-6 h-6 mb-2 ${draftMode === "buy" ? "text-pink-500" : "text-gray-400"}`} />
+                  <p className="font-semibold text-sm text-gray-900">Comprare</p>
+                  <p className="text-xs text-gray-500">Sfoglia gli annunci</p>
+                </button>
+                <button
+                  onClick={() => setDraftMode("sell")}
+                  className={`rounded-2xl border-2 p-4 text-left transition-all ${
+                    draftMode === "sell" ? "border-pink-400 bg-pink-50 shadow-sm" : "border-gray-200 bg-white hover:border-gray-300"
+                  }`}
+                  data-testid="setup-mode-sell"
+                >
+                  <HandCoins className={`w-6 h-6 mb-2 ${draftMode === "sell" ? "text-pink-500" : "text-gray-400"}`} />
+                  <p className="font-semibold text-sm text-gray-900">Vendere</p>
+                  <p className="text-xs text-gray-500">Gestisci i tuoi annunci</p>
+                </button>
+              </div>
+            </div>
+
+            <Button
+              className="w-full h-12 rounded-2xl text-base font-semibold text-white"
+              style={{ background: "linear-gradient(to right, var(--primary-pink), var(--accent-coral))" }}
+              disabled={!draftInterest || !draftMode}
+              onClick={() =>
+                draftInterest && draftMode &&
+                applyPrefs({ city: draftCity.trim(), interest: draftInterest, mode: draftMode })
+              }
+              data-testid="button-setup-start"
+            >
+              Inizia 🎉
+            </Button>
+            {prefs && (
+              <Button
+                variant="ghost"
+                className="w-full mt-2 text-gray-500"
+                onClick={() => setShowSetup(false)}
+                data-testid="button-setup-cancel"
+              >
+                Annulla
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Header */}
-      <div className="bg-white border-b border-gray-200 sticky top-0 z-10 safe-top">
-        <div className="px-4 py-4">
-          <h1 className="text-2xl font-bold text-gray-900 mb-4">{t("marketplace")}</h1>
-          
+      <div className="bg-white/90 backdrop-blur-md border-b border-gray-100 sticky top-0 z-10 safe-top">
+        <div className="px-4 pt-4 pb-3">
+          <div className="flex items-center gap-2 mb-3 pr-14">
+            <h1 className="text-2xl font-bold text-gray-900 flex-1">{t("marketplace")}</h1>
+            {prefs?.city && (
+              <button
+                onClick={clearCityFilter}
+                className="flex items-center gap-1 text-xs font-medium bg-pink-50 text-pink-600 rounded-full pl-2.5 pr-1.5 py-1.5 hover:bg-pink-100 transition-colors"
+                title="Rimuovi filtro città"
+                data-testid="chip-city-filter"
+              >
+                <MapPin className="h-3 w-3" />
+                {prefs.city}
+                <X className="h-3 w-3 ml-0.5" />
+              </button>
+            )}
+            <button
+              onClick={() => {
+                setDraftCity(prefs?.city ?? "");
+                setDraftInterest(prefs?.interest ?? null);
+                setDraftMode(prefs?.mode ?? null);
+                setShowSetup(true);
+              }}
+              className="p-2 rounded-full bg-gray-100 hover:bg-gray-200 transition-colors"
+              title="Preferenze marketplace"
+              data-testid="button-market-prefs"
+            >
+              <SlidersHorizontal className="h-4 w-4 text-gray-600" />
+            </button>
+          </div>
+
           {/* Search Bar */}
-          <div className="relative mb-4">
-            <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+          <div className="relative mb-3">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
             <Input
               placeholder={t("searchItems")}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10 bg-gray-50 border-gray-200 text-gray-900 placeholder-gray-400"
+              className="pl-11 h-11 rounded-full bg-gray-100 border-0 text-gray-900 placeholder-gray-400 focus-visible:ring-pink-300"
+              data-testid="input-market-search"
             />
           </div>
 
-          {/* Filters */}
-          <div className="flex gap-3 overflow-x-auto pb-2">
-            <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-              <SelectTrigger className="w-[180px] bg-white border-gray-200 text-gray-900">
-                <Filter className="h-4 w-4 mr-2" />
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {categoryKeys.map(categoryKey => (
-                  <SelectItem key={categoryKey} value={categoryKey}>
-                    {t(categoryKey)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            <Select value={sortBy} onValueChange={setSortBy}>
-              <SelectTrigger className="w-[150px] bg-white border-gray-200 text-gray-900">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="newest">{t("newest")}</SelectItem>
-                <SelectItem value="oldest">{t("oldest")}</SelectItem>
-                <SelectItem value="price-low">{t("priceLowest")}</SelectItem>
-                <SelectItem value="price-high">{t("priceHighest")}</SelectItem>
-              </SelectContent>
-            </Select>
+          {/* Category chips + sort */}
+          <div className="flex gap-2 overflow-x-auto pb-1 -mx-4 px-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            {categoryKeys.map(categoryKey => {
+              const active = selectedCategory === categoryKey;
+              return (
+                <button
+                  key={categoryKey}
+                  onClick={() => setSelectedCategory(categoryKey)}
+                  className={`shrink-0 px-3.5 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                    active
+                      ? "text-white shadow-sm"
+                      : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                  }`}
+                  style={active ? { background: "linear-gradient(to right, var(--primary-pink), var(--accent-coral))" } : undefined}
+                  data-testid={`chip-category-${categoryKey}`}
+                >
+                  {t(categoryKey)}
+                </button>
+              );
+            })}
+            <div className="shrink-0">
+              <Select value={sortBy} onValueChange={setSortBy}>
+                <SelectTrigger className="h-[30px] rounded-full bg-gray-100 border-0 text-xs text-gray-600 px-3.5 w-auto gap-1">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="newest">{t("newest")}</SelectItem>
+                  <SelectItem value="oldest">{t("oldest")}</SelectItem>
+                  <SelectItem value="price-low">{t("priceLowest")}</SelectItem>
+                  <SelectItem value="price-high">{t("priceHighest")}</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         </div>
       </div>
 
       {/* Tabs Content */}
       <div className="p-4">
-        <Tabs defaultValue="marketplace" className="w-full">
-          <TabsList className="grid w-full grid-cols-2 mb-6">
-            <TabsTrigger value="marketplace">{t("marketplace")}</TabsTrigger>
-            <TabsTrigger value="services">{t("services")}</TabsTrigger>
+        <Tabs value={mainTab} onValueChange={setMainTab} className="w-full">
+          <TabsList className="grid w-full grid-cols-2 mb-4 h-11 rounded-full bg-gray-100 p-1">
+            <TabsTrigger value="marketplace" className="rounded-full">{t("marketplace")}</TabsTrigger>
+            <TabsTrigger value="services" className="rounded-full">{t("services")}</TabsTrigger>
           </TabsList>
 
           <TabsContent value="marketplace" className="mt-0">
-            <Tabs defaultValue="items" className="w-full">
-              <TabsList className="grid w-full grid-cols-2 mb-4">
-                <TabsTrigger value="items">{t("forSale")}</TabsTrigger>
-                <TabsTrigger value="my-products">{t("myProducts")}</TabsTrigger>
+            <Tabs value={marketSubTab} onValueChange={setMarketSubTab} className="w-full">
+              <TabsList className="grid w-full grid-cols-2 mb-4 h-10 rounded-full bg-gray-100 p-1">
+                <TabsTrigger value="items" className="rounded-full">{t("forSale")}</TabsTrigger>
+                <TabsTrigger value="my-products" className="rounded-full">{t("myProducts")}</TabsTrigger>
               </TabsList>
 
               <TabsContent value="items" className="mt-0">
             {filteredItems.length === 0 ? (
-              <div className="text-center py-12">
-                <div className="text-gray-400 text-lg mb-2">{t("noItemsFound")}</div>
-                <div className="text-gray-500 text-sm">{t("tryDifferentCategory")}</div>
+              <div className="text-center py-14 px-6">
+                <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-pink-50 flex items-center justify-center">
+                  <ShoppingBag className="w-7 h-7 text-pink-400" />
+                </div>
+                <div className="text-gray-700 font-semibold mb-1">{t("noItemsFound")}</div>
+                <div className="text-gray-500 text-sm mb-4">
+                  {cityFilter
+                    ? `Nessun articolo a "${prefs?.city}". Prova ad allargare la ricerca.`
+                    : t("tryDifferentCategory")}
+                </div>
+                {cityFilter && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="rounded-full"
+                    onClick={clearCityFilter}
+                    data-testid="button-clear-city-empty"
+                  >
+                    <X className="w-3.5 h-3.5 mr-1.5" />
+                    Mostra tutte le città
+                  </Button>
+                )}
               </div>
             ) : (
-              <div className="space-y-4 mb-24">
+              <div className="space-y-4 mb-nav">
                 {filteredItems.map((item) => (
-              <Card key={item.id} className="bg-white border-gray-200 overflow-hidden cursor-pointer hover:shadow-md transition-shadow" onClick={() => {
+              <Card key={item.id} className="bg-white rounded-2xl border-0 shadow-sm overflow-hidden cursor-pointer hover:shadow-lg transition-shadow" onClick={() => {
                 setSelectedItem(item);
                 setSelectedImageIndex(0);
               }} data-testid={`card-product-${item.id}`}>
@@ -488,12 +680,17 @@ export default function Marketplace() {
                             <span className="text-white font-bold text-base">V</span>
                           </button>
                         )}
-                        <Button 
-                          size="default" 
+                        <Button
+                          size="default"
                           className="text-white px-3 sm:px-6 h-10 rounded-lg text-xs sm:text-sm shrink-0"
-                          style={{ 
+                          style={{
                             background: "linear-gradient(to right, var(--primary-pink), var(--accent-coral))"
                           }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setLocation(`/market-chat/${item.id}/${item.sellerId}`);
+                          }}
+                          data-testid={`button-message-seller-${item.id}`}
                         >
                           {t("message")}
                         </Button>
@@ -514,9 +711,9 @@ export default function Marketplace() {
                 <div className="text-gray-500 text-sm">{t("noProductsYet")}</div>
               </div>
             ) : (
-              <div className="space-y-4 mb-24">
+              <div className="space-y-4 mb-nav">
                 {userItems.map((item) => (
-                  <Card key={item.id} className="bg-white border-gray-200 overflow-hidden cursor-pointer hover:shadow-md transition-shadow" onClick={() => {
+                  <Card key={item.id} className="bg-white rounded-2xl border-0 shadow-sm overflow-hidden cursor-pointer hover:shadow-lg transition-shadow" onClick={() => {
                     setSelectedItem(item);
                     setSelectedImageIndex(0);
                   }} data-testid={`card-my-product-${item.id}`}>
@@ -631,9 +828,9 @@ export default function Marketplace() {
 
           <TabsContent value="services" className="mt-0">
             <Tabs defaultValue="my-services" className="w-full">
-              <TabsList className="grid w-full grid-cols-2 mb-4">
-                <TabsTrigger value="my-services">{t("myServices")}</TabsTrigger>
-                <TabsTrigger value="my-requests">{t("myRequests")}</TabsTrigger>
+              <TabsList className="grid w-full grid-cols-2 mb-4 h-10 rounded-full bg-gray-100 p-1">
+                <TabsTrigger value="my-services" className="rounded-full">{t("myServices")}</TabsTrigger>
+                <TabsTrigger value="my-requests" className="rounded-full">{t("myRequests")}</TabsTrigger>
               </TabsList>
 
               <TabsContent value="my-services" className="mt-0">
@@ -643,9 +840,9 @@ export default function Marketplace() {
                     <div className="text-gray-500 text-sm">{t("clickAddService")}</div>
                   </div>
                 ) : (
-                  <div className="space-y-4 mb-24">
+                  <div className="space-y-4 mb-nav">
                     {userServices.map((service) => (
-                      <Card key={service.id} className="bg-white border-gray-200 overflow-hidden">
+                      <Card key={service.id} className="bg-white rounded-2xl border-0 shadow-sm overflow-hidden">
                         <div className="flex">
                           {/* Icon Section for Services */}
                           <div className="w-32 h-32 flex-shrink-0 flex items-center justify-center p-4 bg-blue-50">
@@ -718,7 +915,7 @@ export default function Marketplace() {
                     <div className="text-gray-500 text-sm">{t("beFirstToRequest")}</div>
                   </div>
                 ) : (
-                  <div className="space-y-4 mb-24">
+                  <div className="space-y-4 mb-nav">
                     {userServiceRequests.map((post) => (
                       <Card key={post.id} className="bg-white border-gray-200 overflow-hidden">
                         <CardContent className="p-4">

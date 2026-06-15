@@ -9,6 +9,7 @@ import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
 import cookieSignature from "cookie-signature";
 import { emailService } from "./emailService";
+import { importOsmParks } from "./osmImport";
 import pg from "pg";
 import multer from "multer";
 import { parse } from "csv-parse/sync";
@@ -375,11 +376,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Global admin switch: when showTestProfiles is "false", test profiles are
+  // hidden from discovery and the map for everyone.
+  const shouldShowTestProfiles = async (): Promise<boolean> => {
+    try {
+      return (await storage.getSetting("showTestProfiles")) !== "false";
+    } catch {
+      return true; // fail open: never hide real content because of a settings error
+    }
+  };
+
   // Get all profiles for discovery (requires active subscription)
   app.get("/api/profiles/discover/:userId", requireAuth, async (req, res) => {
     try {
       const { userId } = req.params;
-      const profiles = await storage.getDiscoverableProfiles(userId);
+      let profiles = await storage.getDiscoverableProfiles(userId);
+      if (!(await shouldShowTestProfiles())) {
+        profiles = profiles.filter((p) => !p.isTestProfile);
+      }
       res.json(profiles);
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch profiles" });
@@ -389,7 +403,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get all profiles for map display (no limit, includes all profiles)
   app.get("/api/profiles/map", requireAuth, async (req, res) => {
     try {
-      const allProfiles = await storage.getAllProfiles();
+      let allProfiles = await storage.getAllProfiles();
+      if (!(await shouldShowTestProfiles())) {
+        allProfiles = allProfiles.filter((p) => !p.isTestProfile);
+      }
       res.json(allProfiles);
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch profiles" });
@@ -443,9 +460,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const updatedProfile = await storage.updateProfile(userId, updateData);
       if (!updatedProfile) {
-        return res.status(404).json({ message: "Profile not found" });
+        // Legacy account with no profile row: create it from the provided data
+        // so the user can self-heal by saving from the profile edit page.
+        const created = await storage.createProfile({
+          userId,
+          firstName: "",
+          lastName: "",
+          age: 18,
+          sex: "female",
+          bio: "",
+          location: "",
+          photoUrls: [],
+          kidsNumber: 0,
+          kidsAges: [],
+          hobbies: [],
+          distanceAway: "0 km",
+          ...updateData,
+        } as any);
+        return res.json(created);
       }
-      
+
       res.json(updatedProfile);
     } catch (error: any) {
       console.error("Error updating profile:", error);
@@ -1626,6 +1660,291 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("CSV upload error:", error);
       res.status(500).json({ message: "Failed to process CSV" });
+    }
+  });
+
+  // ===== Marketplace chat endpoints =====
+
+  // List the user's marketplace conversations (grouped by item + other user)
+  app.get("/api/marketplace/conversations", requireAuth, async (req: any, res) => {
+    try {
+      const userId = req.session.userId;
+      const msgs = await storage.getMarketplaceMessagesByUser(userId);
+
+      // Group by item + counterpart; messages are ordered ASC so the last
+      // one seen per key is the latest.
+      const grouped = new Map<string, { itemId: string; otherUserId: string; lastMessage: any; messageCount: number }>();
+      for (const m of msgs) {
+        const otherUserId = m.buyerId === userId ? m.sellerId : m.buyerId;
+        const key = `${m.itemId}:${otherUserId}`;
+        const existing = grouped.get(key);
+        grouped.set(key, {
+          itemId: m.itemId,
+          otherUserId,
+          lastMessage: m,
+          messageCount: (existing?.messageCount ?? 0) + 1,
+        });
+      }
+
+      const conversations = await Promise.all(
+        Array.from(grouped.values()).map(async (c) => {
+          const [item, otherProfile] = await Promise.all([
+            storage.getMarketplaceItem(c.itemId),
+            storage.getProfile(c.otherUserId),
+          ]);
+          return { ...c, item: item ?? null, otherProfile: otherProfile ?? null };
+        }),
+      );
+
+      conversations.sort(
+        (a, b) => new Date(b.lastMessage.createdAt).getTime() - new Date(a.lastMessage.createdAt).getTime(),
+      );
+      res.json(conversations);
+    } catch (error) {
+      console.error("Marketplace conversations error:", error);
+      res.status(500).json({ message: "Failed to fetch marketplace conversations" });
+    }
+  });
+
+  // Thread between the current user and another user about an item
+  app.get("/api/marketplace/messages/:itemId/:otherUserId", requireAuth, async (req: any, res) => {
+    try {
+      const userId = req.session.userId;
+      const { itemId, otherUserId } = req.params;
+      const all = await storage.getMarketplaceMessagesByItem(itemId);
+      const thread = all
+        .filter(
+          (m) =>
+            (m.buyerId === userId && m.sellerId === otherUserId) ||
+            (m.buyerId === otherUserId && m.sellerId === userId),
+        )
+        .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+
+      const [item, otherProfile] = await Promise.all([
+        storage.getMarketplaceItem(itemId),
+        storage.getProfile(otherUserId),
+      ]);
+      res.json({ item: item ?? null, otherProfile: otherProfile ?? null, messages: thread });
+    } catch (error) {
+      console.error("Marketplace thread error:", error);
+      res.status(500).json({ message: "Failed to fetch marketplace messages" });
+    }
+  });
+
+  // Send a marketplace message
+  app.post("/api/marketplace/messages", requireAuth, async (req: any, res) => {
+    try {
+      const userId = req.session.userId;
+      const { itemId, otherUserId, content } = req.body;
+      if (!itemId || typeof content !== "string" || !content.trim()) {
+        return res.status(400).json({ message: "itemId and content are required" });
+      }
+
+      const item = await storage.getMarketplaceItem(itemId);
+      if (!item) {
+        return res.status(404).json({ message: "Item not found" });
+      }
+
+      // The seller is fixed by the item; the buyer is whoever isn't the seller.
+      const sellerId = item.sellerId;
+      const buyerId = userId === sellerId ? otherUserId : userId;
+      if (!buyerId) {
+        return res.status(400).json({ message: "otherUserId is required when replying as the seller" });
+      }
+      if (userId !== sellerId && userId !== buyerId) {
+        return res.status(403).json({ message: "Not part of this conversation" });
+      }
+
+      const message = await storage.createMarketplaceMessage({
+        itemId,
+        buyerId,
+        sellerId,
+        senderId: userId,
+        content: content.trim(),
+      });
+      res.status(201).json(message);
+    } catch (error) {
+      console.error("Marketplace send message error:", error);
+      res.status(500).json({ message: "Failed to send message" });
+    }
+  });
+
+  // ===== Admin management endpoints =====
+
+  // Dashboard stats
+  app.get("/api/admin/stats", requireAdmin, async (_req, res) => {
+    try {
+      const [allUsers, allProfiles, allLocations, allItems] = await Promise.all([
+        storage.getAllUsers(),
+        storage.getAllProfiles(),
+        storage.getAllLocations(),
+        storage.getAllMarketplaceItems(),
+      ]);
+      res.json({
+        users: allUsers.length,
+        profiles: allProfiles.length,
+        testProfiles: allProfiles.filter((p) => p.isTestProfile).length,
+        locations: allLocations.length,
+        pendingLocations: allLocations.filter((l) => !l.approved).length,
+        marketplaceItems: allItems.length,
+      });
+    } catch (error) {
+      console.error("Admin stats error:", error);
+      res.status(500).json({ message: "Failed to fetch stats" });
+    }
+  });
+
+  // Users + profiles list
+  app.get("/api/admin/users", requireAdmin, async (_req, res) => {
+    try {
+      const [allUsers, allProfiles] = await Promise.all([
+        storage.getAllUsers(),
+        storage.getAllProfiles(),
+      ]);
+      const result = allUsers.map((u) => {
+        const profile = allProfiles.find((p) => p.userId === u.id);
+        return {
+          id: u.id,
+          email: u.email,
+          isEmailVerified: u.isEmailVerified,
+          subscriptionStatus: u.subscriptionStatus,
+          profile: profile
+            ? {
+                id: profile.id,
+                firstName: profile.firstName,
+                lastName: profile.lastName,
+                location: profile.location,
+                isTestProfile: profile.isTestProfile,
+                createdAt: profile.createdAt,
+              }
+            : null,
+        };
+      });
+      res.json(result);
+    } catch (error) {
+      console.error("Admin users error:", error);
+      res.status(500).json({ message: "Failed to fetch users" });
+    }
+  });
+
+  // Toggle test flag on a profile
+  app.patch("/api/admin/profiles/:profileId/test", requireAdmin, async (req, res) => {
+    try {
+      const { isTestProfile } = req.body;
+      if (typeof isTestProfile !== "boolean") {
+        return res.status(400).json({ message: "isTestProfile boolean is required" });
+      }
+      const profile = await storage.setProfileTestFlag(req.params.profileId, isTestProfile);
+      if (!profile) {
+        return res.status(404).json({ message: "Profile not found" });
+      }
+      res.json(profile);
+    } catch (error) {
+      console.error("Admin test flag error:", error);
+      res.status(500).json({ message: "Failed to update profile" });
+    }
+  });
+
+  // Mark every existing profile as test
+  app.post("/api/admin/profiles/mark-all-test", requireAdmin, async (_req, res) => {
+    try {
+      const count = await storage.markAllProfilesAsTest();
+      res.json({ message: `${count} profili marcati come test`, count });
+    } catch (error) {
+      console.error("Admin mark-all-test error:", error);
+      res.status(500).json({ message: "Failed to mark profiles" });
+    }
+  });
+
+  // Delete a user (and their profile)
+  app.delete("/api/admin/users/:userId", requireAdmin, async (req: any, res) => {
+    try {
+      if (req.params.userId === req.session.userId) {
+        return res.status(400).json({ message: "Non puoi eliminare il tuo account admin" });
+      }
+      await storage.deleteUserCompletely(req.params.userId);
+      res.json({ message: "Utente eliminato" });
+    } catch (error) {
+      console.error("Admin delete user error:", error);
+      res.status(500).json({ message: "Failed to delete user" });
+    }
+  });
+
+  // App settings
+  app.get("/api/admin/settings", requireAdmin, async (_req, res) => {
+    try {
+      const showTestProfiles = (await storage.getSetting("showTestProfiles")) !== "false";
+      res.json({ showTestProfiles });
+    } catch (error) {
+      console.error("Admin settings error:", error);
+      res.status(500).json({ message: "Failed to fetch settings" });
+    }
+  });
+
+  app.patch("/api/admin/settings", requireAdmin, async (req, res) => {
+    try {
+      const { showTestProfiles } = req.body;
+      if (typeof showTestProfiles !== "boolean") {
+        return res.status(400).json({ message: "showTestProfiles boolean is required" });
+      }
+      await storage.setSetting("showTestProfiles", String(showTestProfiles));
+      res.json({ showTestProfiles });
+    } catch (error) {
+      console.error("Admin settings update error:", error);
+      res.status(500).json({ message: "Failed to update settings" });
+    }
+  });
+
+  // Locations management (includes unapproved)
+  app.get("/api/admin/locations", requireAdmin, async (_req, res) => {
+    try {
+      const allLocations = await storage.getAllLocations();
+      res.json(allLocations);
+    } catch (error) {
+      console.error("Admin locations error:", error);
+      res.status(500).json({ message: "Failed to fetch locations" });
+    }
+  });
+
+  app.patch("/api/admin/locations/:id", requireAdmin, async (req, res) => {
+    try {
+      const { approved } = req.body;
+      if (typeof approved !== "boolean") {
+        return res.status(400).json({ message: "approved boolean is required" });
+      }
+      const location = await storage.updateLocation(req.params.id, { approved });
+      if (!location) {
+        return res.status(404).json({ message: "Location not found" });
+      }
+      res.json(location);
+    } catch (error) {
+      console.error("Admin location update error:", error);
+      res.status(500).json({ message: "Failed to update location" });
+    }
+  });
+
+  app.delete("/api/admin/locations/:id", requireAdmin, async (req, res) => {
+    try {
+      await storage.deleteLocation(req.params.id);
+      res.json({ message: "Luogo eliminato" });
+    } catch (error) {
+      console.error("Admin location delete error:", error);
+      res.status(500).json({ message: "Failed to delete location" });
+    }
+  });
+
+  // Import parks from OpenStreetMap for a given city
+  app.post("/api/admin/import-osm-parks", requireAdmin, async (req, res) => {
+    try {
+      const { city } = req.body;
+      if (!city || typeof city !== "string" || !city.trim()) {
+        return res.status(400).json({ message: "city is required" });
+      }
+      const result = await importOsmParks(city.trim());
+      res.json(result);
+    } catch (error: any) {
+      console.error("OSM import error:", error);
+      res.status(500).json({ message: `Import OSM fallito: ${error.message}` });
     }
   });
 

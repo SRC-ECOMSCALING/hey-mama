@@ -93,8 +93,36 @@ const getCategoryStyle = (category: string) => {
     },
   };
 
+  // Categories are stored in different shapes ("parco" from the admin CSV,
+  // "Parco" from the OSM import, "Parco Giochi" from user submissions):
+  // normalize and alias them so every park gets the green tree marker etc.
+  const aliases: Record<string, keyof typeof styles> = {
+    parco: "parco",
+    park: "parco",
+    "parco giochi": "playground",
+    playground: "playground",
+    biblioteca: "biblioteca",
+    library: "biblioteca",
+    museo: "museo",
+    "caffè": "cafe",
+    caffe: "cafe",
+    cafe: "cafe",
+    "café": "cafe",
+    piscina: "piscina",
+    "parco acquatico": "piscina",
+    "water park": "piscina",
+    ristorante: "ristorante",
+    ristoranti: "ristorante",
+    restaurants: "ristorante",
+    "centro-commerciale": "centro-commerciale",
+    "centro attività": "playground",
+    "activity center": "playground",
+    teatro: "teatro",
+  };
+
+  const normalized = aliases[category.trim().toLowerCase()];
   return (
-    styles[category as keyof typeof styles] || {
+    (normalized && styles[normalized]) || {
       Icon: MapPin,
       bgColor: "bg-gray-500",
       borderColor: "border-gray-600",
@@ -378,7 +406,7 @@ export default function Discover() {
   return (
     <>
       {/* Map Content */}
-      <main className="relative h-[calc(100vh-80px)] overflow-hidden bg-white">
+      <main className="relative h-[100dvh] overflow-hidden bg-white">
         {/* Header - Floating on top of map */}
         <header className="absolute left-4 right-4 bg-white shadow-lg rounded-2xl z-50 top-[calc(1rem_+_env(safe-area-inset-top))]">
           <div className="flex items-center justify-between p-4">
@@ -617,9 +645,9 @@ export default function Discover() {
                     zIndex={1}
                   >
                     <div
-                      className={`w-4 h-4 ${bgColor} rounded-full flex items-center justify-center shadow-lg cursor-pointer hover:scale-110 transition-transform border ${borderColor}`}
+                      className={`w-7 h-7 ${bgColor} rounded-full flex items-center justify-center shadow-lg cursor-pointer hover:scale-110 transition-transform border-2 ${borderColor}`}
                     >
-                      <Icon className="w-3 h-3 text-white" />
+                      <Icon className="w-4 h-4 text-white" />
                     </div>
                   </AdvancedMarker>
                 );

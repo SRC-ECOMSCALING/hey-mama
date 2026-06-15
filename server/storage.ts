@@ -18,6 +18,7 @@ import {
   serviceLookingForPosts,
   savedItems,
   notifications,
+  appSettings,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -2031,6 +2032,12 @@ export class DatabaseStorage implements IStorage {
     return this.db.select().from(marketplaceMessages).where(eq(marketplaceMessages.itemId, itemId));
   }
 
+  async getMarketplaceMessagesByUser(userId: string): Promise<MarketplaceMessage[]> {
+    return this.db.select().from(marketplaceMessages)
+      .where(or(eq(marketplaceMessages.buyerId, userId), eq(marketplaceMessages.sellerId, userId)))
+      .orderBy(sql`${marketplaceMessages.createdAt} ASC`);
+  }
+
   async createMarketplaceMessage(message: InsertMarketplaceMessage): Promise<MarketplaceMessage> {
     const [newMessage] = await this.db.insert(marketplaceMessages).values(message).returning();
     return newMessage;
@@ -2187,6 +2194,45 @@ export class DatabaseStorage implements IStorage {
   // Interface alias methods to match IStorage exactly
   async getAllProfiles(): Promise<Profile[]> {
     return this.getProfiles();
+  }
+
+  // ===== Admin / app settings operations =====
+  async getSetting(key: string): Promise<string | undefined> {
+    const [row] = await this.db.select().from(appSettings).where(eq(appSettings.key, key));
+    return row?.value;
+  }
+
+  async setSetting(key: string, value: string): Promise<void> {
+    await this.db.insert(appSettings)
+      .values({ key, value, updatedAt: new Date() })
+      .onConflictDoUpdate({
+        target: appSettings.key,
+        set: { value, updatedAt: new Date() },
+      });
+  }
+
+  async getAllUsers(): Promise<User[]> {
+    return this.db.select().from(users);
+  }
+
+  async setProfileTestFlag(profileId: string, isTest: boolean): Promise<Profile | undefined> {
+    const [profile] = await this.db.update(profiles)
+      .set({ isTestProfile: isTest })
+      .where(eq(profiles.id, profileId))
+      .returning();
+    return profile;
+  }
+
+  async markAllProfilesAsTest(): Promise<number> {
+    const updated = await this.db.update(profiles)
+      .set({ isTestProfile: true })
+      .returning({ id: profiles.id });
+    return updated.length;
+  }
+
+  async deleteUserCompletely(userId: string): Promise<void> {
+    await this.db.delete(profiles).where(eq(profiles.userId, userId));
+    await this.db.delete(users).where(eq(users.id, userId));
   }
 
   async getServicesByType(serviceType: string): Promise<Service[]> {

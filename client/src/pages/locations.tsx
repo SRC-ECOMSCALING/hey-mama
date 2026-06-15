@@ -522,7 +522,7 @@ export default function Locations() {
       </div>
 
       {/* Locations List */}
-      <div className="p-4 pb-20">
+      <div className="p-4 pb-nav">
         {filteredLocations.length === 0 ? (
           <div className="text-center py-12">
             <div className="text-6xl mb-4">📍</div>

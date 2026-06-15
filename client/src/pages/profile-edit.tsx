@@ -181,13 +181,8 @@ export default function ProfileEdit() {
     );
   }
 
-  if (!profile) {
-    return (
-      <div className="flex items-center justify-center h-screen">
-        <p className="text-gray-600">{t("profileNotFound")}</p>
-      </div>
-    );
-  }
+  // Note: a missing profile is fine here — the form renders with empty
+  // defaults and saving creates the profile (legacy accounts without one).
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-pink-50 to-purple-50 py-8 px-4">

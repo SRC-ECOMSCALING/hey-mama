@@ -94,7 +94,7 @@ export default function Notifications() {
       </header>
 
       {/* Notifications List */}
-      <div className="p-4 space-y-3 pb-20">
+      <div className="p-4 space-y-3 pb-nav">
         <h1 className="text-2xl font-bold text-gray-800 mb-4">{t("notifications")}</h1>
         
         {notifications.length === 0 ? (

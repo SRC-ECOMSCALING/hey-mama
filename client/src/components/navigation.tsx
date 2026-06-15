@@ -26,31 +26,36 @@ export default function Navigation({ includeMarketplace = false }: NavigationPro
     : [...baseNavItems, profileItem];
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-100 z-50 safe-bottom">
-      <div className="flex items-center justify-between px-2 py-3">
-        {navItems.map(({ path, icon: Icon, label }) => (
-          <Button
-            key={path}
-            variant="ghost"
-            className="flex flex-col items-center p-1 h-auto min-w-0 flex-1"
-            onClick={() => setLocation(path)}
-          >
-            <Icon 
-              className="h-5 w-5 mb-1" 
-              style={{ 
-                color: location === path ? "var(--primary-pink)" : "#9CA3AF"
-              }} 
-            />
-            <span 
-              className="text-xs font-medium truncate"
-              style={{ 
-                color: location === path ? "var(--primary-pink)" : "#9CA3AF"
-              }}
+    <nav className="fixed left-4 right-4 mx-auto max-w-[26rem] z-50 bg-white/90 backdrop-blur-md border border-gray-100 rounded-2xl shadow-lg bottom-[calc(1rem_+_env(safe-area-inset-bottom))]">
+      <div className="flex items-center justify-between px-2 py-2">
+        {navItems.map(({ path, icon: Icon, label }) => {
+          const isActive = location === path;
+          return (
+            <Button
+              key={path}
+              variant="ghost"
+              className={`flex flex-col items-center p-1.5 h-auto min-w-0 flex-1 rounded-xl transition-colors ${
+                isActive ? "bg-pink-50 hover:bg-pink-50" : "hover:bg-gray-50"
+              }`}
+              onClick={() => setLocation(path)}
             >
-              {label}
-            </span>
-          </Button>
-        ))}
+              <Icon
+                className="h-5 w-5 mb-0.5"
+                style={{
+                  color: isActive ? "var(--primary-pink)" : "#9CA3AF"
+                }}
+              />
+              <span
+                className="text-xs font-medium truncate"
+                style={{
+                  color: isActive ? "var(--primary-pink)" : "#9CA3AF"
+                }}
+              >
+                {label}
+              </span>
+            </Button>
+          );
+        })}
       </div>
     </nav>
   );

@@ -43,8 +43,16 @@ export const profiles = pgTable("profiles", {
   dailySwipesUsed: integer("daily_swipes_used").default(0).notNull(),
   lastSwipeResetDate: text("last_swipe_reset_date").default("").notNull(),
   isOnline: boolean("is_online").default(false).notNull(),
+  isTestProfile: boolean("is_test_profile").default(false).notNull(), // Admin-flagged test/demo profiles
   lastActiveAt: timestamp("last_active_at").defaultNow().notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Global app settings managed from the admin page (key-value store)
+export const appSettings = pgTable("app_settings", {
+  key: varchar("key").primaryKey(),
+  value: text("value").notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
 export const matches = pgTable("matches", {
