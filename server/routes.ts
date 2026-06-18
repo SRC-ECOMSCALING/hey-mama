@@ -118,6 +118,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     .filter(Boolean);
   const isAdminEmail = (email?: string | null) =>
     !!email && ADMIN_EMAILS.includes(email.toLowerCase());
+  // Effective admin = bootstrap env email OR DB-granted (is_admin) from dashboard.
+  const isUserAdmin = (user?: { email?: string | null; isAdmin?: boolean } | null) =>
+    !!user && (isAdminEmail(user.email) || user.isAdmin === true);
 
   // Admin middleware
   const requireAdmin = async (req: any, res: any, next: any) => {
@@ -126,7 +129,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
 
     const user = await storage.getUserById(req.session.userId);
-    if (!user || !isAdminEmail(user.email)) {
+    if (!isUserAdmin(user)) {
       return res.status(403).json({ message: "Admin access required" });
     }
 
@@ -296,7 +299,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         id: user.id,
         email: user.email,
         termsAccepted: !!user.termsAcceptedAt,
-        isAdmin: isAdminEmail(user.email),
+        isAdmin: isUserAdmin(user),
       });
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch user" });
@@ -1838,6 +1841,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           email: u.email,
           isEmailVerified: u.isEmailVerified,
           subscriptionStatus: u.subscriptionStatus,
+          isAdmin: isUserAdmin(u),
+          // env-bootstrapped admins can't be demoted from the dashboard
+          isEnvAdmin: isAdminEmail(u.email),
           profile: profile
             ? {
                 id: profile.id,
@@ -1974,6 +1980,50 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Admin service delete error:", error);
       res.status(500).json({ message: "Failed to delete service" });
+    }
+  });
+
+  // Promote/demote a user as admin
+  app.patch("/api/admin/users/:userId/admin", requireAdmin, async (req: any, res) => {
+    try {
+      const { isAdmin } = req.body;
+      if (typeof isAdmin !== "boolean") {
+        return res.status(400).json({ message: "isAdmin boolean is required" });
+      }
+      const target = await storage.getUserById(req.params.userId);
+      if (!target) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      if (isAdminEmail(target.email)) {
+        return res.status(400).json({ message: "Questo admin è definito via ADMIN_EMAILS e non si gestisce da qui" });
+      }
+      if (!isAdmin && req.params.userId === req.session.userId) {
+        return res.status(400).json({ message: "Non puoi rimuovere l'admin a te stesso" });
+      }
+      const updated = await storage.setUserAdmin(req.params.userId, isAdmin);
+      res.json({ id: updated?.id, isAdmin: isUserAdmin(updated) });
+    } catch (error) {
+      console.error("Admin promote error:", error);
+      res.status(500).json({ message: "Failed to update admin" });
+    }
+  });
+
+  // Add an admin by email (must be an existing registered user)
+  app.post("/api/admin/admins", requireAdmin, async (req, res) => {
+    try {
+      const email = typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : "";
+      if (!email) {
+        return res.status(400).json({ message: "email is required" });
+      }
+      const target = await storage.getUserByEmail(email);
+      if (!target) {
+        return res.status(404).json({ message: "Nessun utente registrato con questa email" });
+      }
+      const updated = await storage.setUserAdmin(target.id, true);
+      res.json({ id: updated?.id, email: updated?.email, isAdmin: isUserAdmin(updated) });
+    } catch (error) {
+      console.error("Admin add error:", error);
+      res.status(500).json({ message: "Failed to add admin" });
     }
   });
 

@@ -20,6 +20,8 @@ export const users = pgTable("users", {
   language: varchar("language").default("en").notNull(), // 'en' or 'it'
   // Legal: when the user accepted Terms of Use + Privacy Policy (null = not yet)
   termsAcceptedAt: timestamp("terms_accepted_at"),
+  // Admin granted from the dashboard (in addition to ADMIN_EMAILS env bootstrap)
+  isAdmin: boolean("is_admin").default(false).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

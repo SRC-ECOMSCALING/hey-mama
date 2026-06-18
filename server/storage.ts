@@ -1735,6 +1735,15 @@ export class DatabaseStorage implements IStorage {
     return user;
   }
 
+  // Grant/revoke admin from the dashboard.
+  async setUserAdmin(userId: string, isAdmin: boolean): Promise<User | undefined> {
+    const [user] = await this.db.update(users)
+      .set({ isAdmin, updatedAt: new Date() })
+      .where(eq(users.id, userId))
+      .returning();
+    return user;
+  }
+
   // Record that the user accepted the Terms of Use + Privacy Policy.
   async setTermsAccepted(userId: string): Promise<User | undefined> {
     const [user] = await this.db.update(users)

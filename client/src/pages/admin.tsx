@@ -29,6 +29,7 @@ interface AdminStats {
 }
 interface AdminUser {
   id: string; email: string; isEmailVerified: boolean; subscriptionStatus: string | null;
+  isAdmin: boolean; isEnvAdmin: boolean;
   profile: { id: string; firstName: string; lastName: string; location: string; isTestProfile: boolean; createdAt: string } | null;
 }
 interface AdminItem { id: string; title: string; price: number; category: string; condition: string; createdAt: string; sellerName: string }
@@ -43,10 +44,11 @@ const LOCATION_CATEGORIES = [
   { value: "teatro", label: "🎭 Teatro" }, { value: "altro", label: "📍 Altro" },
 ];
 
-type SectionKey = "dashboard" | "users" | "test" | "locations" | "marketplace" | "services" | "settings";
+type SectionKey = "dashboard" | "users" | "admins" | "test" | "locations" | "marketplace" | "services" | "settings";
 const NAV: { key: SectionKey; label: string; icon: typeof Home }[] = [
   { key: "dashboard", label: "Dashboard", icon: BarChart3 },
   { key: "users", label: "Utenti", icon: Users },
+  { key: "admins", label: "Amministratori", icon: ShieldCheck },
   { key: "test", label: "Profili Test", icon: FlaskConical },
   { key: "locations", label: "Luoghi", icon: MapPin },
   { key: "marketplace", label: "Marketplace", icon: ShoppingBag },
@@ -71,6 +73,7 @@ export default function Admin() {
   const [uploading, setUploading] = useState(false);
   const [uploadResult, setUploadResult] = useState<UploadResult | null>(null);
   const [osmCity, setOsmCity] = useState("");
+  const [newAdminEmail, setNewAdminEmail] = useState("");
 
   const isAdmin = isAdminUser;
 
@@ -101,6 +104,20 @@ export default function Admin() {
     mutationFn: async (userId: string) => (await apiRequest("DELETE", `/api/admin/users/${userId}`)).json(),
     onSuccess: () => { invalidateAll(); toast({ title: "Utente eliminato" }); },
     onError: (e: any) => toast({ title: "Errore", description: e.message, variant: "destructive" }),
+  });
+  const setAdmin = useMutation({
+    mutationFn: async (d: { userId: string; isAdmin: boolean }) =>
+      (await apiRequest("PATCH", `/api/admin/users/${d.userId}/admin`, { isAdmin: d.isAdmin })).json(),
+    onSuccess: () => invalidateAll(),
+    onError: (e: any) => toast({ title: "Errore", description: e.message, variant: "destructive" }),
+  });
+  const addAdmin = useMutation({
+    mutationFn: async (email: string) => {
+      const res = await apiRequest("POST", "/api/admin/admins", { email });
+      return res.json();
+    },
+    onSuccess: (data: any) => { invalidateAll(); setNewAdminEmail(""); toast({ title: "Admin aggiunto", description: data.email }); },
+    onError: (e: any) => toast({ title: "Errore", description: e.message.replace(/^\d+:\s*/, ""), variant: "destructive" }),
   });
   const updateSettings = useMutation({
     mutationFn: async (showTestProfiles: boolean) => (await apiRequest("PATCH", "/api/admin/settings", { showTestProfiles })).json(),
@@ -313,6 +330,7 @@ export default function Admin() {
                       <TableHead>Email</TableHead>
                       <TableHead className="hidden md:table-cell">Città</TableHead>
                       <TableHead className="hidden md:table-cell">Abbonamento</TableHead>
+                      <TableHead className="text-center">Admin</TableHead>
                       <TableHead className="text-center">Test</TableHead>
                       <TableHead className="text-right">Azioni</TableHead>
                     </TableRow>
@@ -330,6 +348,14 @@ export default function Admin() {
                           {u.subscriptionStatus === "active"
                             ? <Badge className="bg-green-100 text-green-700">attivo</Badge>
                             : <span className="text-gray-400 text-sm">{u.subscriptionStatus || "free"}</span>}
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <Switch
+                            checked={u.isAdmin}
+                            disabled={u.isEnvAdmin || u.id === user?.id || setAdmin.isPending}
+                            onCheckedChange={(c) => setAdmin.mutate({ userId: u.id, isAdmin: c })}
+                            data-testid={`switch-admin-${u.id}`}
+                          />
                         </TableCell>
                         <TableCell className="text-center">
                           {u.profile ? (
@@ -352,10 +378,77 @@ export default function Admin() {
                       </TableRow>
                     ))}
                     {filteredUsers.length === 0 && (
-                      <TableRow><TableCell colSpan={6} className="text-center text-gray-400 py-8">Nessun utente</TableCell></TableRow>
+                      <TableRow><TableCell colSpan={7} className="text-center text-gray-400 py-8">Nessun utente</TableCell></TableRow>
                     )}
                   </TableBody>
                 </Table>
+              </Card>
+            </div>
+          )}
+
+          {/* ADMINS */}
+          {section === "admins" && (
+            <div className="space-y-6 max-w-3xl">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2"><ShieldCheck className="w-5 h-5" /> Aggiungi amministratore</CardTitle>
+                  <CardDescription>Inserisci l'email di un utente già registrato per dargli accesso admin.</CardDescription>
+                </CardHeader>
+                <CardContent className="flex gap-2">
+                  <Input
+                    type="email"
+                    placeholder="email@esempio.com"
+                    value={newAdminEmail}
+                    onChange={(e) => setNewAdminEmail(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && newAdminEmail.trim() && addAdmin.mutate(newAdminEmail.trim())}
+                    data-testid="input-new-admin-email"
+                  />
+                  <Button
+                    onClick={() => newAdminEmail.trim() && addAdmin.mutate(newAdminEmail.trim())}
+                    disabled={!newAdminEmail.trim() || addAdmin.isPending}
+                    style={{ background: "linear-gradient(to right, var(--primary-pink), var(--accent-coral))" }}
+                    data-testid="button-add-admin"
+                  >
+                    {addAdmin.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : "Aggiungi"}
+                  </Button>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader><CardTitle>Amministratori ({adminUsers.filter((u) => u.isAdmin).length})</CardTitle></CardHeader>
+                <CardContent>
+                  <Table>
+                    <TableHeader>
+                      <TableRow><TableHead>Nome</TableHead><TableHead>Email</TableHead><TableHead>Tipo</TableHead><TableHead className="text-right">Azioni</TableHead></TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {adminUsers.filter((u) => u.isAdmin).map((u) => (
+                        <TableRow key={u.id} data-testid={`row-admin-${u.id}`}>
+                          <TableCell className="font-medium">{u.profile ? `${u.profile.firstName} ${u.profile.lastName}`.trim() || "(vuoto)" : "—"}</TableCell>
+                          <TableCell className="text-gray-500">{u.email}</TableCell>
+                          <TableCell>
+                            {u.isEnvAdmin
+                              ? <Badge variant="outline" className="text-gray-500">env (fisso)</Badge>
+                              : <Badge className="bg-pink-100 text-pink-700">dashboard</Badge>}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {u.isEnvAdmin ? (
+                              <span className="text-xs text-gray-400">non modificabile</span>
+                            ) : u.id === user?.id ? (
+                              <span className="text-xs text-gray-400">tu</span>
+                            ) : (
+                              <Button variant="ghost" size="sm" className="text-red-500 hover:text-red-700"
+                                onClick={() => confirm(`Rimuovere admin a ${u.email}?`) && setAdmin.mutate({ userId: u.id, isAdmin: false })}
+                                data-testid={`button-remove-admin-${u.id}`}>
+                                Rimuovi admin
+                              </Button>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                  <p className="text-xs text-gray-400 mt-3">Gli admin "env" sono definiti nella variabile ADMIN_EMAILS e restano admin a prescindere.</p>
+                </CardContent>
               </Card>
             </div>
           )}
