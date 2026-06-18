@@ -18,6 +18,8 @@ export const users = pgTable("users", {
   subscriptionEndDate: timestamp("subscription_end_date"),
   // User preferences
   language: varchar("language").default("en").notNull(), // 'en' or 'it'
+  // Legal: when the user accepted Terms of Use + Privacy Policy (null = not yet)
+  termsAcceptedAt: timestamp("terms_accepted_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

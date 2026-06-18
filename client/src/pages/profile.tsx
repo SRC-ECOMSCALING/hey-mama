@@ -178,7 +178,7 @@ export default function Profile() {
               <Settings className="h-4 w-4 mr-2" />
               {t("settings")}
             </Button>
-            <Button 
+            <Button
               variant="outline"
               className="w-full py-4 rounded-2xl font-semibold text-red-600 border-red-200 hover:bg-red-50"
               onClick={logout}
@@ -188,6 +188,25 @@ export default function Profile() {
               <LogOut className="h-4 w-4 mr-2" />
               {isLoggingOut ? t("loggingOut") : t("logout")}
             </Button>
+          </div>
+
+          {/* Legal links */}
+          <div className="mt-6 pt-4 border-t border-gray-100 flex items-center justify-center gap-4 text-sm">
+            <button
+              onClick={() => setLocation("/terms")}
+              className="text-muted-foreground hover:text-gray-700 underline"
+              data-testid="link-profile-terms"
+            >
+              {t("termsOfUse")}
+            </button>
+            <span className="text-gray-300">·</span>
+            <button
+              onClick={() => setLocation("/privacy")}
+              className="text-muted-foreground hover:text-gray-700 underline"
+              data-testid="link-profile-privacy"
+            >
+              {t("privacyPolicy")}
+            </button>
           </div>
         </div>
       </div>

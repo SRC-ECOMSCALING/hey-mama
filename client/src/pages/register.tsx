@@ -13,6 +13,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ObjectUploader } from "@/components/ObjectUploader";
@@ -50,6 +51,7 @@ export default function Register() {
   const queryClient = useQueryClient();
   const [showVerification, setShowVerification] = useState(false);
   const [verificationCode, setVerificationCode] = useState("");
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [userEmail, setUserEmail] = useState("");
   const { t } = useLanguage();
 
@@ -187,6 +189,14 @@ export default function Register() {
   };
 
   const onSubmit = (data: Registration) => {
+    if (!acceptedTerms) {
+      toast({
+        title: t("registrationFailed"),
+        description: t("mustAcceptTerms"),
+        variant: "destructive",
+      });
+      return;
+    }
     registerMutation.mutate({
       ...data,
       photoUrls: uploadedPhotos,
@@ -631,10 +641,35 @@ export default function Register() {
                       )}
                     </div>
 
+                    <label className="flex items-start gap-3 cursor-pointer">
+                      <Checkbox
+                        checked={acceptedTerms}
+                        onCheckedChange={(v) => setAcceptedTerms(v === true)}
+                        className="mt-0.5"
+                        data-testid="checkbox-register-terms"
+                      />
+                      <span className="text-sm text-muted-foreground">
+                        {t("registerAcceptTerms")}{" "}
+                        (
+                        <Link href="/terms">
+                          <a className="text-pink-600 hover:text-pink-700 underline" data-testid="link-register-terms">
+                            {t("termsOfUse")}
+                          </a>
+                        </Link>
+                        {" · "}
+                        <Link href="/privacy">
+                          <a className="text-pink-600 hover:text-pink-700 underline" data-testid="link-register-privacy">
+                            {t("privacyPolicy")}
+                          </a>
+                        </Link>
+                        )
+                      </span>
+                    </label>
+
                     <Button
                       type="submit"
                       className="w-full bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-600 hover:to-purple-700"
-                      disabled={registerMutation.isPending}
+                      disabled={registerMutation.isPending || !acceptedTerms}
                       data-testid="button-register"
                     >
                       {registerMutation.isPending ? t("sendingVerification") : t("createAccount")}

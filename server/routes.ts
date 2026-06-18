@@ -110,17 +110,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
     next();
   };
 
+  // Admin allowlist: comma-separated emails in ADMIN_EMAILS, defaulting to the
+  // original hardcoded admin. Lets the owner grant admin without code changes.
+  const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || "admin@claudio.com")
+    .split(",")
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean);
+  const isAdminEmail = (email?: string | null) =>
+    !!email && ADMIN_EMAILS.includes(email.toLowerCase());
+
   // Admin middleware
   const requireAdmin = async (req: any, res: any, next: any) => {
     if (!req.session.userId) {
       return res.status(401).json({ message: "Authentication required" });
     }
-    
+
     const user = await storage.getUserById(req.session.userId);
-    if (!user || user.email !== "admin@claudio.com") {
+    if (!user || !isAdminEmail(user.email)) {
       return res.status(403).json({ message: "Admin access required" });
     }
-    
+
     next();
   };
 
@@ -172,6 +181,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ...registrationData,
         isEmailVerified: false
       });
+      await storage.setTermsAccepted(user.id); // accepted via the registration form
       req.session.userId = user.id;
 
       return res.status(201).json({
@@ -246,7 +256,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ...pendingRegistration,
         isEmailVerified: true
       });
-      
+      await storage.setTermsAccepted(user.id); // accepted via the registration form
+
       // Clear pending registration
       delete req.session.pendingRegistration;
       
@@ -281,12 +292,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "User not found" });
       }
       
-      res.json({ 
-        id: user.id, 
-        email: user.email
+      res.json({
+        id: user.id,
+        email: user.email,
+        termsAccepted: !!user.termsAcceptedAt,
+        isAdmin: isAdminEmail(user.email),
       });
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch user" });
+    }
+  });
+
+  // Record acceptance of Terms of Use + Privacy Policy for the logged-in user
+  app.post("/api/auth/accept-terms", requireAuth, async (req: any, res) => {
+    try {
+      const user = await storage.setTermsAccepted(req.session.userId);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      res.json({ termsAccepted: !!user.termsAcceptedAt });
+    } catch (error) {
+      console.error("Accept terms error:", error);
+      res.status(500).json({ message: "Failed to accept terms" });
     }
   });
 
@@ -417,10 +444,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/profiles/current-user", requireAuth, async (req: any, res) => {
     try {
       const userId = req.session.userId;
-      const profile = await storage.getProfile(userId);
-      if (!profile) {
-        return res.status(404).json({ message: "Profile not found" });
-      }
+      // Auto-create a minimal profile for legacy accounts that never had one,
+      // so the profile page works instead of dead-ending on "profilo non trovato".
+      const profile = await storage.ensureProfile(userId);
       res.json(profile);
     } catch (error) {
       console.error("Error fetching current user profile:", error);
@@ -1774,19 +1800,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Dashboard stats
   app.get("/api/admin/stats", requireAdmin, async (_req, res) => {
     try {
-      const [allUsers, allProfiles, allLocations, allItems] = await Promise.all([
+      const [allUsers, allProfiles, allLocations, allItems, allServices] = await Promise.all([
         storage.getAllUsers(),
         storage.getAllProfiles(),
         storage.getAllLocations(),
         storage.getAllMarketplaceItems(),
+        storage.getAllServices(),
       ]);
       res.json({
         users: allUsers.length,
+        verifiedUsers: allUsers.filter((u) => u.isEmailVerified).length,
+        subscribedUsers: allUsers.filter((u) => u.subscriptionStatus === "active").length,
         profiles: allProfiles.length,
         testProfiles: allProfiles.filter((p) => p.isTestProfile).length,
         locations: allLocations.length,
         pendingLocations: allLocations.filter((l) => !l.approved).length,
         marketplaceItems: allItems.length,
+        services: allServices.length,
       });
     } catch (error) {
       console.error("Admin stats error:", error);
@@ -1853,6 +1883,97 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Admin mark-all-test error:", error);
       res.status(500).json({ message: "Failed to mark profiles" });
+    }
+  });
+
+  // Bulk set/unset the test flag on all profiles
+  app.post("/api/admin/profiles/set-all-test", requireAdmin, async (req, res) => {
+    try {
+      const { isTest } = req.body;
+      if (typeof isTest !== "boolean") {
+        return res.status(400).json({ message: "isTest boolean is required" });
+      }
+      const count = await storage.setAllProfilesTest(isTest);
+      res.json({
+        message: isTest ? `${count} profili marcati come test` : `${count} profili rimossi dai test`,
+        count,
+      });
+    } catch (error) {
+      console.error("Admin set-all-test error:", error);
+      res.status(500).json({ message: "Failed to update profiles" });
+    }
+  });
+
+  // Marketplace items management
+  app.get("/api/admin/marketplace", requireAdmin, async (_req, res) => {
+    try {
+      const [items, profiles] = await Promise.all([
+        storage.getAllMarketplaceItems(),
+        storage.getAllProfiles(),
+      ]);
+      const result = items.map((it) => {
+        const seller = profiles.find((p) => p.userId === it.sellerId);
+        return {
+          id: it.id,
+          title: it.title,
+          price: it.price,
+          category: it.category,
+          condition: it.condition,
+          createdAt: it.createdAt,
+          sellerName: seller ? `${seller.firstName} ${seller.lastName}`.trim() : "—",
+        };
+      });
+      res.json(result);
+    } catch (error) {
+      console.error("Admin marketplace list error:", error);
+      res.status(500).json({ message: "Failed to fetch marketplace items" });
+    }
+  });
+
+  app.delete("/api/admin/marketplace/:id", requireAdmin, async (req, res) => {
+    try {
+      await storage.deleteMarketplaceItem(req.params.id);
+      res.json({ message: "Annuncio eliminato" });
+    } catch (error) {
+      console.error("Admin marketplace delete error:", error);
+      res.status(500).json({ message: "Failed to delete item" });
+    }
+  });
+
+  // Services management
+  app.get("/api/admin/services", requireAdmin, async (_req, res) => {
+    try {
+      const [services, profiles] = await Promise.all([
+        storage.getAllServices(),
+        storage.getAllProfiles(),
+      ]);
+      const result = services.map((s) => {
+        const provider = profiles.find((p) => p.userId === s.providerId);
+        return {
+          id: s.id,
+          title: s.title,
+          serviceType: s.serviceType,
+          hourlyRate: s.hourlyRate,
+          location: s.location,
+          isAvailable: s.isAvailable,
+          createdAt: s.createdAt,
+          providerName: provider ? `${provider.firstName} ${provider.lastName}`.trim() : "—",
+        };
+      });
+      res.json(result);
+    } catch (error) {
+      console.error("Admin services list error:", error);
+      res.status(500).json({ message: "Failed to fetch services" });
+    }
+  });
+
+  app.delete("/api/admin/services/:id", requireAdmin, async (req, res) => {
+    try {
+      await storage.deleteService(req.params.id);
+      res.json({ message: "Servizio eliminato" });
+    } catch (error) {
+      console.error("Admin service delete error:", error);
+      res.status(500).json({ message: "Failed to delete service" });
     }
   });
 

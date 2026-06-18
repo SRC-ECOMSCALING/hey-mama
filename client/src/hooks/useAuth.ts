@@ -5,6 +5,8 @@ import { useToast } from "@/hooks/use-toast";
 interface User {
   id: string;
   email: string;
+  termsAccepted?: boolean;
+  isAdmin?: boolean;
 }
 
 export function useAuth() {
@@ -37,10 +39,15 @@ export function useAuth() {
     },
   });
 
+  const typedUser = user as User | null;
+
   return {
-    user: user as User | null,
+    user: typedUser,
     isLoading,
     isAuthenticated: !!user && !error,
+    isAdmin: typedUser?.isAdmin === true,
+    // undefined while unknown; true/false once /api/auth/me has resolved
+    termsAccepted: typedUser ? typedUser.termsAccepted === true : undefined,
     logout: () => logoutMutation.mutate(),
     isLoggingOut: logoutMutation.isPending,
   };

@@ -21,7 +21,9 @@ import Notifications from "@/pages/notifications";
 import Settings from "@/pages/settings";
 import Admin from "@/pages/admin";
 import Privacy from "@/pages/privacy";
+import Terms from "@/pages/terms";
 import MarketChat from "@/pages/market-chat";
+import TermsGate from "@/components/terms-gate";
 import { LanguageProvider } from "@/contexts/LanguageContext";
 
 function Router() {
@@ -44,6 +46,7 @@ function Router() {
     return (
       <Switch>
         <Route path="/privacy" component={Privacy} />
+        <Route path="/terms" component={Terms} />
         <Route path="/register" component={Register} />
         <Route path="/login" component={Login} />
         <Route path="/" component={Login} />
@@ -54,24 +57,28 @@ function Router() {
 
   // If authenticated, show main app routes
   return (
-    <Switch>
-      <Route path="/" component={Discover} />
-      <Route path="/admin" component={Admin} />
-      <Route path="/locations" component={Locations} />
-      <Route path="/messages" component={Messages} />
-      <Route path="/chat/:matchId" component={Chat} />
-      <Route path="/market-chat/:itemId/:otherUserId" component={MarketChat} />
-      <Route path="/matches" component={Matches} />
-      <Route path="/marketplace" component={Marketplace} />
-      <Route path="/marketplace/add" component={AddProduct} />
-      <Route path="/services/add" component={AddService} />
-      <Route path="/profile" component={Profile} />
-      <Route path="/profile/edit" component={ProfileEdit} />
-      <Route path="/settings" component={Settings} />
-      <Route path="/notifications" component={Notifications} />
-      <Route path="/privacy" component={Privacy} />
-      <Route component={NotFound} />
-    </Switch>
+    <>
+      <TermsGate />
+      <Switch>
+        <Route path="/" component={Discover} />
+        <Route path="/admin" component={Admin} />
+        <Route path="/locations" component={Locations} />
+        <Route path="/messages" component={Messages} />
+        <Route path="/chat/:matchId" component={Chat} />
+        <Route path="/market-chat/:itemId/:otherUserId" component={MarketChat} />
+        <Route path="/matches" component={Matches} />
+        <Route path="/marketplace" component={Marketplace} />
+        <Route path="/marketplace/add" component={AddProduct} />
+        <Route path="/services/add" component={AddService} />
+        <Route path="/profile" component={Profile} />
+        <Route path="/profile/edit" component={ProfileEdit} />
+        <Route path="/settings" component={Settings} />
+        <Route path="/notifications" component={Notifications} />
+        <Route path="/privacy" component={Privacy} />
+        <Route path="/terms" component={Terms} />
+        <Route component={NotFound} />
+      </Switch>
+    </>
   );
 }
 

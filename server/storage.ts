@@ -1735,6 +1735,36 @@ export class DatabaseStorage implements IStorage {
     return user;
   }
 
+  // Record that the user accepted the Terms of Use + Privacy Policy.
+  async setTermsAccepted(userId: string): Promise<User | undefined> {
+    const [user] = await this.db.update(users)
+      .set({ termsAcceptedAt: new Date(), updatedAt: new Date() })
+      .where(eq(users.id, userId))
+      .returning();
+    return user;
+  }
+
+  // Ensure the user has a profile row, creating a minimal editable one if not.
+  // Self-heals legacy accounts that were created without completing the profile.
+  async ensureProfile(userId: string): Promise<Profile> {
+    const existing = await this.getProfile(userId);
+    if (existing) return existing;
+    return this.createProfile({
+      userId,
+      firstName: "",
+      lastName: "",
+      age: 18,
+      sex: "female",
+      bio: "",
+      location: "",
+      photoUrls: [],
+      kidsNumber: 0,
+      kidsAges: [],
+      hobbies: [],
+      distanceAway: "0 km",
+    } as any);
+  }
+
   async updateUserSubscription(userId: string, subscriptionData: {
     stripeCustomerId?: string;
     stripeSubscriptionId?: string;
@@ -2224,8 +2254,13 @@ export class DatabaseStorage implements IStorage {
   }
 
   async markAllProfilesAsTest(): Promise<number> {
+    return this.setAllProfilesTest(true);
+  }
+
+  // Bulk set/unset the test flag on every profile (used by the admin dashboard).
+  async setAllProfilesTest(isTest: boolean): Promise<number> {
     const updated = await this.db.update(profiles)
-      .set({ isTestProfile: true })
+      .set({ isTestProfile: isTest })
       .returning({ id: profiles.id });
     return updated.length;
   }
