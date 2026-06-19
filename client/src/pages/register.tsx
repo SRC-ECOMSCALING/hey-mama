@@ -63,7 +63,7 @@ export default function Register() {
       confirmPassword: "",
       firstName: "",
       lastName: "",
-      age: 18,
+      age: undefined,
       sex: undefined,
       bio: "",
       location: "",
@@ -336,15 +336,18 @@ export default function Register() {
                           name="age"
                           render={({ field }) => (
                             <FormItem>
-                              <FormLabel>{t("age")}</FormLabel>
+                              <FormLabel>{t("age")} <span className="text-muted-foreground font-normal">({t("optional")})</span></FormLabel>
                               <FormControl>
                                 <Input
                                   type="number"
                                   min="18"
                                   max="65"
                                   data-testid="input-age"
-                                  {...field}
-                                  onChange={(e) => field.onChange(parseInt(e.target.value))}
+                                  name={field.name}
+                                  ref={field.ref}
+                                  onBlur={field.onBlur}
+                                  value={field.value ?? ""}
+                                  onChange={(e) => field.onChange(e.target.value === "" ? undefined : parseInt(e.target.value))}
                                 />
                               </FormControl>
                               <FormMessage />
@@ -357,7 +360,7 @@ export default function Register() {
                           name="sex"
                           render={({ field }) => (
                             <FormItem>
-                              <FormLabel>{t("gender")}</FormLabel>
+                              <FormLabel>{t("gender")} <span className="text-muted-foreground font-normal">({t("optional")})</span></FormLabel>
                               <Select onValueChange={field.onChange} defaultValue={field.value} data-testid="select-sex">
                                 <FormControl>
                                   <SelectTrigger>

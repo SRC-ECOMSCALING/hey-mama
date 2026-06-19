@@ -306,6 +306,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Delete the logged-in user's own account and all related data (App Store 5.1.1)
+  app.delete("/api/auth/account", requireAuth, async (req: any, res) => {
+    try {
+      const userId = req.session.userId;
+      await storage.deleteUserCompletely(userId);
+      req.session.destroy(() => {});
+      res.json({ message: "Account eliminato" });
+    } catch (error) {
+      console.error("Account deletion error:", error);
+      res.status(500).json({ message: "Failed to delete account" });
+    }
+  });
+
   // Record acceptance of Terms of Use + Privacy Policy for the logged-in user
   app.post("/api/auth/accept-terms", requireAuth, async (req: any, res) => {
     try {

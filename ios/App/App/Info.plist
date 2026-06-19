@@ -47,5 +47,13 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>HeyMama usa la fotocamera per scattare le foto del tuo profilo e degli annunci del marketplace.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>HeyMama usa il microfono quando registri un video da allegare al profilo o a un annuncio.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>HeyMama accede alle tue foto per impostare le immagini del profilo e degli annunci.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>HeyMama può salvare immagini nella tua libreria foto.</string>
 </dict>
 </plist>

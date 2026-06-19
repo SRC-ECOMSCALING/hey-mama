@@ -94,7 +94,7 @@ export default function Profile() {
             </div>
           )}
           <h2 className="text-2xl font-bold text-gray-800 mb-1">{profile.firstName} {profile.lastName}</h2>
-          <p className="text-gray-600">{profile.age} {t("yearsOld")}</p>
+          {profile.age != null && <p className="text-gray-600">{profile.age} {t("yearsOld")}</p>}
         </div>
 
         <div className="space-y-6">

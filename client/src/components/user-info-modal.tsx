@@ -27,7 +27,7 @@ export default function UserInfoModal({ open, onOpenChange, profile }: UserInfoM
             />
             <div>
               <div className="text-xl font-bold">{profile.firstName} {profile.lastName}</div>
-              <div className="text-sm text-muted-foreground font-normal">{profile.age} {t("yearsOld")}</div>
+              {profile.age != null && <div className="text-sm text-muted-foreground font-normal">{profile.age} {t("yearsOld")}</div>}
             </div>
           </DialogTitle>
         </DialogHeader>

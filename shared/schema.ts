@@ -31,8 +31,8 @@ export const profiles = pgTable("profiles", {
   userId: varchar("user_id").notNull(), // Foreign key to users table
   firstName: text("first_name").notNull(),
   lastName: text("last_name").notNull(),
-  age: integer("age").notNull(),
-  sex: varchar("sex").notNull(), // 'female', 'male', 'other'
+  age: integer("age"), // optional (App Store 5.1.1: not required at signup)
+  sex: varchar("sex"), // optional: 'female', 'male', 'other'
   bio: text("bio").notNull(),
   location: text("location").notNull(),
   latitude: text("latitude"), // Geographic latitude
@@ -188,8 +188,8 @@ export const registrationSchema = z.object({
   confirmPassword: z.string(),
   firstName: z.string().min(1, "First name is required"),
   lastName: z.string().min(1, "Last name is required"),
-  age: z.number().min(18, "Must be at least 18 years old").max(100, "Must be under 100 years old"),
-  sex: z.enum(["female", "male", "other"], { required_error: "Please select your sex" }),
+  age: z.number().min(18, "Must be at least 18 years old").max(100, "Must be under 100 years old").optional(),
+  sex: z.enum(["female", "male", "other"]).optional(),
   bio: z.string().min(10, "Bio must be at least 10 characters"),
   location: z.string().min(1, "Location is required"),
   photoUrls: z.array(z.string().url()).min(1, "At least one photo is required"),

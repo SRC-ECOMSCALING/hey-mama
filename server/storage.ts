@@ -2275,6 +2275,23 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteUserCompletely(userId: string): Promise<void> {
+    // Remove all data owned by / referencing the user, then the user itself.
+    // No FK constraints in this schema, so order is not critical.
+    await this.db.delete(notifications).where(or(eq(notifications.recipientId, userId), eq(notifications.senderId, userId)));
+    await this.db.delete(savedItems).where(eq(savedItems.userId, userId));
+    await this.db.delete(reviews).where(eq(reviews.userId, userId));
+    await this.db.delete(marketplaceMessages).where(or(
+      eq(marketplaceMessages.buyerId, userId),
+      eq(marketplaceMessages.sellerId, userId),
+      eq(marketplaceMessages.senderId, userId),
+    ));
+    await this.db.delete(marketplaceItems).where(eq(marketplaceItems.sellerId, userId));
+    await this.db.delete(services).where(eq(services.providerId, userId));
+    await this.db.delete(serviceLookingForPosts).where(eq(serviceLookingForPosts.userId, userId));
+    await this.db.delete(lookingForPosts).where(eq(lookingForPosts.userId, userId));
+    await this.db.delete(messages).where(eq(messages.senderId, userId));
+    await this.db.delete(matches).where(or(eq(matches.userId, userId), eq(matches.matchedUserId, userId)));
+    await this.db.delete(swipes).where(or(eq(swipes.userId, userId), eq(swipes.targetUserId, userId)));
     await this.db.delete(profiles).where(eq(profiles.userId, userId));
     await this.db.delete(users).where(eq(users.id, userId));
   }

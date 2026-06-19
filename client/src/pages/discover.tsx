@@ -551,7 +551,7 @@ export default function Discover() {
                     {/* Profile Info */}
                     <div className="mb-3">
                       <h3 className="text-xl font-bold text-gray-800">
-                        {selectedProfile.firstName}, {selectedProfile.age}
+                        {selectedProfile.firstName}{selectedProfile.age != null ? `, ${selectedProfile.age}` : ""}
                       </h3>
                       <div className="flex items-center gap-1 text-sm text-gray-600 mt-1">
                         <MapPin className="w-4 h-4" />

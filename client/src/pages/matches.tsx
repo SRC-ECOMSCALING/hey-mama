@@ -135,7 +135,7 @@ export default function Matches() {
                     }}
                   >
                     <h3 className="font-semibold text-gray-800 mb-1">
-                      {match.profile?.firstName} {match.profile?.lastName}, {match.profile?.age}
+                      {match.profile?.firstName} {match.profile?.lastName}{match.profile?.age != null ? `, ${match.profile.age}` : ""}
                     </h3>
                     <div className="flex items-center gap-2 text-sm text-gray-600 mb-2">
                       <MapPin className="h-4 w-4" />
@@ -189,7 +189,7 @@ export default function Matches() {
           <DialogContent className="max-w-md mx-auto max-h-[80vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
-                {selectedProfile.firstName} {selectedProfile.lastName}, {selectedProfile.age}
+                {selectedProfile.firstName} {selectedProfile.lastName}{selectedProfile.age != null ? `, ${selectedProfile.age}` : ""}
                 <div className={`w-2 h-2 rounded-full ${
                   selectedProfile.isOnline ? 'bg-green-500' : 'bg-gray-400'
                 }`} />

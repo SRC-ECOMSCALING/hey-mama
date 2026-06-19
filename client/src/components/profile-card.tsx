@@ -188,7 +188,7 @@ export default function ProfileCard({ profile, onLike, onPass, onSuperLike, onNe
                     profile.isOnline ? 'bg-green-500' : 'bg-gray-400'
                   }`} />
                 </div>
-                <span className="text-lg">{profile.age}</span>
+                {profile.age != null && <span className="text-lg">{profile.age}</span>}
               </div>
               
               <div className="flex flex-wrap gap-2 mb-3">
@@ -229,7 +229,7 @@ export default function ProfileCard({ profile, onLike, onPass, onSuperLike, onNe
         <DialogContent className="max-w-md mx-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              {profile.firstName}, {profile.age}
+              {profile.firstName}{profile.age != null ? `, ${profile.age}` : ""}
               <div className={`w-2 h-2 rounded-full ${
                 profile.isOnline ? 'bg-green-500' : 'bg-gray-400'
               }`} />
