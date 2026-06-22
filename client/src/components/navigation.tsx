@@ -1,4 +1,4 @@
-import { Search, Heart, MessageCircle, User, MapPin, ShoppingBag } from "lucide-react";
+import { Search, Users, MessageCircle, User, MapPin, ShoppingBag } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useLocation } from "wouter";
 import { useLanguage } from "@/contexts/LanguageContext";
@@ -14,7 +14,7 @@ export default function Navigation({ includeMarketplace = false }: NavigationPro
   const baseNavItems = [
     { path: "/", icon: Search, label: t("discover") },
     { path: "/locations", icon: MapPin, label: t("locations") },
-    { path: "/matches", icon: Heart, label: t("matches") },
+    { path: "/matches", icon: Users, label: t("connections") },
     { path: "/messages", icon: MessageCircle, label: t("messages") },
   ];
 

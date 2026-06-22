@@ -8,17 +8,16 @@ import {
   AdvancedMarker,
   InfoWindow,
 } from "@vis.gl/react-google-maps";
-import MatchModal from "@/components/match-modal";
 import ServicesModal from "@/components/services-modal";
 import SettingsModal from "@/components/settings-modal";
 import Navigation from "@/components/navigation";
 import NotificationIcon from "@/components/notification-icon";
 import {
   Settings,
-  Heart,
   X,
   MapPin,
   Users,
+  UserPlus,
   Baby,
   Trees,
   Star,
@@ -154,8 +153,6 @@ export default function Discover() {
   const [selectedLocation, setSelectedLocation] =
     useState<LocationWithReviews | null>(null);
   const [showReviewModal, setShowReviewModal] = useState(false);
-  const [matchedProfile, setMatchedProfile] = useState<Profile | null>(null);
-  const [showMatchModal, setShowMatchModal] = useState(false);
   const [showServicesModal, setShowServicesModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
 
@@ -265,39 +262,29 @@ export default function Discover() {
   const swipeMutation = useMutation({
     mutationFn: async ({
       targetUserId,
-      isLike,
     }: {
-      targetUserId: string;
-      isLike: boolean;
+      targetUserId: string; // the other mom's USER id
+      profileId: string; // her profile id (for local UI state)
     }) => {
       const response = await apiRequest("POST", "/api/swipes", {
-        userId: CURRENT_USER_ID,
+        userId: CURRENT_USER_ID, // ignored server-side (uses the session user)
         targetUserId,
-        isLike,
+        isLike: true,
       });
       return response.json() as Promise<SwipeResponse>;
     },
-    onSuccess: (data, variables) => {
-      // Update swipe state
-      if (data.match) {
-        setSwipeStates((prev) => ({
-          ...prev,
-          [variables.targetUserId]: "matched",
-        }));
-        const matchedUser = profiles.find(
-          (p) => p.id === variables.targetUserId,
-        );
-        if (matchedUser) {
-          setMatchedProfile(matchedUser);
-          setShowMatchModal(true);
-        }
-      } else {
-        setSwipeStates((prev) => ({
-          ...prev,
-          [variables.targetUserId]: variables.isLike ? "liked" : "passed",
-        }));
-      }
+    onSuccess: (_data, variables) => {
+      // Community connection: mark connected and confirm with a simple toast.
+      const connectedUser = profiles.find((p) => p.id === variables.profileId);
+      setSwipeStates((prev) => ({
+        ...prev,
+        [variables.profileId]: "liked",
+      }));
       setSelectedProfile(null);
+      toast({
+        title: t("connectedTitle"),
+        description: t("connectedDesc").replace("{name}", connectedUser?.firstName || ""),
+      });
       queryClient.invalidateQueries({ queryKey: ["/api/profiles/discover"] });
       queryClient.invalidateQueries({ queryKey: ["/api/matches"] });
       queryClient.invalidateQueries({
@@ -321,10 +308,10 @@ export default function Discover() {
     },
   });
 
-  const handleLike = (profile: Profile) => {
+  const handleConnect = (profile: Profile) => {
     swipeMutation.mutate({
-      targetUserId: profile.id,
-      isLike: true,
+      targetUserId: profile.userId, // the other mom's user id (for the connection)
+      profileId: profile.id, // her profile id (local UI state)
     });
   };
 
@@ -380,13 +367,6 @@ export default function Discover() {
       rating: reviewRating,
       comment: reviewComment,
       visitedWith: "Con i miei bambini",
-    });
-  };
-
-  const handlePass = (profile: Profile) => {
-    swipeMutation.mutate({
-      targetUserId: profile.id,
-      isLike: false,
     });
   };
 
@@ -598,30 +578,21 @@ export default function Discover() {
                         </div>
                       )}
 
-                    {/* Action Buttons */}
-                    <div className="flex gap-2 justify-center">
+                    {/* Connect action (community model, not dating) */}
+                    <div className="flex justify-center">
                       <Button
-                        onClick={() => handlePass(selectedProfile)}
-                        disabled={swipeMutation.isPending}
-                        variant="outline"
+                        onClick={() => handleConnect(selectedProfile)}
+                        disabled={swipeMutation.isPending || swipeStates[selectedProfile.id] === "liked"}
                         size="lg"
-                        className="flex-1 rounded-full border-2 border-gray-300 hover:border-gray-400"
-                        data-testid="button-pass"
-                      >
-                        <X className="w-6 h-6 text-gray-600" />
-                      </Button>
-                      <Button
-                        onClick={() => handleLike(selectedProfile)}
-                        disabled={swipeMutation.isPending}
-                        size="lg"
-                        className="flex-1 rounded-full"
+                        className="w-full rounded-full text-white"
                         style={{
                           background:
                             "linear-gradient(to right, var(--primary-pink), var(--accent-coral))",
                         }}
-                        data-testid="button-like"
+                        data-testid="button-connect"
                       >
-                        <Heart className="w-6 h-6 text-white fill-white" />
+                        <UserPlus className="w-5 h-5 mr-2" />
+                        {swipeStates[selectedProfile.id] === "liked" ? t("connected") : t("connect")}
                       </Button>
                     </div>
                   </div>
@@ -766,17 +737,6 @@ export default function Discover() {
 
       {/* Navigation */}
       <Navigation includeMarketplace={true} />
-
-      {/* Match Modal */}
-      {showMatchModal && matchedProfile && (
-        <MatchModal
-          profile={matchedProfile}
-          onClose={() => setShowMatchModal(false)}
-          onMessage={() => {
-            setShowMatchModal(false);
-          }}
-        />
-      )}
 
       {/* Services Modal */}
       {showServicesModal && (

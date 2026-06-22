@@ -4,7 +4,12 @@ export const translations = {
   en: {
     // Navigation
     discover: "Discover",
-    matches: "Matches",
+    matches: "Connections",
+    connections: "Connections",
+    connect: "Connect",
+    connected: "Connected",
+    connectedTitle: "Connected!",
+    connectedDesc: "You can now message {name}.",
     messages: "Messages",
     locations: "Locations",
     marketplace: "Marketplace",
@@ -69,16 +74,16 @@ export const translations = {
     noMoreProfiles: "No more profiles",
     checkBackLater: "Check back later for new mom friends in your area!",
     dailyLimitReached: "Daily Limit Reached",
-    dailyLimitMessage: "You've used all your daily swipes. Upgrade to Pro for unlimited swipes!",
-    swipeError: "Failed to process swipe",
+    dailyLimitMessage: "You've reached today's connection limit. Upgrade to Pro for unlimited connections!",
+    swipeError: "Failed to process the request",
     
     // Matches
-    noMatchesYet: "No matches yet",
-    keepSwiping: "Keep swiping to find your mom squad!",
+    noMatchesYet: "No connections yet",
+    keepSwiping: "Discover moms near you and connect!",
     conversationStarted: "Conversation Started!",
     nowSendMessages: "You can now send messages!",
     errorStartingConversation: "Failed to start conversation. Please try again.",
-    matchedRecently: "Matched recently",
+    matchedRecently: "Connected recently",
     
     // Messages
     noConversationsYet: "No conversations yet",
@@ -343,7 +348,12 @@ export const translations = {
   it: {
     // Navigation
     discover: "Scopri",
-    matches: "Match",
+    matches: "Connessioni",
+    connections: "Connessioni",
+    connect: "Connetti",
+    connected: "Connessa",
+    connectedTitle: "Connessa!",
+    connectedDesc: "Ora puoi scrivere a {name}.",
     messages: "Messaggi",
     locations: "Luoghi",
     marketplace: "Market",
@@ -408,16 +418,16 @@ export const translations = {
     noMoreProfiles: "Non ci sono più profili",
     checkBackLater: "Torna più tardi per nuove mamme nella tua zona!",
     dailyLimitReached: "Limite Giornaliero Raggiunto",
-    dailyLimitMessage: "Hai usato tutti i tuoi swipe giornalieri. Passa a Pro per swipe illimitati!",
-    swipeError: "Impossibile elaborare lo swipe",
+    dailyLimitMessage: "Hai raggiunto il limite di connessioni di oggi. Passa a Pro per connessioni illimitate!",
+    swipeError: "Impossibile completare la richiesta",
     
     // Matches
-    noMatchesYet: "Nessun match ancora",
-    keepSwiping: "Continua a scorrere per trovare la tua squadra di mamme!",
+    noMatchesYet: "Nessuna connessione ancora",
+    keepSwiping: "Scopri le mamme vicine a te e connettiti!",
     conversationStarted: "Conversazione Iniziata!",
     nowSendMessages: "Ora puoi inviare messaggi!",
     errorStartingConversation: "Impossibile avviare la conversazione. Riprova.",
-    matchedRecently: "Match recente",
+    matchedRecently: "Connessa di recente",
     
     // Messages
     noConversationsYet: "Nessuna conversazione ancora",

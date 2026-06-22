@@ -535,50 +535,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Create a swipe (requires active subscription)
   app.post("/api/swipes", requireAuth, async (req, res) => {
     try {
-      const swipeData = insertSwipeSchema.parse(req.body);
-      
+      // Always use the authenticated user as the actor (ignore client "current-user").
+      const parsed = insertSwipeSchema.parse(req.body);
+      const swipeData = { ...parsed, userId: (req as any).session.userId };
+
       const swipe = await storage.createSwipe(swipeData);
-      
-      // Check if this creates a match
-      const otherUserSwipe = await storage.getSwipe(swipeData.targetUserId, swipeData.userId);
+
+      // Community model (not dating): connecting establishes a connection
+      // immediately so both moms can message — no mutual "match" required.
       let match = null;
-      
-      if (swipeData.isLike && otherUserSwipe?.isLike) {
-        // It's a match!
-        match = await storage.createMatch({
+      if (swipeData.isLike) {
+        const existing = await storage.getMatch(swipeData.userId, swipeData.targetUserId);
+        match = existing || await storage.createMatch({
           userId: swipeData.userId,
           matchedUserId: swipeData.targetUserId,
           isMatch: true,
         });
-        
-        // Create notifications for both users about the match
-        try {
-          await storage.createNotification({
-            type: 'match',
-            senderId: swipeData.userId,
-            recipientId: swipeData.targetUserId,
-            message: 'You have a new match!',
-            relatedId: match.id,
-            isRead: false
-          });
-          
-          await storage.createNotification({
-            type: 'match',
-            senderId: swipeData.targetUserId,
-            recipientId: swipeData.userId,
-            message: 'You have a new match!',
-            relatedId: match.id,
-            isRead: false
-          });
-        } catch (notificationError) {
-          console.error("Error creating match notifications:", notificationError);
-          // Don't fail the match creation if notifications fail
+
+        // Notify the other user that someone connected with them.
+        if (!existing) {
+          try {
+            await storage.createNotification({
+              type: 'match',
+              senderId: swipeData.userId,
+              recipientId: swipeData.targetUserId,
+              message: 'Una mamma si è connessa con te!',
+              relatedId: match.id,
+              isRead: false
+            });
+          } catch (notificationError) {
+            console.error("Error creating connection notification:", notificationError);
+          }
         }
       }
-      
-      res.json({ 
-        swipe, 
-        match
+
+      res.json({
+        swipe,
+        match,
+        connected: !!match,
       });
     } catch (error) {
       if (error instanceof z.ZodError) {
