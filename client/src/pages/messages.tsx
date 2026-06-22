@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, MessageCircle, ShoppingBag, Heart } from "lucide-react";
+import { ArrowLeft, MessageCircle, ShoppingBag, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import Navigation from "@/components/navigation";
@@ -82,8 +82,8 @@ export default function Messages() {
         <Tabs defaultValue="match" className="w-full">
           <TabsList className="grid w-full grid-cols-2 mb-4 h-11 rounded-full bg-gray-100 p-1">
             <TabsTrigger value="match" className="rounded-full" data-testid="tab-match-chats">
-              <Heart className="w-4 h-4 mr-1.5" />
-              Match
+              <Users className="w-4 h-4 mr-1.5" />
+              {t("connections")}
             </TabsTrigger>
             <TabsTrigger value="market" className="rounded-full" data-testid="tab-market-chats">
               <ShoppingBag className="w-4 h-4 mr-1.5" />

@@ -87,8 +87,8 @@ export const translations = {
     
     // Messages
     noConversationsYet: "No conversations yet",
-    startFromMatches: "Start conversations from your matches to begin chatting!",
-    viewMatches: "View Matches",
+    startFromMatches: "Start a conversation from your connections to begin chatting!",
+    viewMatches: "View connections",
     message: "message",
     messages_plural: "messages",
     
@@ -431,8 +431,8 @@ export const translations = {
     
     // Messages
     noConversationsYet: "Nessuna conversazione ancora",
-    startFromMatches: "Inizia conversazioni dai tuoi match per iniziare a chattare!",
-    viewMatches: "Visualizza Match",
+    startFromMatches: "Inizia una conversazione dalle tue connessioni per chattare!",
+    viewMatches: "Visualizza connessioni",
     message: "messaggio",
     messages_plural: "messaggi",
     
