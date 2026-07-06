@@ -22,6 +22,7 @@ import Settings from "@/pages/settings";
 import Admin from "@/pages/admin";
 import Privacy from "@/pages/privacy";
 import Terms from "@/pages/terms";
+import Support from "@/pages/support";
 import MarketChat from "@/pages/market-chat";
 import TermsGate from "@/components/terms-gate";
 import { LanguageProvider } from "@/contexts/LanguageContext";
@@ -47,6 +48,7 @@ function Router() {
       <Switch>
         <Route path="/privacy" component={Privacy} />
         <Route path="/terms" component={Terms} />
+        <Route path="/support" component={Support} />
         <Route path="/register" component={Register} />
         <Route path="/login" component={Login} />
         <Route path="/" component={Login} />
@@ -76,6 +78,7 @@ function Router() {
         <Route path="/notifications" component={Notifications} />
         <Route path="/privacy" component={Privacy} />
         <Route path="/terms" component={Terms} />
+        <Route path="/support" component={Support} />
         <Route component={NotFound} />
       </Switch>
     </>
