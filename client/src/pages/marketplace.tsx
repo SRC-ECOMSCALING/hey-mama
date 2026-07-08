@@ -1189,11 +1189,17 @@ export default function Marketplace() {
                     <Button
                       className="flex-1 text-white"
                       data-testid="button-message-seller"
-                      style={{ 
+                      style={{
                         background: "linear-gradient(to right, var(--primary-pink), var(--accent-coral))"
                       }}
+                      onClick={() => {
+                        const sellerId = selectedItem.sellerId;
+                        const itemId = selectedItem.id;
+                        setSelectedItem(null);
+                        setLocation(`/market-chat/${itemId}/${sellerId}`);
+                      }}
                     >
-                      Message Seller
+                      {t("message")}
                     </Button>
                   </div>
                 </div>
