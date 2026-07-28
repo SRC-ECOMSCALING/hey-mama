@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { apiRequest } from "@/lib/queryClient";
 import { formatDistanceToNow } from "date-fns";
 import type { MarketplaceItem, MarketplaceMessage, Profile } from "@shared/schema";
+import ReportBlockControls from "@/components/report-block";
 
 interface ThreadResponse {
   item: MarketplaceItem | null;
@@ -112,6 +113,15 @@ export default function MarketChat() {
               {item ? `📦 ${item.title} · €${(item.price / 100).toFixed(0)}` : "Annuncio"}
             </p>
           </div>
+          {otherUserId && (
+            <ReportBlockControls
+              targetUserId={otherUserId}
+              targetType="message"
+              targetId={itemId}
+              onBlocked={() => setLocation("/messages")}
+              variant="icons"
+            />
+          )}
         </div>
       </header>
 

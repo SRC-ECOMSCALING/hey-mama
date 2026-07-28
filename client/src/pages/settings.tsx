@@ -7,19 +7,42 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { ArrowLeft, Trash2, Loader2 } from "lucide-react";
+import { ArrowLeft, Trash2, Loader2, Ban } from "lucide-react";
 import { Link, useLocation } from "wouter";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Language } from "@/lib/translations";
 import { apiRequest } from "@/lib/queryClient";
 import { setToken } from "@/lib/config";
 import { useToast } from "@/hooks/use-toast";
+import type { Block, Profile } from "@shared/schema";
+
+interface BlockWithProfile extends Block {
+  profile: Profile | null;
+}
 
 export default function Settings() {
   const { language, setLanguage, t } = useLanguage();
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
   const { toast } = useToast();
+
+  const { data: blockedUsers = [] } = useQuery<BlockWithProfile[]>({
+    queryKey: ["/api/blocks"],
+  });
+
+  const unblock = useMutation({
+    mutationFn: async (blockedUserId: string) => {
+      const res = await apiRequest("DELETE", `/api/blocks/${blockedUserId}`);
+      return res.json();
+    },
+    onSuccess: () => {
+      // Refetch everything so the unblocked user's content reappears
+      queryClient.invalidateQueries();
+    },
+    onError: () => {
+      toast({ title: t("error"), description: t("somethingWentWrong"), variant: "destructive" });
+    },
+  });
 
   const deleteAccount = useMutation({
     mutationFn: async () => {
@@ -89,6 +112,48 @@ export default function Settings() {
           <CardContent className="flex flex-col gap-2">
             <Link href="/terms"><a className="text-sm text-pink-600 hover:text-pink-700 underline" data-testid="link-settings-terms">{t("termsOfUse")}</a></Link>
             <Link href="/privacy"><a className="text-sm text-pink-600 hover:text-pink-700 underline" data-testid="link-settings-privacy">{t("privacyPolicy")}</a></Link>
+          </CardContent>
+        </Card>
+
+        {/* Blocked users (App Store 1.2) */}
+        <Card data-testid="card-blocked-users">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Ban className="h-5 w-5 text-red-500" />
+              {t("blockedUsers")}
+            </CardTitle>
+            <CardDescription>{t("blockedUsersDescription")}</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {blockedUsers.length === 0 ? (
+              <p className="text-sm text-muted-foreground" data-testid="text-no-blocked-users">
+                {t("noBlockedUsers")}
+              </p>
+            ) : (
+              <div className="space-y-3">
+                {blockedUsers.map((b) => (
+                  <div key={b.id} className="flex items-center gap-3" data-testid={`row-blocked-${b.blockedId}`}>
+                    <img
+                      src={b.profile?.photoUrls?.[0] || "https://via.placeholder.com/80"}
+                      alt=""
+                      className="w-10 h-10 rounded-full object-cover"
+                    />
+                    <span className="flex-1 text-sm font-medium text-gray-800">
+                      {b.profile ? `${b.profile.firstName} ${b.profile.lastName}`.trim() : "—"}
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => unblock.mutate(b.blockedId)}
+                      disabled={unblock.isPending}
+                      data-testid={`button-unblock-${b.blockedId}`}
+                    >
+                      {t("unblock")}
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
 

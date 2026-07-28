@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Upload, MapPin, CheckCircle, XCircle, LogOut, Users, BarChart3,
   Settings as SettingsIcon, Trash2, TreePine, Loader2, FlaskConical, Eye, EyeOff,
-  ShoppingBag, Wrench, Home, Search, ShieldCheck, BadgeCheck, CreditCard,
+  ShoppingBag, Wrench, Home, Search, ShieldCheck, BadgeCheck, CreditCard, Flag,
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -26,6 +26,13 @@ interface AdminStats {
   profiles: number; testProfiles: number;
   locations: number; pendingLocations: number;
   marketplaceItems: number; services: number;
+  openReports: number;
+}
+interface AdminReport {
+  id: string; reporterId: string; reportedUserId: string | null;
+  targetType: string; targetId: string | null; reason: string;
+  details: string | null; status: string; createdAt: string;
+  reporterName: string; reportedUserName: string;
 }
 interface AdminUser {
   id: string; email: string; isEmailVerified: boolean; subscriptionStatus: string | null;
@@ -44,7 +51,7 @@ const LOCATION_CATEGORIES = [
   { value: "teatro", label: "🎭 Teatro" }, { value: "altro", label: "📍 Altro" },
 ];
 
-type SectionKey = "dashboard" | "users" | "admins" | "test" | "locations" | "marketplace" | "services" | "settings";
+type SectionKey = "dashboard" | "users" | "admins" | "test" | "locations" | "marketplace" | "services" | "reports" | "settings";
 const NAV: { key: SectionKey; label: string; icon: typeof Home }[] = [
   { key: "dashboard", label: "Dashboard", icon: BarChart3 },
   { key: "users", label: "Utenti", icon: Users },
@@ -53,6 +60,7 @@ const NAV: { key: SectionKey; label: string; icon: typeof Home }[] = [
   { key: "locations", label: "Luoghi", icon: MapPin },
   { key: "marketplace", label: "Marketplace", icon: ShoppingBag },
   { key: "services", label: "Servizi", icon: Wrench },
+  { key: "reports", label: "Segnalazioni", icon: Flag },
   { key: "settings", label: "Impostazioni", icon: SettingsIcon },
 ];
 
@@ -83,11 +91,12 @@ export default function Admin() {
   const { data: adminLocations = [] } = useQuery<Location[]>({ queryKey: ["/api/admin/locations"], enabled: isAdmin });
   const { data: adminItems = [] } = useQuery<AdminItem[]>({ queryKey: ["/api/admin/marketplace"], enabled: isAdmin });
   const { data: adminServices = [] } = useQuery<AdminService[]>({ queryKey: ["/api/admin/services"], enabled: isAdmin });
+  const { data: adminReports = [] } = useQuery<AdminReport[]>({ queryKey: ["/api/admin/reports"], enabled: isAdmin });
 
   const invalidate = (...keys: string[]) =>
     keys.forEach((k) => queryClient.invalidateQueries({ queryKey: [k] }));
   const invalidateAll = () =>
-    invalidate("/api/admin/stats", "/api/admin/users", "/api/admin/locations", "/api/admin/settings", "/api/admin/marketplace", "/api/admin/services");
+    invalidate("/api/admin/stats", "/api/admin/users", "/api/admin/locations", "/api/admin/settings", "/api/admin/marketplace", "/api/admin/services", "/api/admin/reports");
 
   const toggleTest = useMutation({
     mutationFn: async (d: { profileId: string; isTestProfile: boolean }) =>
@@ -150,6 +159,12 @@ export default function Admin() {
     mutationFn: async (id: string) => (await apiRequest("DELETE", `/api/admin/services/${id}`)).json(),
     onSuccess: () => { invalidateAll(); toast({ title: "Servizio eliminato" }); },
     onError: () => toast({ title: "Errore", description: "Impossibile eliminare il servizio", variant: "destructive" }),
+  });
+  const setReportStatus = useMutation({
+    mutationFn: async (d: { id: string; status: "open" | "resolved" }) =>
+      (await apiRequest("PATCH", `/api/admin/reports/${d.id}`, { status: d.status })).json(),
+    onSuccess: () => invalidateAll(),
+    onError: () => toast({ title: "Errore", description: "Impossibile aggiornare la segnalazione", variant: "destructive" }),
   });
   const osmImport = useMutation({
     mutationFn: async (city: string) => (await apiRequest("POST", "/api/admin/import-osm-parks", { city })).json() as Promise<OsmImportResult>,
@@ -264,6 +279,9 @@ export default function Admin() {
               {key === "locations" && (stats?.pendingLocations ?? 0) > 0 && (
                 <span className="ml-auto text-xs bg-orange-100 text-orange-700 rounded-full px-2 py-0.5">{stats?.pendingLocations}</span>
               )}
+              {key === "reports" && (stats?.openReports ?? 0) > 0 && (
+                <span className="ml-auto text-xs bg-red-100 text-red-700 rounded-full px-2 py-0.5">{stats?.openReports}</span>
+              )}
             </button>
           ))}
         </nav>
@@ -310,6 +328,7 @@ export default function Admin() {
                 <StatCard icon={MapPin} label="Luoghi in attesa" value={stats?.pendingLocations} accent="text-orange-600" />
                 <StatCard icon={ShoppingBag} label="Annunci market" value={stats?.marketplaceItems} />
                 <StatCard icon={Wrench} label="Servizi" value={stats?.services} />
+                <StatCard icon={Flag} label="Segnalazioni aperte" value={stats?.openReports} accent="text-red-600" />
               </div>
               {TestVisibilityCard}
             </div>
@@ -616,6 +635,76 @@ export default function Admin() {
                       </TableRow>
                     ))}
                     {adminServices.length === 0 && <TableRow><TableCell colSpan={5} className="text-center text-gray-400 py-8">Nessun servizio</TableCell></TableRow>}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* REPORTS (App Store 1.2) */}
+          {section === "reports" && (
+            <Card className="max-w-6xl">
+              <CardHeader>
+                <CardTitle>Segnalazioni ({adminReports.length})</CardTitle>
+                <CardDescription>
+                  Segnalazioni di contenuti e blocchi utente. Esamina le segnalazioni aperte entro 24 ore:
+                  elimina i contenuti in violazione dalle sezioni Marketplace/Servizi/Utenti e poi risolvi la segnalazione.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Data</TableHead>
+                      <TableHead>Segnalato da</TableHead>
+                      <TableHead>Utente segnalata</TableHead>
+                      <TableHead className="hidden md:table-cell">Tipo</TableHead>
+                      <TableHead>Motivo</TableHead>
+                      <TableHead className="hidden md:table-cell">Dettagli</TableHead>
+                      <TableHead className="text-center">Stato</TableHead>
+                      <TableHead className="text-right">Azioni</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {adminReports.map((r) => (
+                      <TableRow key={r.id} className={r.status === "open" ? "" : "opacity-60"} data-testid={`row-report-${r.id}`}>
+                        <TableCell className="text-gray-500 whitespace-nowrap">{new Date(r.createdAt).toLocaleDateString("it-IT")}</TableCell>
+                        <TableCell className="font-medium">{r.reporterName}</TableCell>
+                        <TableCell>{r.reportedUserName}</TableCell>
+                        <TableCell className="hidden md:table-cell">
+                          {r.targetType === "user_block"
+                            ? <Badge className="bg-red-100 text-red-700">blocco</Badge>
+                            : <Badge variant="outline" className="text-gray-600">{r.targetType}</Badge>}
+                        </TableCell>
+                        <TableCell className="text-gray-600">{r.reason}</TableCell>
+                        <TableCell className="hidden md:table-cell text-gray-500 truncate max-w-[14rem]">{r.details || "—"}</TableCell>
+                        <TableCell className="text-center">
+                          {r.status === "open"
+                            ? <Badge className="bg-orange-100 text-orange-700">aperta</Badge>
+                            : <Badge className="bg-green-100 text-green-700">risolta</Badge>}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {r.status === "open" ? (
+                            <Button variant="ghost" size="sm" className="text-green-600 hover:text-green-700"
+                              onClick={() => setReportStatus.mutate({ id: r.id, status: "resolved" })}
+                              disabled={setReportStatus.isPending}
+                              data-testid={`button-resolve-report-${r.id}`}>
+                              <CheckCircle className="w-4 h-4 mr-1" /> Risolvi
+                            </Button>
+                          ) : (
+                            <Button variant="ghost" size="sm" className="text-gray-500"
+                              onClick={() => setReportStatus.mutate({ id: r.id, status: "open" })}
+                              disabled={setReportStatus.isPending}
+                              data-testid={`button-reopen-report-${r.id}`}>
+                              Riapri
+                            </Button>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {adminReports.length === 0 && (
+                      <TableRow><TableCell colSpan={8} className="text-center text-gray-400 py-8">Nessuna segnalazione</TableCell></TableRow>
+                    )}
                   </TableBody>
                 </Table>
               </CardContent>

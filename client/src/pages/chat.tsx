@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useParams, useLocation } from "wouter";
-import { ArrowLeft, Send, Heart } from "lucide-react";
+import { ArrowLeft, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
@@ -9,6 +9,7 @@ import { formatDistanceToNow } from "date-fns";
 import type { Message, Profile } from "@shared/schema";
 import heyMamaLogo from "@assets/logo_gradient_text-min_1757514869714.png";
 import { useLanguage } from "@/contexts/LanguageContext";
+import ReportBlockControls from "@/components/report-block";
 
 interface CurrentUser {
   id: string;
@@ -170,9 +171,15 @@ export default function Chat() {
             </div>
           </div>
           
-          <Button variant="ghost" size="icon" className="rounded-full">
-            <Heart className="h-5 w-5 text-pink-500" />
-          </Button>
+          {conversation?.otherUserId && (
+            <ReportBlockControls
+              targetUserId={conversation.otherUserId}
+              targetType="message"
+              targetId={matchId}
+              onBlocked={() => setLocation("/messages")}
+              variant="icons"
+            />
+          )}
         </div>
       </header>
 

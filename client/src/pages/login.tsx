@@ -160,10 +160,18 @@ export default function Login() {
             </Link>
           </div>
 
-          <div className="mt-4 text-center">
+          {/* EULA / Terms presented before login (App Store 1.2) */}
+          <div className="mt-4 text-center text-xs text-muted-foreground" data-testid="text-login-terms-notice">
+            {t("byContinuingAgree")}{" "}
+            <Link href="/terms">
+              <Button variant="link" className="p-0 h-auto text-xs font-medium text-pink-600 hover:text-pink-700 align-baseline" data-testid="link-terms">
+                {t("termsOfUse")}
+              </Button>
+            </Link>{" "}
+            {t("and")}{" "}
             <Link href="/privacy">
-              <Button variant="link" className="p-0 h-auto text-xs font-normal text-muted-foreground hover:text-gray-700" data-testid="link-privacy">
-                Privacy
+              <Button variant="link" className="p-0 h-auto text-xs font-medium text-pink-600 hover:text-pink-700 align-baseline" data-testid="link-privacy">
+                {t("privacyPolicy")}
               </Button>
             </Link>
           </div>

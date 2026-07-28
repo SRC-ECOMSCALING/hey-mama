@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { MapPin, Users, Heart, ExternalLink, ShoppingBag } from "lucide-react";
 import type { Profile } from "@shared/schema";
 import { useLanguage } from "@/contexts/LanguageContext";
+import ReportBlockControls from "@/components/report-block";
 
 interface UserInfoModalProps {
   open: boolean;
@@ -106,6 +107,15 @@ export default function UserInfoModal({ open, onOpenChange, profile }: UserInfoM
               </Button>
             </div>
           )}
+
+          {/* Report / block (App Store 1.2) */}
+          <ReportBlockControls
+            targetUserId={profile.userId}
+            targetType="profile"
+            targetId={profile.id}
+            onBlocked={() => onOpenChange(false)}
+            className="pt-2 border-t"
+          />
         </div>
       </DialogContent>
     </Dialog>

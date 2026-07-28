@@ -429,6 +429,156 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   };
 
+  // ===== App Store 1.2: user blocking + content reporting =====
+
+  // Ids of users blocked by / blocking the given user. Their content must be
+  // hidden from every feed. Fails closed to an empty set so a DB hiccup never
+  // breaks the feeds themselves.
+  const getBlockedSet = async (userId?: string): Promise<Set<string>> => {
+    if (!userId) return new Set();
+    try {
+      return new Set(await storage.getBlockedUserIds(userId));
+    } catch {
+      return new Set();
+    }
+  };
+
+  // Email the developer/admins about a new report or block. Best-effort:
+  // a Brevo outage must never make the report/block action fail.
+  const notifyAdminsOfReport = async (subject: string, lines: string[]) => {
+    try {
+      const html = `<h2>${subject}</h2><ul>${lines.map((l) => `<li>${l}</li>`).join("")}</ul>
+        <p>Gestisci la segnalazione dalla dashboard admin dell'app (sezione Segnalazioni).</p>`;
+      await Promise.all(ADMIN_EMAILS.map((to) =>
+        emailService.sendEmail({
+          to,
+          subject: `[HeyMama moderazione] ${subject}`,
+          htmlContent: html,
+          textContent: `${subject}\n${lines.join("\n")}`,
+        })
+      ));
+    } catch (err: any) {
+      console.error("Failed to email admins about report:", err?.message || err);
+    }
+  };
+
+  const describeUser = async (userId?: string | null): Promise<string> => {
+    if (!userId) return "sconosciuto";
+    try {
+      const [user, profile] = await Promise.all([
+        storage.getUserById(userId),
+        storage.getProfile(userId),
+      ]);
+      const name = profile ? `${profile.firstName} ${profile.lastName}`.trim() : "";
+      return `${name || "(senza profilo)"} <${user?.email || userId}>`;
+    } catch {
+      return userId;
+    }
+  };
+
+  const REPORT_TARGET_TYPES = ["profile", "marketplace_item", "service", "message", "review", "user_block"];
+
+  // Flag objectionable content
+  app.post("/api/reports", requireAuth, async (req: any, res) => {
+    try {
+      const { targetType, targetId, reportedUserId, reason, details } = req.body || {};
+      if (!targetType || !REPORT_TARGET_TYPES.includes(targetType)) {
+        return res.status(400).json({ message: "Invalid targetType" });
+      }
+      if (!reason || typeof reason !== "string") {
+        return res.status(400).json({ message: "reason is required" });
+      }
+      const report = await storage.createReport({
+        reporterId: req.session.userId,
+        reportedUserId: reportedUserId || null,
+        targetType,
+        targetId: targetId || null,
+        reason,
+        details: typeof details === "string" && details.trim() ? details.trim() : null,
+      });
+      const [reporter, reported] = await Promise.all([
+        describeUser(req.session.userId),
+        describeUser(reportedUserId),
+      ]);
+      await notifyAdminsOfReport("Nuova segnalazione di contenuto", [
+        `Segnalato da: ${reporter}`,
+        `Utente segnalato: ${reported}`,
+        `Tipo contenuto: ${targetType}`,
+        `Id contenuto: ${targetId || "-"}`,
+        `Motivo: ${reason}`,
+        `Dettagli: ${details || "-"}`,
+      ]);
+      res.status(201).json({ message: "Report submitted", report });
+    } catch (error) {
+      console.error("Create report error:", error);
+      res.status(500).json({ message: "Failed to submit report" });
+    }
+  });
+
+  // Block a user (also notifies the developer, per App Store 1.2)
+  app.post("/api/blocks", requireAuth, async (req: any, res) => {
+    try {
+      const { blockedUserId, reason } = req.body || {};
+      if (!blockedUserId || typeof blockedUserId !== "string") {
+        return res.status(400).json({ message: "blockedUserId is required" });
+      }
+      if (blockedUserId === req.session.userId) {
+        return res.status(400).json({ message: "Cannot block yourself" });
+      }
+      const block = await storage.blockUser(req.session.userId, blockedUserId);
+      // Every block is also recorded as a report so admins can review the user.
+      await storage.createReport({
+        reporterId: req.session.userId,
+        reportedUserId: blockedUserId,
+        targetType: "user_block",
+        targetId: blockedUserId,
+        reason: typeof reason === "string" && reason.trim() ? reason.trim() : "blocked",
+        details: null,
+      });
+      const [blocker, blocked] = await Promise.all([
+        describeUser(req.session.userId),
+        describeUser(blockedUserId),
+      ]);
+      await notifyAdminsOfReport("Utente bloccato", [
+        `Bloccato da: ${blocker}`,
+        `Utente bloccato: ${blocked}`,
+        `Motivo: ${reason || "-"}`,
+      ]);
+      res.status(201).json({ message: "User blocked", block });
+    } catch (error) {
+      console.error("Block user error:", error);
+      res.status(500).json({ message: "Failed to block user" });
+    }
+  });
+
+  // Unblock a user
+  app.delete("/api/blocks/:blockedUserId", requireAuth, async (req: any, res) => {
+    try {
+      await storage.unblockUser(req.session.userId, req.params.blockedUserId);
+      res.json({ message: "User unblocked" });
+    } catch (error) {
+      console.error("Unblock user error:", error);
+      res.status(500).json({ message: "Failed to unblock user" });
+    }
+  });
+
+  // List users blocked by the current user (for the settings page)
+  app.get("/api/blocks", requireAuth, async (req: any, res) => {
+    try {
+      const userBlocks = await storage.getBlocksByUser(req.session.userId);
+      const withProfiles = await Promise.all(
+        userBlocks.map(async (b) => ({
+          ...b,
+          profile: (await storage.getProfile(b.blockedId)) ?? null,
+        })),
+      );
+      res.json(withProfiles);
+    } catch (error) {
+      console.error("List blocks error:", error);
+      res.status(500).json({ message: "Failed to fetch blocked users" });
+    }
+  });
+
   // Get all profiles for discovery (requires active subscription)
   app.get("/api/profiles/discover/:userId", requireAuth, async (req, res) => {
     try {
@@ -437,6 +587,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!(await shouldShowTestProfiles())) {
         profiles = profiles.filter((p) => !p.isTestProfile);
       }
+      const blocked = await getBlockedSet(req.session.userId);
+      profiles = profiles.filter((p) => !blocked.has(p.userId));
       res.json(profiles);
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch profiles" });
@@ -450,6 +602,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!(await shouldShowTestProfiles())) {
         allProfiles = allProfiles.filter((p) => !p.isTestProfile);
       }
+      const blocked = await getBlockedSet(req.session.userId);
+      allProfiles = allProfiles.filter((p) => !blocked.has(p.userId));
       res.json(allProfiles);
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch profiles" });
@@ -595,9 +749,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         userId = req.session.userId;
       }
       
-      // Get all matches for the user
-      const allMatches = await storage.getMatchesByUser(userId);
-      
+      // Get all matches for the user, hiding blocked users' connections
+      const blocked = await getBlockedSet(userId);
+      const allMatches = (await storage.getMatchesByUser(userId)).filter((m) => {
+        const otherUserId = m.userId === userId ? m.matchedUserId : m.userId;
+        return !blocked.has(otherUserId);
+      });
+
       // Filter for mutual matches only (where both users liked each other)
       const mutualMatches = [];
       const processedPairs = new Set();
@@ -659,9 +817,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ message: "User not authenticated" });
       }
       
+      // Blocked users can't start conversations with each other
+      if (await storage.isBlockedBetween(req.session.userId, matchedUserId)) {
+        return res.status(403).json({ message: "User is blocked" });
+      }
+
       // Find the match between current user and matched user
       const match = await storage.getMatch(req.session.userId, matchedUserId);
-      
+
       if (!match) {
         return res.status(404).json({ message: "Match not found" });
       }
@@ -694,15 +857,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         userId = req.session.userId;
       }
       
+      const blocked = await getBlockedSet(userId);
       const matches = await storage.getMatchesByUser(userId);
-      
+
       // Only return matches that have messages (active conversations)
       const conversationsWithMessages = [];
-      
+
       for (const match of matches) {
+        const otherParticipantId = match.userId === userId ? match.matchedUserId : match.userId;
+        if (blocked.has(otherParticipantId)) continue; // hide blocked users' conversations
         const messages = await storage.getMessagesByMatch(match.id);
         if (messages.length > 0) {
-          const otherUserId = match.userId === userId ? match.matchedUserId : match.userId;
+          const otherUserId = otherParticipantId;
           const profile = await storage.getProfile(otherUserId);
           const lastMessage = messages[messages.length - 1]; // Get the latest message
           
@@ -757,7 +923,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!match.isMatch) {
         return res.status(403).json({ message: "Cannot send message to unconfirmed match" });
       }
-      
+
+      // Blocked users can't message each other
+      const otherParticipantId = match.userId === messageData.senderId ? match.matchedUserId : match.userId;
+      if (await storage.isBlockedBetween(messageData.senderId, otherParticipantId)) {
+        return res.status(403).json({ message: "User is blocked" });
+      }
+
       const message = await storage.createMessage(messageData);
       
       // Create notification for new message
@@ -791,7 +963,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get notifications for current user
   app.get("/api/notifications", requireAuth, async (req, res) => {
     try {
-      const notifications = await storage.getNotificationsByUser(req.session.userId!);
+      const blocked = await getBlockedSet(req.session.userId);
+      const notifications = (await storage.getNotificationsByUser(req.session.userId!))
+        .filter((n) => !blocked.has(n.senderId));
       res.json(notifications);
     } catch (error) {
       console.error("Error fetching notifications:", error);
@@ -1008,8 +1182,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/locations/:id/reviews", async (req, res) => {
     try {
       const { id } = req.params;
-      const reviews = await storage.getReviewsByLocation(id);
-      
+      let reviews = await storage.getReviewsByLocation(id);
+
+      // Hide reviews written by blocked users
+      const blocked = await getBlockedSet(req.session.userId);
+      reviews = reviews.filter((r) => !blocked.has(r.userId));
+
       // Get profile information for review authors
       const reviewsWithProfiles = await Promise.all(
         reviews.map(async (review) => {
@@ -1183,7 +1361,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
           items = [];
         }
       }
-      
+
+      // Hide listings from blocked sellers
+      const blocked = await getBlockedSet(req.session.userId);
+      items = items.filter((item) => !blocked.has(item.sellerId));
+
       // Fetch seller profiles for each item
       const itemsWithSellerProfiles = await Promise.all(
         items.map(async (item) => {
@@ -1380,13 +1562,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/marketplace/looking-for", async (req, res) => {
     try {
       const { category } = req.query;
-      if (category && typeof category === 'string') {
-        const posts = await storage.getLookingForPostsByType(category);
-        res.json(posts);
-      } else {
-        const posts = await storage.getAllLookingForPosts();
-        res.json(posts);
-      }
+      let posts = category && typeof category === 'string'
+        ? await storage.getLookingForPostsByType(category)
+        : await storage.getAllLookingForPosts();
+      // Hide posts from blocked users
+      const blocked = await getBlockedSet(req.session.userId);
+      posts = posts.filter((p) => !blocked.has(p.userId));
+      res.json(posts);
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch looking for posts" });
     }
@@ -1447,13 +1629,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/services", async (req, res) => {
     try {
       const { serviceType } = req.query;
-      if (serviceType && typeof serviceType === 'string') {
-        const services = await storage.getServicesByType(serviceType);
-        res.json(services);
-      } else {
-        const services = await storage.getAllServices();
-        res.json(services);
-      }
+      let services = serviceType && typeof serviceType === 'string'
+        ? await storage.getServicesByType(serviceType)
+        : await storage.getAllServices();
+      // Hide services from blocked providers
+      const blocked = await getBlockedSet(req.session.userId);
+      services = services.filter((s) => !blocked.has(s.providerId));
+      res.json(services);
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch services" });
     }
@@ -1524,13 +1706,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/services/looking-for", async (req, res) => {
     try {
       const { serviceType } = req.query;
-      if (serviceType && typeof serviceType === 'string') {
-        const posts = await storage.getServiceLookingForPostsByType(serviceType);
-        res.json(posts);
-      } else {
-        const posts = await storage.getAllServiceLookingForPosts();
-        res.json(posts);
-      }
+      let posts = serviceType && typeof serviceType === 'string'
+        ? await storage.getServiceLookingForPostsByType(serviceType)
+        : await storage.getAllServiceLookingForPosts();
+      // Hide posts from blocked users
+      const blocked = await getBlockedSet(req.session.userId);
+      posts = posts.filter((p) => !blocked.has(p.userId));
+      res.json(posts);
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch service looking for posts" });
     }
@@ -1705,6 +1887,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/marketplace/conversations", requireAuth, async (req: any, res) => {
     try {
       const userId = req.session.userId;
+      const blocked = await getBlockedSet(userId);
       const msgs = await storage.getMarketplaceMessagesByUser(userId);
 
       // Group by item + counterpart; messages are ordered ASC so the last
@@ -1712,6 +1895,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const grouped = new Map<string, { itemId: string; otherUserId: string; lastMessage: any; messageCount: number }>();
       for (const m of msgs) {
         const otherUserId = m.buyerId === userId ? m.sellerId : m.buyerId;
+        if (blocked.has(otherUserId)) continue; // hide blocked users' conversations
         const key = `${m.itemId}:${otherUserId}`;
         const existing = grouped.get(key);
         grouped.set(key, {
@@ -1781,6 +1965,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Item not found" });
       }
 
+      // Blocked users can't message each other
+      const counterpartId = userId === item.sellerId ? otherUserId : item.sellerId;
+      if (counterpartId && await storage.isBlockedBetween(userId, counterpartId)) {
+        return res.status(403).json({ message: "User is blocked" });
+      }
+
       // The seller is fixed by the item; the buyer is whoever isn't the seller.
       const sellerId = item.sellerId;
       const buyerId = userId === sellerId ? otherUserId : userId;
@@ -1810,12 +2000,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Dashboard stats
   app.get("/api/admin/stats", requireAdmin, async (_req, res) => {
     try {
-      const [allUsers, allProfiles, allLocations, allItems, allServices] = await Promise.all([
+      const [allUsers, allProfiles, allLocations, allItems, allServices, allReports] = await Promise.all([
         storage.getAllUsers(),
         storage.getAllProfiles(),
         storage.getAllLocations(),
         storage.getAllMarketplaceItems(),
         storage.getAllServices(),
+        storage.getAllReports(),
       ]);
       res.json({
         users: allUsers.length,
@@ -1827,6 +2018,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         pendingLocations: allLocations.filter((l) => !l.approved).length,
         marketplaceItems: allItems.length,
         services: allServices.length,
+        openReports: allReports.filter((r) => r.status === "open").length,
       });
     } catch (error) {
       console.error("Admin stats error:", error);
@@ -1987,6 +2179,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Admin service delete error:", error);
       res.status(500).json({ message: "Failed to delete service" });
+    }
+  });
+
+  // Reports moderation (App Store 1.2)
+  app.get("/api/admin/reports", requireAdmin, async (_req, res) => {
+    try {
+      const [allReports, allProfiles, allUsers] = await Promise.all([
+        storage.getAllReports(),
+        storage.getAllProfiles(),
+        storage.getAllUsers(),
+      ]);
+      const label = (userId: string | null) => {
+        if (!userId) return "—";
+        const profile = allProfiles.find((p) => p.userId === userId);
+        const user = allUsers.find((u) => u.id === userId);
+        const name = profile ? `${profile.firstName} ${profile.lastName}`.trim() : "";
+        return name || user?.email || userId;
+      };
+      res.json(allReports.map((r) => ({
+        ...r,
+        reporterName: label(r.reporterId),
+        reportedUserName: label(r.reportedUserId),
+      })));
+    } catch (error) {
+      console.error("Admin reports list error:", error);
+      res.status(500).json({ message: "Failed to fetch reports" });
+    }
+  });
+
+  app.patch("/api/admin/reports/:id", requireAdmin, async (req, res) => {
+    try {
+      const { status } = req.body;
+      if (status !== "open" && status !== "resolved") {
+        return res.status(400).json({ message: "status must be 'open' or 'resolved'" });
+      }
+      const report = await storage.updateReportStatus(req.params.id, status);
+      if (!report) {
+        return res.status(404).json({ message: "Report not found" });
+      }
+      res.json(report);
+    } catch (error) {
+      console.error("Admin report update error:", error);
+      res.status(500).json({ message: "Failed to update report" });
     }
   });
 

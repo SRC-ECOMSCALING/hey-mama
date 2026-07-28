@@ -359,3 +359,41 @@ export const insertNotificationSchema = createInsertSchema(notifications).omit({
 
 export type Notification = typeof notifications.$inferSelect;
 export type InsertNotification = z.infer<typeof insertNotificationSchema>;
+
+// User blocks (App Store 1.2): blocker never sees blocked user's content again
+export const blocks = pgTable("blocks", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  blockerId: varchar("blocker_id").notNull(),
+  blockedId: varchar("blocked_id").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertBlockSchema = createInsertSchema(blocks).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type Block = typeof blocks.$inferSelect;
+export type InsertBlock = z.infer<typeof insertBlockSchema>;
+
+// Content/user reports (App Store 1.2): flagged content reviewed by admins
+export const reports = pgTable("reports", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  reporterId: varchar("reporter_id").notNull(),
+  reportedUserId: varchar("reported_user_id"), // user the content belongs to, if known
+  targetType: varchar("target_type").notNull(), // 'profile' | 'marketplace_item' | 'service' | 'message' | 'review' | 'user_block'
+  targetId: varchar("target_id"), // id of the reported content, if any
+  reason: varchar("reason").notNull(), // 'inappropriate' | 'spam' | 'harassment' | 'scam' | 'other' | 'blocked'
+  details: text("details"),
+  status: varchar("status").default("open").notNull(), // 'open' | 'resolved'
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertReportSchema = createInsertSchema(reports).omit({
+  id: true,
+  createdAt: true,
+  status: true,
+});
+
+export type Report = typeof reports.$inferSelect;
+export type InsertReport = z.infer<typeof insertReportSchema>;

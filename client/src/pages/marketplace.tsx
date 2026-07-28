@@ -22,6 +22,7 @@ import type { MarketplaceItem, LookingForPost, Service, ServiceLookingForPost, P
 import { insertMarketplaceItemSchema } from "@shared/schema";
 import { z } from "zod";
 import UserInfoModal from "@/components/user-info-modal";
+import ReportBlockControls from "@/components/report-block";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { translations } from "@/lib/translations";
 
@@ -1202,6 +1203,17 @@ export default function Marketplace() {
                       {t("message")}
                     </Button>
                   </div>
+
+                  {/* Report / block seller (App Store 1.2) */}
+                  {user?.id !== selectedItem.sellerId && (
+                    <ReportBlockControls
+                      targetUserId={selectedItem.sellerId}
+                      targetType="marketplace_item"
+                      targetId={selectedItem.id}
+                      onBlocked={() => setSelectedItem(null)}
+                      className="pt-3 border-t"
+                    />
+                  )}
                 </div>
               </div>
             </div>

@@ -1,4 +1,4 @@
-import { type User, type InsertUser, type Profile, type InsertProfile, type Match, type InsertMatch, type Message, type InsertMessage, type Swipe, type InsertSwipe, type Location, type InsertLocation, type Review, type InsertReview, type MarketplaceItem, type InsertMarketplaceItem, type MarketplaceMessage, type InsertMarketplaceMessage, type LookingForPost, type InsertLookingForPost, type Service, type InsertService, type ServiceLookingForPost, type InsertServiceLookingForPost, type SavedItem, type InsertSavedItem, type Notification, type InsertNotification, type Registration, type Login } from "@shared/schema";
+import { type User, type InsertUser, type Profile, type InsertProfile, type Match, type InsertMatch, type Message, type InsertMessage, type Swipe, type InsertSwipe, type Location, type InsertLocation, type Review, type InsertReview, type MarketplaceItem, type InsertMarketplaceItem, type MarketplaceMessage, type InsertMarketplaceMessage, type LookingForPost, type InsertLookingForPost, type Service, type InsertService, type ServiceLookingForPost, type InsertServiceLookingForPost, type SavedItem, type InsertSavedItem, type Notification, type InsertNotification, type Block, type Report, type InsertReport, type Registration, type Login } from "@shared/schema";
 import { randomUUID } from "crypto";
 import bcrypt from "bcryptjs";
 import { db, withDbRetry } from "./db";
@@ -19,6 +19,8 @@ import {
   savedItems,
   notifications,
   appSettings,
+  blocks,
+  reports,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -135,6 +137,18 @@ export interface IStorage {
   getNotificationsByUser(userId: string): Promise<Notification[]>;
   markNotificationAsRead(id: string): Promise<Notification | undefined>;
   getUnreadNotificationCount(userId: string): Promise<number>;
+
+  // Block operations (App Store 1.2)
+  blockUser(blockerId: string, blockedId: string): Promise<Block>;
+  unblockUser(blockerId: string, blockedId: string): Promise<void>;
+  getBlocksByUser(blockerId: string): Promise<Block[]>;
+  getBlockedUserIds(userId: string): Promise<string[]>;
+  isBlockedBetween(userIdA: string, userIdB: string): Promise<boolean>;
+
+  // Report operations (App Store 1.2)
+  createReport(report: InsertReport): Promise<Report>;
+  getAllReports(): Promise<Report[]>;
+  updateReportStatus(id: string, status: string): Promise<Report | undefined>;
 }
 
 export class MemStorage implements IStorage {
@@ -1543,6 +1557,21 @@ export class MemStorage implements IStorage {
       .filter(notification => notification.recipientId === userId && !notification.isRead)
       .length;
   }
+
+  // Block/report operations — not supported in the legacy in-memory storage
+  // (MemStorage is unused at runtime; DatabaseStorage is the real backend).
+  async blockUser(_blockerId: string, _blockedId: string): Promise<Block> {
+    throw new Error("Blocks not supported in MemStorage");
+  }
+  async unblockUser(_blockerId: string, _blockedId: string): Promise<void> {}
+  async getBlocksByUser(_blockerId: string): Promise<Block[]> { return []; }
+  async getBlockedUserIds(_userId: string): Promise<string[]> { return []; }
+  async isBlockedBetween(_a: string, _b: string): Promise<boolean> { return false; }
+  async createReport(_report: InsertReport): Promise<Report> {
+    throw new Error("Reports not supported in MemStorage");
+  }
+  async getAllReports(): Promise<Report[]> { return []; }
+  async updateReportStatus(_id: string, _status: string): Promise<Report | undefined> { return undefined; }
 }
 
 // Database Storage Implementation
@@ -2292,6 +2321,8 @@ export class DatabaseStorage implements IStorage {
     await this.db.delete(messages).where(eq(messages.senderId, userId));
     await this.db.delete(matches).where(or(eq(matches.userId, userId), eq(matches.matchedUserId, userId)));
     await this.db.delete(swipes).where(or(eq(swipes.userId, userId), eq(swipes.targetUserId, userId)));
+    await this.db.delete(blocks).where(or(eq(blocks.blockerId, userId), eq(blocks.blockedId, userId)));
+    await this.db.delete(reports).where(eq(reports.reporterId, userId));
     await this.db.delete(profiles).where(eq(profiles.userId, userId));
     await this.db.delete(users).where(eq(users.id, userId));
   }
@@ -2335,6 +2366,66 @@ export class DatabaseStorage implements IStorage {
       .from(notifications)
       .where(and(eq(notifications.recipientId, userId), eq(notifications.isRead, false)));
     return result.count;
+  }
+
+  // ===== Block operations (App Store 1.2) =====
+  async blockUser(blockerId: string, blockedId: string): Promise<Block> {
+    // Idempotent: if the block already exists, return it.
+    const [existing] = await this.db.select().from(blocks)
+      .where(and(eq(blocks.blockerId, blockerId), eq(blocks.blockedId, blockedId)));
+    if (existing) return existing;
+    const [block] = await this.db.insert(blocks)
+      .values({ blockerId, blockedId })
+      .returning();
+    return block;
+  }
+
+  async unblockUser(blockerId: string, blockedId: string): Promise<void> {
+    await this.db.delete(blocks)
+      .where(and(eq(blocks.blockerId, blockerId), eq(blocks.blockedId, blockedId)));
+  }
+
+  async getBlocksByUser(blockerId: string): Promise<Block[]> {
+    return this.db.select().from(blocks).where(eq(blocks.blockerId, blockerId));
+  }
+
+  // Every user id blocked by OR blocking the given user: content is hidden in
+  // both directions so neither side keeps seeing the other after a block.
+  async getBlockedUserIds(userId: string): Promise<string[]> {
+    const rows = await this.db.select().from(blocks)
+      .where(or(eq(blocks.blockerId, userId), eq(blocks.blockedId, userId)));
+    const ids = new Set<string>();
+    for (const row of rows) {
+      ids.add(row.blockerId === userId ? row.blockedId : row.blockerId);
+    }
+    return Array.from(ids);
+  }
+
+  async isBlockedBetween(userIdA: string, userIdB: string): Promise<boolean> {
+    const [row] = await this.db.select().from(blocks)
+      .where(or(
+        and(eq(blocks.blockerId, userIdA), eq(blocks.blockedId, userIdB)),
+        and(eq(blocks.blockerId, userIdB), eq(blocks.blockedId, userIdA)),
+      ));
+    return !!row;
+  }
+
+  // ===== Report operations (App Store 1.2) =====
+  async createReport(report: InsertReport): Promise<Report> {
+    const [newReport] = await this.db.insert(reports).values(report).returning();
+    return newReport;
+  }
+
+  async getAllReports(): Promise<Report[]> {
+    return this.db.select().from(reports).orderBy(sql`${reports.createdAt} DESC`);
+  }
+
+  async updateReportStatus(id: string, status: string): Promise<Report | undefined> {
+    const [report] = await this.db.update(reports)
+      .set({ status })
+      .where(eq(reports.id, id))
+      .returning();
+    return report;
   }
 
 }

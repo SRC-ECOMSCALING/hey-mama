@@ -10,6 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import type { Match, Profile } from "@shared/schema";
 import heyMamaLogo from "@assets/logo_gradient_text-min_1757514869714.png";
 import { useLanguage } from "@/contexts/LanguageContext";
+import ReportBlockControls from "@/components/report-block";
 
 const CURRENT_USER_ID = "current-user";
 
@@ -254,6 +255,17 @@ export default function Matches() {
                 <Calendar className="h-4 w-4" />
                 <span>{t("matchedRecently")}</span>
               </div>
+
+              {/* Report / block (App Store 1.2) */}
+              <ReportBlockControls
+                targetUserId={selectedProfile.userId}
+                targetType="profile"
+                targetId={selectedProfile.id}
+                onBlocked={() => {
+                  setShowProfileModal(false);
+                  setSelectedProfile(null);
+                }}
+              />
             </div>
           </DialogContent>
         </Dialog>

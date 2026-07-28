@@ -6,7 +6,7 @@ import { useLanguage } from "@/contexts/LanguageContext";
 // NOTE: replace the contact email / legal entity placeholders with your real
 // company details before publishing.
 const CONTACT_EMAIL = "support@heymama.app";
-const LAST_UPDATED = "2026-06-10";
+const LAST_UPDATED = "2026-07-28";
 
 type Section = { heading: string; body: string[] };
 type Content = { title: string; intro: string; updatedLabel: string; sections: Section[] };
@@ -45,7 +45,7 @@ const CONTENT: Record<"it" | "en", Content> = {
           "HeyMama! è una community di mamme: ti impegni a comportarti con rispetto.",
           "È vietato pubblicare contenuti illegali, offensivi, diffamatori, molesti, ingannevoli o che violino i diritti altrui.",
           "È vietato impersonare altre persone, raccogliere dati di altri utenti senza consenso o usare l'app per finalità commerciali non autorizzate o spam.",
-          "Ci riserviamo il diritto di rimuovere contenuti e sospendere o chiudere account che violino questi Termini.",
+          "Non c'è alcuna tolleranza per contenuti discutibili o comportamenti abusivi. Ci riserviamo il diritto di rimuovere contenuti e sospendere o chiudere account che violino questi Termini.",
         ],
       },
       {
@@ -53,6 +53,8 @@ const CONTENT: Record<"it" | "en", Content> = {
         body: [
           "Resti titolare dei contenuti che pubblichi (foto, testi, annunci). Concedi a HeyMama! una licenza non esclusiva e gratuita per ospitarli e mostrarli all'interno dell'app al fine di fornirti il servizio.",
           "Sei l'unico responsabile dei contenuti che pubblichi e garantisci di avere il diritto di condividerli.",
+          "Puoi segnalare qualsiasi contenuto discutibile direttamente dall'app (pulsante \"Segnala\") e bloccare gli utenti che si comportano in modo abusivo (pulsante \"Blocca\"): bloccando un'utente, i suoi contenuti scompaiono immediatamente dai tuoi feed, non potrà più contattarti e il nostro team viene avvisato.",
+          "Esaminiamo le segnalazioni entro 24 ore: i contenuti in violazione vengono rimossi e gli utenti responsabili possono essere sospesi o espulsi dall'app.",
         ],
       },
       {
@@ -146,7 +148,7 @@ const CONTENT: Record<"it" | "en", Content> = {
           "HeyMama! is a community of mothers: you agree to behave respectfully.",
           "You may not post illegal, offensive, defamatory, harassing, misleading content or content that infringes others' rights.",
           "You may not impersonate others, collect other users' data without consent, or use the app for unauthorized commercial purposes or spam.",
-          "We reserve the right to remove content and suspend or terminate accounts that violate these Terms.",
+          "There is no tolerance for objectionable content or abusive behavior. We reserve the right to remove content and suspend or terminate accounts that violate these Terms.",
         ],
       },
       {
@@ -154,6 +156,8 @@ const CONTENT: Record<"it" | "en", Content> = {
         body: [
           "You retain ownership of the content you post (photos, text, listings). You grant HeyMama! a non-exclusive, royalty-free license to host and display it within the app to provide the service.",
           "You are solely responsible for the content you post and warrant that you have the right to share it.",
+          "You can flag any objectionable content directly in the app (\"Report\" button) and block abusive users (\"Block\" button): when you block a user, their content instantly disappears from your feeds, they can no longer contact you, and our team is notified.",
+          "We review reports within 24 hours: content that violates these Terms is removed and the responsible users may be suspended or ejected from the app.",
         ],
       },
       {
