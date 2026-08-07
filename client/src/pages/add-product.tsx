@@ -170,32 +170,11 @@ export default function AddProduct() {
     if (!response.ok) {
       throw new Error('Failed to upload file');
     }
-    
-    // Return the object URL (clean object path without bucket or .private prefix)
+
+    // The upload URL (minus any query string) is also the serving URL.
+    // Absolute so it works in the native WebView too.
     const url = new URL(uploadUrl);
-    let pathname = url.pathname;
-    
-    // Remove leading slash
-    if (pathname.startsWith('/')) {
-      pathname = pathname.slice(1);
-    }
-    
-    // Split into parts and remove bucket and .private segments
-    const parts = pathname.split('/');
-    let cleanParts = parts;
-    
-    // Remove bucket name (first segment) if present
-    if (cleanParts.length > 0) {
-      cleanParts = cleanParts.slice(1);
-    }
-    
-    // Remove .private segment if present
-    if (cleanParts.length > 0 && cleanParts[0] === '.private') {
-      cleanParts = cleanParts.slice(1);
-    }
-    
-    const objectPath = cleanParts.join('/');
-    return `/objects/${objectPath}`;
+    return `${url.origin}${url.pathname}`;
   };
 
   // Function to upload a single image

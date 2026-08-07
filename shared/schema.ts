@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, timestamp, boolean } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, timestamp, boolean, customType } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -397,3 +397,20 @@ export const insertReportSchema = createInsertSchema(reports).omit({
 
 export type Report = typeof reports.$inferSelect;
 export type InsertReport = z.infer<typeof insertReportSchema>;
+
+// Uploaded images stored in Postgres (profile photos, marketplace pictures).
+// Replaces the Replit object storage, which is unavailable outside Replit.
+const bytea = customType<{ data: Buffer }>({
+  dataType() {
+    return "bytea";
+  },
+});
+
+export const uploadedImages = pgTable("uploaded_images", {
+  id: varchar("id").primaryKey(), // UUID generated when the upload URL is issued
+  data: bytea("data").notNull(),
+  contentType: varchar("content_type").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type UploadedImage = typeof uploadedImages.$inferSelect;

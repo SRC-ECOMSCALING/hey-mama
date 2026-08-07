@@ -1,6 +1,15 @@
-import type { Express } from "express";
+import { raw, type Express } from "express";
 import { createServer, type Server } from "http";
+import { randomUUID } from "crypto";
 import { storage } from "./storage";
+import {
+  MAX_IMAGE_BYTES,
+  getImage,
+  imageIdFromPath,
+  isValidImageId,
+  requestBaseUrl,
+  saveImage,
+} from "./imageStorage";
 import { insertSwipeSchema, insertMessageSchema, insertReviewSchema, insertLookingForPostSchema, insertServiceSchema, insertServiceLookingForPostSchema, insertLocationSchema, registrationSchema, loginSchema, updateProfileSchema } from "@shared/schema";
 import { z } from "zod";
 import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
@@ -346,6 +355,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/objects/:objectPath(*)", requireAuth, async (req: any, res) => {
     const userId = req.session.userId;
     console.log(`[OBJECT] Serving ${req.path} for user ${userId}`);
+    // Postgres-stored images first (/objects/uploads/<uuid> URLs saved by the
+    // client); the code below only handles legacy Replit object storage.
+    const imageId = imageIdFromPath(req.path);
+    if (imageId) {
+      const image = await getImage(imageId).catch(() => null);
+      if (image) {
+        res.set({
+          "Content-Type": image.contentType,
+          "Content-Length": String(image.data.length),
+          "Cache-Control": "public, max-age=31536000, immutable",
+        });
+        return res.end(image.data);
+      }
+    }
     try {
       const objectFile = await objectStorageService.getObjectEntityFile(req.path);
       console.log(`[OBJECT] File found for ${req.path}`);
@@ -372,25 +395,73 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Images are stored in Postgres and served by this server (the previous
+  // Replit object storage only worked on Replit). The upload endpoints hand
+  // out an absolute PUT URL on this server; the client uploads the file there
+  // and stores that same URL as the photo URL.
+  const makeUploadURL = (req: any) =>
+    `${requestBaseUrl(req)}/api/uploads/${randomUUID()}`;
+
   // Public upload route for registration (no auth required)
   app.post("/api/objects/upload/public", async (req, res) => {
-    try {
-      const uploadURL = await objectStorageService.getObjectEntityUploadURL();
-      res.json({ uploadURL });
-    } catch (error) {
-      console.error("Error creating upload URL:", error);
-      res.status(500).json({ error: "Failed to create upload URL" });
-    }
+    res.json({ uploadURL: makeUploadURL(req) });
   });
 
   // Authenticated upload route for logged-in users
   app.post("/api/objects/upload", requireAuth, async (req: any, res) => {
+    res.json({ uploadURL: makeUploadURL(req) });
+  });
+
+  // Receives the image bytes for an upload URL issued above
+  app.put(
+    "/api/uploads/:id",
+    raw({ type: () => true, limit: MAX_IMAGE_BYTES }),
+    async (req, res) => {
+      try {
+        const { id } = req.params;
+        if (!isValidImageId(id)) {
+          return res.status(400).json({ error: "Invalid image id" });
+        }
+        const contentType = req.headers["content-type"] || "";
+        if (
+          !contentType.startsWith("image/") &&
+          contentType !== "application/octet-stream"
+        ) {
+          return res.status(400).json({ error: "Only images are accepted" });
+        }
+        if (!Buffer.isBuffer(req.body) || req.body.length === 0) {
+          return res.status(400).json({ error: "Empty upload" });
+        }
+        await saveImage(id, req.body, contentType);
+        res.sendStatus(200);
+      } catch (error) {
+        console.error("Error storing upload:", error);
+        res.status(500).json({ error: "Failed to store upload" });
+      }
+    },
+  );
+
+  // Serves uploaded images. Public: profile photos are shown during
+  // registration (before login) and in native WebViews without cookies.
+  app.get("/api/uploads/:id", async (req, res) => {
     try {
-      const uploadURL = await objectStorageService.getObjectEntityUploadURL();
-      res.json({ uploadURL });
+      const { id } = req.params;
+      if (!isValidImageId(id)) {
+        return res.sendStatus(404);
+      }
+      const image = await getImage(id);
+      if (!image) {
+        return res.sendStatus(404);
+      }
+      res.set({
+        "Content-Type": image.contentType,
+        "Content-Length": String(image.data.length),
+        "Cache-Control": "public, max-age=31536000, immutable",
+      });
+      res.end(image.data);
     } catch (error) {
-      console.error("Error creating upload URL:", error);
-      res.status(500).json({ error: "Failed to create upload URL" });
+      console.error("Error serving upload:", error);
+      res.sendStatus(500);
     }
   });
 
