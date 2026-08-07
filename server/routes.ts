@@ -55,6 +55,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         "GET,POST,PUT,PATCH,DELETE,OPTIONS",
       );
       res.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
+      // Uppy (@uppy/aws-s3) must read the ETag of the upload PUT response;
+      // cross-origin (native WebView) that needs an explicit expose, or the
+      // upload hangs at 100% forever.
+      res.header("Access-Control-Expose-Headers", "ETag, Location");
     }
     if (req.method === "OPTIONS") {
       return res.sendStatus(204);
