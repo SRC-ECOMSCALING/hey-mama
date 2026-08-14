@@ -15,13 +15,14 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { useToast } from "@/hooks/use-toast";
 import { insertMarketplaceItemSchema, type InsertMarketplaceItem } from "@shared/schema";
 import { z } from "zod";
+import { apiRequest } from "@/lib/queryClient";
 
 // Extended schema for the add product form
 const addProductSchema = insertMarketplaceItemSchema.extend({
   // Ensure required fields
   title: z.string().min(1, "Il titolo è obbligatorio"),
   description: z.string().min(10, "La descrizione deve essere almeno 10 caratteri"),
-  price: z.number().min(1, "Il prezzo deve essere maggiore di 0"),
+  price: z.number({ invalid_type_error: "Inserisci un prezzo valido" }).min(0.01, "Inserisci un prezzo valido"),
   category: z.string().min(1, "Seleziona una categoria"),
   brand: z.string().min(1, "Seleziona una marca"),
   size: z.string().min(1, "Seleziona una taglia"),
@@ -118,6 +119,9 @@ type UploadedImage = {
 export default function AddProduct() {
   const [, setLocation] = useLocation();
   const [uploadedImages, setUploadedImages] = useState<UploadedImage[]>([]);
+  // The price is edited as free text (comma or dot decimals) and parsed on
+  // change: no pre-filled 0 to fight against while typing.
+  const [priceText, setPriceText] = useState("");
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -126,7 +130,7 @@ export default function AddProduct() {
     defaultValues: {
       title: "",
       description: "",
-      price: 0,
+      price: undefined as unknown as number,
       category: "",
       brand: "",
       size: "",
@@ -142,17 +146,10 @@ export default function AddProduct() {
     },
   });
 
-  // Function to get upload URL from backend
+  // Function to get upload URL from backend (apiRequest adds the bearer token
+  // required by native builds, where session cookies are unreliable)
   const getUploadUrl = async (): Promise<string> => {
-    const response = await fetch('/api/objects/upload', {
-      method: 'POST',
-      credentials: 'include',
-    });
-    
-    if (!response.ok) {
-      throw new Error('Failed to get upload URL');
-    }
-    
+    const response = await apiRequest('POST', '/api/objects/upload');
     const data = await response.json();
     return data.uploadURL;
   };
@@ -163,10 +160,12 @@ export default function AddProduct() {
       method: 'PUT',
       body: file,
       headers: {
-        'Content-Type': file.type,
+        // Some pickers return files without a MIME type: fall back to a
+        // generic binary type the server accepts instead of an empty header.
+        'Content-Type': file.type || 'application/octet-stream',
       },
     });
-    
+
     if (!response.ok) {
       throw new Error('Failed to upload file');
     }
@@ -579,14 +578,27 @@ export default function AddProduct() {
                     <FormItem>
                       <FormLabel>Prezzo (€) *</FormLabel>
                       <FormControl>
-                        <Input 
-                          type="number"
-                          step="0.01"
-                          placeholder="0.00"
-                          {...field}
-                          onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
-                          data-testid="input-price"
-                        />
+                        <div className="relative">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">€</span>
+                          <Input
+                            type="text"
+                            inputMode="decimal"
+                            placeholder="es. 12,50"
+                            className="pl-8"
+                            value={priceText}
+                            name={field.name}
+                            ref={field.ref}
+                            onBlur={field.onBlur}
+                            onChange={(e) => {
+                              // Accept only digits with one comma/dot decimal separator
+                              const raw = e.target.value.replace(/[^\d.,]/g, "");
+                              setPriceText(raw);
+                              const parsed = parseFloat(raw.replace(",", "."));
+                              field.onChange(Number.isFinite(parsed) ? parsed : undefined);
+                            }}
+                            data-testid="input-price"
+                          />
+                        </div>
                       </FormControl>
                       <FormMessage />
                     </FormItem>

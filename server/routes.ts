@@ -10,7 +10,7 @@ import {
   requestBaseUrl,
   saveImage,
 } from "./imageStorage";
-import { insertSwipeSchema, insertMessageSchema, insertReviewSchema, insertLookingForPostSchema, insertServiceSchema, insertServiceLookingForPostSchema, insertLocationSchema, registrationSchema, loginSchema, updateProfileSchema } from "@shared/schema";
+import { insertSwipeSchema, insertMessageSchema, insertReviewSchema, insertLookingForPostSchema, insertServiceSchema, insertServiceLookingForPostSchema, insertLocationSchema, insertEventSchema, registrationSchema, loginSchema, updateProfileSchema, type Profile, type MarketplaceItem } from "@shared/schema";
 import { z } from "zod";
 import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
 import { ObjectPermission } from "./objectAcl";
@@ -152,6 +152,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Object storage service
   const objectStorageService = new ObjectStorageService();
+
+  // ===== Image URL normalization =====
+  // Photo URLs have been stored in several shapes over time (absolute URLs of
+  // old deployments, relative /objects/uploads/<id>, presigned GCS links).
+  // Whenever an uploaded image id can be recovered, rewrite the URL to this
+  // server's public serving endpoint so pictures load on web AND in the
+  // native WebView (which cannot resolve relative <img> sources).
+  const normalizeImageUrl = (req: any, url: string | null | undefined): string | null => {
+    if (!url) return url ?? null;
+    const id = imageIdFromPath(url);
+    return id ? `${requestBaseUrl(req)}/api/uploads/${id}` : url;
+  };
+
+  const normalizeProfileImages = <T extends Profile | null | undefined>(req: any, profile: T): T => {
+    if (!profile) return profile;
+    return {
+      ...profile,
+      photoUrls: (profile.photoUrls || []).map((u) => normalizeImageUrl(req, u) as string),
+    };
+  };
+
+  const normalizeItemImages = <T extends MarketplaceItem | null | undefined>(req: any, item: T): T => {
+    if (!item) return item;
+    return {
+      ...item,
+      imageUrls: (item.imageUrls || []).map((u) => normalizeImageUrl(req, u) as string),
+    };
+  };
 
 
   // Authentication routes
@@ -307,10 +335,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!user) {
         return res.status(404).json({ message: "User not found" });
       }
-      
+
+      const profile = await storage.getProfile(req.session.userId).catch(() => undefined);
       res.json({
         id: user.id,
         email: user.email,
+        language: user.language || "it",
+        accountType: profile?.accountType || "mom",
         termsAccepted: !!user.termsAcceptedAt,
         isAdmin: isUserAdmin(user),
       });
@@ -426,7 +457,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (!isValidImageId(id)) {
           return res.status(400).json({ error: "Invalid image id" });
         }
-        const contentType = req.headers["content-type"] || "";
+        // Some WebViews/pickers send no content type at all — treat those as
+        // binary images rather than rejecting the upload.
+        const contentType =
+          (req.headers["content-type"] as string | undefined)?.trim() ||
+          "application/octet-stream";
         if (
           !contentType.startsWith("image/") &&
           contentType !== "application/octet-stream"
@@ -664,24 +699,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       const blocked = await getBlockedSet(req.session.userId);
       profiles = profiles.filter((p) => !blocked.has(p.userId));
-      res.json(profiles);
+      res.json(profiles.map((p) => normalizeProfileImages(req, p)));
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch profiles" });
     }
   });
 
-  // Get all profiles for map display (no limit, includes all profiles)
+  // Get mom profiles for map display (professionals are listed in "Intorno a te")
   app.get("/api/profiles/map", requireAuth, async (req, res) => {
     try {
-      let allProfiles = await storage.getAllProfiles();
+      let allProfiles = await storage.getAllMomProfiles();
       if (!(await shouldShowTestProfiles())) {
         allProfiles = allProfiles.filter((p) => !p.isTestProfile);
       }
       const blocked = await getBlockedSet(req.session.userId);
       allProfiles = allProfiles.filter((p) => !blocked.has(p.userId));
-      res.json(allProfiles);
+      res.json(allProfiles.map((p) => normalizeProfileImages(req, p)));
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch profiles" });
+    }
+  });
+
+  // Professionals directory ("Intorno a te" tab): professional profiles with
+  // the services they offer.
+  app.get("/api/professionals", requireAuth, async (req: any, res) => {
+    try {
+      let pros = await storage.getProfessionalProfiles();
+      if (!(await shouldShowTestProfiles())) {
+        pros = pros.filter((p) => !p.isTestProfile);
+      }
+      const blocked = await getBlockedSet(req.session.userId);
+      pros = pros.filter((p) => !blocked.has(p.userId));
+      const withServices = await Promise.all(
+        pros.map(async (p) => ({
+          ...normalizeProfileImages(req, p),
+          services: await storage.getServicesByProvider(p.userId),
+        })),
+      );
+      res.json(withServices);
+    } catch (error) {
+      console.error("Professionals list error:", error);
+      res.status(500).json({ message: "Failed to fetch professionals" });
     }
   });
 
@@ -692,7 +750,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Auto-create a minimal profile for legacy accounts that never had one,
       // so the profile page works instead of dead-ending on "profilo non trovato".
       const profile = await storage.ensureProfile(userId);
-      res.json(profile);
+      res.json(normalizeProfileImages(req, profile));
     } catch (error) {
       console.error("Error fetching current user profile:", error);
       res.status(500).json({ message: "Failed to fetch profile" });
@@ -707,7 +765,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!profile) {
         return res.status(404).json({ message: "Profile not found" });
       }
-      res.json(profile);
+      res.json(normalizeProfileImages(req, profile));
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch profile" });
     }
@@ -761,7 +819,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Create a swipe (requires active subscription)
+  // Create a swipe. A "like" sends a CONNECTION REQUEST (match.isMatch=false):
+  // messaging opens only after the other mom accepts. If she had already sent
+  // a request to us, liking her accepts it.
   app.post("/api/swipes", requireAuth, async (req, res) => {
     try {
       // Always use the authenticated user as the actor (ignore client "current-user").
@@ -770,25 +830,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const swipe = await storage.createSwipe(swipeData);
 
-      // Community model (not dating): connecting establishes a connection
-      // immediately so both moms can message — no mutual "match" required.
       let match = null;
       if (swipeData.isLike) {
         const existing = await storage.getMatch(swipeData.userId, swipeData.targetUserId);
-        match = existing || await storage.createMatch({
-          userId: swipeData.userId,
-          matchedUserId: swipeData.targetUserId,
-          isMatch: true,
-        });
-
-        // Notify the other user that someone connected with them.
-        if (!existing) {
+        if (existing && !existing.isMatch && existing.userId === swipeData.targetUserId) {
+          // She asked first — liking back accepts her request.
+          match = await storage.acceptMatch(existing.id) ?? existing;
           try {
             await storage.createNotification({
               type: 'match',
               senderId: swipeData.userId,
               recipientId: swipeData.targetUserId,
-              message: 'Una mamma si è connessa con te!',
+              message: 'La tua richiesta di connessione è stata accettata!',
+              relatedId: match.id,
+              isRead: false
+            });
+          } catch (notificationError) {
+            console.error("Error creating accept notification:", notificationError);
+          }
+        } else if (existing) {
+          match = existing;
+        } else {
+          match = await storage.createMatch({
+            userId: swipeData.userId,
+            matchedUserId: swipeData.targetUserId,
+            isMatch: false, // pending request until accepted
+          });
+          try {
+            await storage.createNotification({
+              type: 'connection_request',
+              senderId: swipeData.userId,
+              recipientId: swipeData.targetUserId,
+              message: 'Hai ricevuto una richiesta di connessione!',
               relatedId: match.id,
               isRead: false
             });
@@ -801,13 +874,119 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({
         swipe,
         match,
-        connected: !!match,
+        connected: !!match?.isMatch,
+        requested: !!match && !match.isMatch,
       });
     } catch (error) {
       if (error instanceof z.ZodError) {
         return res.status(400).json({ message: "Invalid swipe data", errors: error.errors });
       }
       res.status(500).json({ message: "Failed to create swipe" });
+    }
+  });
+
+  // ===== Connection requests =====
+
+  // Incoming + outgoing pending requests for the current user
+  app.get("/api/connections/requests", requireAuth, async (req: any, res) => {
+    try {
+      const userId = req.session.userId;
+      const blocked = await getBlockedSet(userId);
+      const [incoming, outgoing] = await Promise.all([
+        storage.getIncomingRequests(userId),
+        storage.getOutgoingRequests(userId),
+      ]);
+      const withProfiles = async (rows: typeof incoming, otherIdOf: (m: typeof incoming[number]) => string) =>
+        (await Promise.all(
+          rows
+            .filter((m) => !blocked.has(otherIdOf(m)))
+            .map(async (m) => ({
+              ...m,
+              otherUserId: otherIdOf(m),
+              profile: normalizeProfileImages(req, await storage.getProfile(otherIdOf(m)) ?? null),
+            })),
+        )).filter((m) => m.profile);
+      res.json({
+        incoming: await withProfiles(incoming, (m) => m.userId),
+        outgoing: await withProfiles(outgoing, (m) => m.matchedUserId),
+      });
+    } catch (error) {
+      console.error("Connection requests error:", error);
+      res.status(500).json({ message: "Failed to fetch connection requests" });
+    }
+  });
+
+  // Connection status per user id: 'connected' | 'pending_sent' | 'pending_received'.
+  // Used by the map (white/pink/photo markers) and the discover deck.
+  app.get("/api/connections/status", requireAuth, async (req: any, res) => {
+    try {
+      const userId = req.session.userId;
+      const all = await storage.getMatchesByUser(userId);
+      const statuses: Record<string, string> = {};
+      for (const m of all) {
+        const otherId = m.userId === userId ? m.matchedUserId : m.userId;
+        if (m.isMatch) {
+          statuses[otherId] = "connected";
+        } else if (statuses[otherId] !== "connected") {
+          statuses[otherId] = m.userId === userId ? "pending_sent" : "pending_received";
+        }
+      }
+      res.json(statuses);
+    } catch (error) {
+      console.error("Connection status error:", error);
+      res.status(500).json({ message: "Failed to fetch connection status" });
+    }
+  });
+
+  // Accept an incoming request (only the recipient can)
+  app.post("/api/connections/:matchId/accept", requireAuth, async (req: any, res) => {
+    try {
+      const match = await storage.getMatchById(req.params.matchId);
+      if (!match) {
+        return res.status(404).json({ message: "Request not found" });
+      }
+      if (match.matchedUserId !== req.session.userId) {
+        return res.status(403).json({ message: "Only the recipient can accept this request" });
+      }
+      const accepted = await storage.acceptMatch(match.id);
+      try {
+        await storage.createNotification({
+          type: 'match',
+          senderId: req.session.userId,
+          recipientId: match.userId,
+          message: 'La tua richiesta di connessione è stata accettata!',
+          relatedId: match.id,
+          isRead: false,
+        });
+      } catch (notificationError) {
+        console.error("Error creating accept notification:", notificationError);
+      }
+      res.json(accepted);
+    } catch (error) {
+      console.error("Accept connection error:", error);
+      res.status(500).json({ message: "Failed to accept request" });
+    }
+  });
+
+  // Decline an incoming request (or cancel one you sent)
+  app.post("/api/connections/:matchId/decline", requireAuth, async (req: any, res) => {
+    try {
+      const match = await storage.getMatchById(req.params.matchId);
+      if (!match) {
+        return res.status(404).json({ message: "Request not found" });
+      }
+      const userId = req.session.userId;
+      if (match.matchedUserId !== userId && match.userId !== userId) {
+        return res.status(403).json({ message: "Not part of this request" });
+      }
+      if (match.isMatch) {
+        return res.status(400).json({ message: "Connection already accepted" });
+      }
+      await storage.deleteMatch(match.id);
+      res.json({ message: "Request removed" });
+    } catch (error) {
+      console.error("Decline connection error:", error);
+      res.status(500).json({ message: "Failed to decline request" });
     }
   });
 
@@ -824,39 +1003,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
         userId = req.session.userId;
       }
       
-      // Get all matches for the user, hiding blocked users' connections
+      // Accepted connections only (isMatch=true); pending requests live in
+      // /api/connections/requests. Blocked users' connections are hidden.
       const blocked = await getBlockedSet(userId);
-      const allMatches = (await storage.getMatchesByUser(userId)).filter((m) => {
+      const seenPairs = new Set<string>();
+      const acceptedMatches = (await storage.getMatchesByUser(userId)).filter((m) => {
+        if (!m.isMatch) return false;
         const otherUserId = m.userId === userId ? m.matchedUserId : m.userId;
-        return !blocked.has(otherUserId);
+        if (blocked.has(otherUserId)) return false;
+        const pairKey = [userId, otherUserId].sort().join('-');
+        if (seenPairs.has(pairKey)) return false;
+        seenPairs.add(pairKey);
+        return true;
       });
 
-      // Filter for mutual matches only (where both users liked each other)
-      const mutualMatches = [];
-      const processedPairs = new Set();
-      
-      for (const match of allMatches) {
-        const otherUserId = match.userId === userId ? match.matchedUserId : match.userId;
-        const pairKey = [userId, otherUserId].sort().join('-');
-        
-        if (!processedPairs.has(pairKey)) {
-          processedPairs.add(pairKey);
-          
-          // Check if there's a mutual match (both users liked each other)
-          const reverseMatch = await storage.getMatch(userId, otherUserId);
-          const forwardMatch = await storage.getMatch(otherUserId, userId);
-          
-          if (reverseMatch && forwardMatch && reverseMatch.isMatch && forwardMatch.isMatch) {
-            mutualMatches.push(match);
-          }
-        }
-      }
-      
       // Get profile information for matched users
       const matchesWithProfiles = await Promise.all(
-        mutualMatches.map(async (match) => {
+        acceptedMatches.map(async (match) => {
           const matchedUserId = match.userId === userId ? match.matchedUserId : match.userId;
-          const profile = await storage.getProfile(matchedUserId);
+          const profile = normalizeProfileImages(req, await storage.getProfile(matchedUserId) ?? null);
           return {
             ...match,
             profile,
@@ -864,8 +1029,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           };
         })
       );
-      
-      res.json(matchesWithProfiles);
+
+      res.json(matchesWithProfiles.filter((m) => m.profile));
     } catch (error) {
       console.error("Error fetching matches:", error);
       res.status(500).json({ message: "Failed to fetch matches" });
@@ -903,9 +1068,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!match) {
         return res.status(404).json({ message: "Match not found" });
       }
-      
+
+      // Messaging requires an ACCEPTED connection
+      if (!match.isMatch) {
+        return res.status(403).json({ message: "Connection not accepted yet" });
+      }
+
       // Get the matched user's profile for conversation display
-      const profile = await storage.getProfile(matchedUserId);
+      const profile = normalizeProfileImages(req, await storage.getProfile(matchedUserId) ?? null);
       
       // Return the conversation info (match + profile)
       res.json({
@@ -939,12 +1109,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const conversationsWithMessages = [];
 
       for (const match of matches) {
+        if (!match.isMatch) continue; // pending requests have no conversation
         const otherParticipantId = match.userId === userId ? match.matchedUserId : match.userId;
         if (blocked.has(otherParticipantId)) continue; // hide blocked users' conversations
         const messages = await storage.getMessagesByMatch(match.id);
         if (messages.length > 0) {
           const otherUserId = otherParticipantId;
-          const profile = await storage.getProfile(otherUserId);
+          const profile = normalizeProfileImages(req, await storage.getProfile(otherUserId) ?? null);
           const lastMessage = messages[messages.length - 1]; // Get the latest message
           
           conversationsWithMessages.push({
@@ -1014,7 +1185,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           type: 'message',
           senderId: messageData.senderId,
           recipientId: recipientId,
-          message: 'You have a new message!',
+          message: 'Hai ricevuto un nuovo messaggio!',
           relatedId: message.id,
           isRead: false
         });
@@ -1281,9 +1452,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Create a review
-  app.post("/api/reviews", async (req, res) => {
+  app.post("/api/reviews", requireAuth, async (req: any, res) => {
     try {
-      const reviewData = insertReviewSchema.parse(req.body);
+      const reviewData = insertReviewSchema.parse({
+        ...req.body,
+        userId: req.session.userId,
+      });
       const review = await storage.createReview(reviewData);
       res.json(review);
     } catch (error) {
@@ -1446,12 +1620,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         items.map(async (item) => {
           const sellerProfile = await storage.getProfile(item.sellerId);
           return {
-            ...item,
-            sellerProfile: sellerProfile || null
+            ...normalizeItemImages(req, item),
+            sellerProfile: normalizeProfileImages(req, sellerProfile ?? null)
           };
         })
       );
-      
+
       res.json(itemsWithSellerProfiles);
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch marketplace items" });
@@ -1465,7 +1639,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!item) {
         return res.status(404).json({ message: "Item not found" });
       }
-      res.json(item);
+      res.json(normalizeItemImages(req, item));
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch marketplace item" });
     }
@@ -1592,7 +1766,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ message: "Authentication required" });
       }
       const savedItems = await storage.getSavedItems(req.session.userId);
-      res.json(savedItems);
+      res.json(savedItems.map((it) => normalizeItemImages(req, it)));
     } catch (error) {
       console.error('Error getting saved items:', error);
       res.status(500).json({ message: "Failed to get saved items" });
@@ -1627,7 +1801,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { sellerId } = req.params;
       const items = await storage.getMarketplaceItemsBySeller(sellerId);
-      res.json(items);
+      res.json(items.map((it) => normalizeItemImages(req, it)));
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch seller's items" });
     }
@@ -1649,9 +1823,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/marketplace/looking-for", async (req, res) => {
+  app.post("/api/marketplace/looking-for", requireAuth, async (req: any, res) => {
     try {
-      const postData = insertLookingForPostSchema.parse(req.body);
+      const postData = insertLookingForPostSchema.parse({
+        ...req.body,
+        userId: req.session.userId,
+      });
       const post = await storage.createLookingForPost(postData);
       res.status(201).json(post);
     } catch (error) {
@@ -1716,15 +1893,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/services", async (req, res) => {
+  // The provider is ALWAYS the logged-in user. The form intentionally omits
+  // providerId, so parsing the raw body used to fail validation every time —
+  // that's why services could never be published.
+  app.post("/api/services", requireAuth, async (req: any, res) => {
     try {
-      const serviceData = insertServiceSchema.parse(req.body);
+      const serviceData = insertServiceSchema.parse({
+        ...req.body,
+        providerId: req.session.userId,
+      });
       const service = await storage.createService(serviceData);
       res.status(201).json(service);
     } catch (error) {
       if (error instanceof z.ZodError) {
         res.status(400).json({ message: "Invalid service data", errors: error.errors });
       } else {
+        console.error("Create service error:", error);
         res.status(500).json({ message: "Failed to create service" });
       }
     }
@@ -1743,23 +1927,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put("/api/services/:id", async (req, res) => {
+  app.put("/api/services/:id", requireAuth, async (req: any, res) => {
     try {
       const { id } = req.params;
-      const updateData = req.body;
-      const service = await storage.updateService(id, updateData);
-      if (!service) {
+      const existing = await storage.getService(id);
+      if (!existing) {
         return res.status(404).json({ message: "Service not found" });
       }
+      const user = await storage.getUserById(req.session.userId);
+      if (existing.providerId !== req.session.userId && !isUserAdmin(user)) {
+        return res.status(403).json({ message: "Not your service" });
+      }
+      const { providerId: _ignored, ...updateData } = req.body || {};
+      const service = await storage.updateService(id, updateData);
       res.json(service);
     } catch (error) {
       res.status(500).json({ message: "Failed to update service" });
     }
   });
 
-  app.delete("/api/services/:id", async (req, res) => {
+  app.delete("/api/services/:id", requireAuth, async (req: any, res) => {
     try {
       const { id } = req.params;
+      const existing = await storage.getService(id);
+      if (!existing) {
+        return res.status(404).json({ message: "Service not found" });
+      }
+      const user = await storage.getUserById(req.session.userId);
+      if (existing.providerId !== req.session.userId && !isUserAdmin(user)) {
+        return res.status(403).json({ message: "Not your service" });
+      }
       await storage.deleteService(id);
       res.json({ message: "Service deleted successfully" });
     } catch (error) {
@@ -1793,9 +1990,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/services/looking-for", async (req, res) => {
+  app.post("/api/services/looking-for", requireAuth, async (req: any, res) => {
     try {
-      const postData = insertServiceLookingForPostSchema.parse(req.body);
+      const postData = insertServiceLookingForPostSchema.parse({
+        ...req.body,
+        userId: req.session.userId,
+      });
       const post = await storage.createServiceLookingForPost(postData);
       res.status(201).json(post);
     } catch (error) {
@@ -1841,6 +2041,166 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ message: "Service looking for post deleted successfully" });
     } catch (error) {
       res.status(500).json({ message: "Failed to delete service looking for post" });
+    }
+  });
+
+  // ===== Community events =====
+
+  // Events visible to the current user: own events (any status, so the
+  // creator always sees pending/rejected states), approved public events, and
+  // approved private events from accepted connections.
+  app.get("/api/events", requireAuth, async (req: any, res) => {
+    try {
+      const userId = req.session.userId;
+      const [allEvents, blocked, myMatches] = await Promise.all([
+        storage.getAllEvents(),
+        getBlockedSet(userId),
+        storage.getMatchesByUser(userId),
+      ]);
+      const connectedIds = new Set(
+        myMatches
+          .filter((m) => m.isMatch)
+          .map((m) => (m.userId === userId ? m.matchedUserId : m.userId)),
+      );
+
+      const visible = allEvents.filter((e) => {
+        if (e.createdByUserId === userId) return true;
+        if (blocked.has(e.createdByUserId)) return false;
+        if (e.status !== "approved") return false;
+        if (e.visibility === "private") return connectedIds.has(e.createdByUserId);
+        return true;
+      });
+
+      const withCreator = await Promise.all(
+        visible.map(async (e) => {
+          const creator = await storage.getProfile(e.createdByUserId);
+          return {
+            ...e,
+            isOwn: e.createdByUserId === userId,
+            creatorName: creator
+              ? (creator.businessName || `${creator.firstName} ${creator.lastName}`.trim())
+              : "",
+            creatorPhotoUrl: normalizeImageUrl(req, creator?.photoUrls?.[0] ?? null),
+          };
+        }),
+      );
+      res.json(withCreator);
+    } catch (error) {
+      console.error("Events list error:", error);
+      res.status(500).json({ message: "Failed to fetch events" });
+    }
+  });
+
+  // Create an event. Admin events go live immediately; everyone else's wait
+  // for admin approval.
+  app.post("/api/events", requireAuth, async (req: any, res) => {
+    try {
+      const user = await storage.getUserById(req.session.userId);
+      const eventData = insertEventSchema.parse({
+        ...req.body,
+        createdByUserId: req.session.userId,
+      });
+      const event = await storage.createEvent({
+        ...eventData,
+        status: isUserAdmin(user) ? "approved" : "pending",
+      });
+
+      // Let admins know there's an event waiting for moderation.
+      // Fire-and-forget: the email must not delay the response.
+      if (!isUserAdmin(user)) {
+        (async () => {
+          const creator = await describeUser(req.session.userId);
+          await notifyAdminsOfReport("Nuovo evento in attesa di approvazione", [
+            `Creato da: ${creator}`,
+            `Titolo: ${event.title}`,
+            `Data: ${new Date(event.eventDate).toLocaleString("it-IT")}`,
+            `Luogo: ${event.location}`,
+            `Visibilità: ${event.visibility === "private" ? "privato (solo connessioni)" : "pubblico"}`,
+          ]);
+        })().catch((err) => console.error("Event admin notification failed:", err));
+      }
+      res.status(201).json(event);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid event data", errors: error.errors });
+      }
+      console.error("Create event error:", error);
+      res.status(500).json({ message: "Failed to create event" });
+    }
+  });
+
+  // Delete an event (creator or admin)
+  app.delete("/api/events/:id", requireAuth, async (req: any, res) => {
+    try {
+      const event = await storage.getEvent(req.params.id);
+      if (!event) {
+        return res.status(404).json({ message: "Event not found" });
+      }
+      const user = await storage.getUserById(req.session.userId);
+      if (event.createdByUserId !== req.session.userId && !isUserAdmin(user)) {
+        return res.status(403).json({ message: "Not your event" });
+      }
+      await storage.deleteEvent(req.params.id);
+      res.json({ message: "Evento eliminato" });
+    } catch (error) {
+      console.error("Delete event error:", error);
+      res.status(500).json({ message: "Failed to delete event" });
+    }
+  });
+
+  // Admin: full events list for moderation
+  app.get("/api/admin/events", requireAdmin, async (req: any, res) => {
+    try {
+      const [allEvents, allProfiles] = await Promise.all([
+        storage.getAllEvents(),
+        storage.getAllProfiles(),
+      ]);
+      res.json(allEvents.map((e) => {
+        const creator = allProfiles.find((p) => p.userId === e.createdByUserId);
+        return {
+          ...e,
+          creatorName: creator
+            ? (creator.businessName || `${creator.firstName} ${creator.lastName}`.trim())
+            : "—",
+        };
+      }));
+    } catch (error) {
+      console.error("Admin events error:", error);
+      res.status(500).json({ message: "Failed to fetch events" });
+    }
+  });
+
+  // Admin: approve/reject an event (creator is notified in-app)
+  app.patch("/api/admin/events/:id", requireAdmin, async (req: any, res) => {
+    try {
+      const { status } = req.body;
+      if (status !== "approved" && status !== "rejected" && status !== "pending") {
+        return res.status(400).json({ message: "status must be 'approved', 'rejected' or 'pending'" });
+      }
+      const event = await storage.updateEventStatus(req.params.id, status);
+      if (!event) {
+        return res.status(404).json({ message: "Event not found" });
+      }
+      if (status !== "pending") {
+        try {
+          await storage.createNotification({
+            type: "event",
+            senderId: req.session.userId,
+            recipientId: event.createdByUserId,
+            message: status === "approved"
+              ? `Il tuo evento "${event.title}" è stato approvato!`
+              : `Il tuo evento "${event.title}" è stato rifiutato.`,
+            relatedId: event.id,
+            isRead: false,
+          });
+        } catch (notificationError) {
+          console.error("Event status notification error:", notificationError);
+        }
+      }
+      res.json(event);
+    } catch (error) {
+      console.error("Admin event update error:", error);
+      res.status(500).json({ message: "Failed to update event" });
     }
   });
 
@@ -1957,6 +2317,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ===== Marketplace chat endpoints =====
+  // Conversations are keyed by an item reference. Besides real marketplace
+  // items, a reference of the form "service:<serviceId>" opens a chat about a
+  // service — this is how moms contact professionals without a connection.
+  const SERVICE_REF_PREFIX = "service:";
+
+  const resolveChatSubject = async (itemRef: string): Promise<
+    | { kind: "item"; sellerId: string; item: MarketplaceItem }
+    | { kind: "service"; sellerId: string; service: any }
+    | null
+  > => {
+    if (itemRef.startsWith(SERVICE_REF_PREFIX)) {
+      const service = await storage.getService(itemRef.slice(SERVICE_REF_PREFIX.length));
+      return service ? { kind: "service", sellerId: service.providerId, service } : null;
+    }
+    const item = await storage.getMarketplaceItem(itemRef);
+    return item ? { kind: "item", sellerId: item.sellerId, item } : null;
+  };
 
   // List the user's marketplace conversations (grouped by item + other user)
   app.get("/api/marketplace/conversations", requireAuth, async (req: any, res) => {
@@ -1983,11 +2360,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const conversations = await Promise.all(
         Array.from(grouped.values()).map(async (c) => {
-          const [item, otherProfile] = await Promise.all([
-            storage.getMarketplaceItem(c.itemId),
+          const [subject, otherProfile] = await Promise.all([
+            resolveChatSubject(c.itemId),
             storage.getProfile(c.otherUserId),
           ]);
-          return { ...c, item: item ?? null, otherProfile: otherProfile ?? null };
+          return {
+            ...c,
+            item: subject?.kind === "item" ? normalizeItemImages(req, subject.item) : null,
+            service: subject?.kind === "service" ? subject.service : null,
+            otherProfile: normalizeProfileImages(req, otherProfile ?? null),
+          };
         }),
       );
 
@@ -2015,11 +2397,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         )
         .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
-      const [item, otherProfile] = await Promise.all([
-        storage.getMarketplaceItem(itemId),
+      const [subject, otherProfile] = await Promise.all([
+        resolveChatSubject(itemId),
         storage.getProfile(otherUserId),
       ]);
-      res.json({ item: item ?? null, otherProfile: otherProfile ?? null, messages: thread });
+      res.json({
+        item: subject?.kind === "item" ? normalizeItemImages(req, subject.item) : null,
+        service: subject?.kind === "service" ? subject.service : null,
+        otherProfile: normalizeProfileImages(req, otherProfile ?? null),
+        messages: thread,
+      });
     } catch (error) {
       console.error("Marketplace thread error:", error);
       res.status(500).json({ message: "Failed to fetch marketplace messages" });
@@ -2035,19 +2422,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "itemId and content are required" });
       }
 
-      const item = await storage.getMarketplaceItem(itemId);
-      if (!item) {
+      const subject = await resolveChatSubject(itemId);
+      if (!subject) {
         return res.status(404).json({ message: "Item not found" });
       }
 
       // Blocked users can't message each other
-      const counterpartId = userId === item.sellerId ? otherUserId : item.sellerId;
+      const counterpartId = userId === subject.sellerId ? otherUserId : subject.sellerId;
       if (counterpartId && await storage.isBlockedBetween(userId, counterpartId)) {
         return res.status(403).json({ message: "User is blocked" });
       }
 
-      // The seller is fixed by the item; the buyer is whoever isn't the seller.
-      const sellerId = item.sellerId;
+      // The seller is fixed by the item/service; the buyer is whoever isn't the seller.
+      const sellerId = subject.sellerId;
       const buyerId = userId === sellerId ? otherUserId : userId;
       if (!buyerId) {
         return res.status(400).json({ message: "otherUserId is required when replying as the seller" });
@@ -2075,13 +2462,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Dashboard stats
   app.get("/api/admin/stats", requireAdmin, async (_req, res) => {
     try {
-      const [allUsers, allProfiles, allLocations, allItems, allServices, allReports] = await Promise.all([
+      const [allUsers, allProfiles, allLocations, allItems, allServices, allReports, allEvents] = await Promise.all([
         storage.getAllUsers(),
         storage.getAllProfiles(),
         storage.getAllLocations(),
         storage.getAllMarketplaceItems(),
         storage.getAllServices(),
         storage.getAllReports(),
+        storage.getAllEvents(),
       ]);
       res.json({
         users: allUsers.length,
@@ -2089,11 +2477,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         subscribedUsers: allUsers.filter((u) => u.subscriptionStatus === "active").length,
         profiles: allProfiles.length,
         testProfiles: allProfiles.filter((p) => p.isTestProfile).length,
+        professionals: allProfiles.filter((p) => p.accountType === "professional").length,
         locations: allLocations.length,
         pendingLocations: allLocations.filter((l) => !l.approved).length,
         marketplaceItems: allItems.length,
         services: allServices.length,
         openReports: allReports.filter((r) => r.status === "open").length,
+        events: allEvents.length,
+        pendingEvents: allEvents.filter((e) => e.status === "pending").length,
       });
     } catch (error) {
       console.error("Admin stats error:", error);

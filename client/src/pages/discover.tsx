@@ -8,7 +8,6 @@ import {
   AdvancedMarker,
   InfoWindow,
 } from "@vis.gl/react-google-maps";
-import ServicesModal from "@/components/services-modal";
 import SettingsModal from "@/components/settings-modal";
 import Navigation from "@/components/navigation";
 import NotificationIcon from "@/components/notification-icon";
@@ -153,7 +152,6 @@ export default function Discover() {
   const [selectedLocation, setSelectedLocation] =
     useState<LocationWithReviews | null>(null);
   const [showReviewModal, setShowReviewModal] = useState(false);
-  const [showServicesModal, setShowServicesModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
 
   // Load saved map position from localStorage
@@ -180,6 +178,17 @@ export default function Discover() {
 
   const { data: profiles = [], isLoading } = useQuery<Profile[]>({
     queryKey: ["/api/profiles/map"],
+  });
+
+  // Professional accounts don't connect with moms: they see places only.
+  const { data: me } = useQuery<{ accountType?: string }>({
+    queryKey: ["/api/auth/me"],
+  });
+  const isProfessional = me?.accountType === "professional";
+
+  // Real connection status per user id: 'connected' | 'pending_sent' | 'pending_received'
+  const { data: connectionStatus = {} } = useQuery<Record<string, string>>({
+    queryKey: ["/api/connections/status"],
   });
 
   // Fetch locations from database
@@ -273,20 +282,30 @@ export default function Discover() {
       });
       return response.json() as Promise<SwipeResponse>;
     },
-    onSuccess: (_data, variables) => {
-      // Community connection: mark connected and confirm with a simple toast.
+    onSuccess: (data, variables) => {
+      // A like sends a connection request; it connects immediately only when
+      // the other mom had already asked us.
       const connectedUser = profiles.find((p) => p.id === variables.profileId);
       setSwipeStates((prev) => ({
         ...prev,
-        [variables.profileId]: "liked",
+        [variables.profileId]: (data as any).connected ? "matched" : "liked",
       }));
       setSelectedProfile(null);
-      toast({
-        title: t("connectedTitle"),
-        description: t("connectedDesc").replace("{name}", connectedUser?.firstName || ""),
-      });
+      if ((data as any).connected) {
+        toast({
+          title: t("connectedTitle"),
+          description: t("connectedDesc").replace("{name}", connectedUser?.firstName || ""),
+        });
+      } else {
+        toast({
+          title: t("requestSentTitle"),
+          description: t("requestSentDesc").replace("{name}", connectedUser?.firstName || ""),
+        });
+      }
       queryClient.invalidateQueries({ queryKey: ["/api/profiles/discover"] });
       queryClient.invalidateQueries({ queryKey: ["/api/matches"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/connections/status"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/connections/requests"] });
       queryClient.invalidateQueries({
         queryKey: ["/api/users", CURRENT_USER_ID, "swipe-status"],
       });
@@ -380,8 +399,19 @@ export default function Discover() {
 
   const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
 
-  // Filter profiles that have coordinates
-  const profilesWithCoords = profiles.filter((p) => p.latitude && p.longitude);
+  // Filter profiles that have coordinates. Professionals see no mom markers.
+  const profilesWithCoords = isProfessional
+    ? []
+    : profiles.filter((p) => p.latitude && p.longitude);
+
+  // Marker state combining server-side connection status with this session's
+  // optimistic swipe state: 'none' | 'pending' | 'connected'
+  const markerStateOf = (profile: Profile): "none" | "pending" | "connected" => {
+    const status = connectionStatus[profile.userId];
+    if (status === "connected" || swipeStates[profile.id] === "matched") return "connected";
+    if (status === "pending_sent" || status === "pending_received" || swipeStates[profile.id] === "liked") return "pending";
+    return "none";
+  };
 
   return (
     <>
@@ -450,21 +480,17 @@ export default function Discover() {
               }}
             >
               {profilesWithCoords.map((profile) => {
-                const swipeState = swipeStates[profile.id];
+                // Marker semantics: white = not connected, pink = request
+                // pending, profile photo = connection accepted.
+                const markerState = markerStateOf(profile);
                 const markerBgColor =
-                  swipeState === "matched"
-                    ? "bg-pink-500"
-                    : swipeState === "liked"
-                      ? "bg-pink-100"
-                      : "bg-white";
+                  markerState === "pending" ? "bg-pink-400" : "bg-white";
                 const borderColor =
-                  swipeState === "matched"
-                    ? "border-pink-600"
-                    : swipeState === "liked"
-                      ? "border-pink-300"
+                  markerState === "connected"
+                    ? "border-pink-500"
+                    : markerState === "pending"
+                      ? "border-pink-500"
                       : "border-pink-200";
-                const logoFilter =
-                  swipeState === "passed" ? "grayscale(100%)" : "none";
 
                 return (
                   <AdvancedMarker
@@ -478,14 +504,24 @@ export default function Discover() {
                   >
                     <div className="relative">
                       <div
-                        className={`w-12 h-12 ${markerBgColor} rounded-full flex items-center justify-center shadow-lg cursor-pointer hover:scale-110 transition-all duration-300 border-2 ${borderColor}`}
+                        className={`w-12 h-12 ${markerBgColor} rounded-full flex items-center justify-center shadow-lg cursor-pointer hover:scale-110 transition-all duration-300 border-2 ${borderColor} overflow-hidden`}
                       >
-                        <img
-                          src={heyMamaLogo}
-                          alt="HeyMama"
-                          className="w-8 h-8 object-contain transition-all duration-300"
-                          style={{ filter: logoFilter }}
-                        />
+                        {markerState === "connected" && profile.photoUrls?.[0] ? (
+                          <img
+                            src={profile.photoUrls[0]}
+                            alt={profile.firstName}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <img
+                            src={heyMamaLogo}
+                            alt="HeyMama"
+                            className="w-8 h-8 object-contain transition-all duration-300"
+                            style={{
+                              filter: markerState === "pending" ? "brightness(0) invert(1)" : "none",
+                            }}
+                          />
+                        )}
                       </div>
                       {profile.isOnline && (
                         <div className="absolute -top-1 -right-1 w-3 h-3 bg-green-500 rounded-full border-2 border-white"></div>
@@ -578,22 +614,41 @@ export default function Discover() {
                         </div>
                       )}
 
-                    {/* Connect action (community model, not dating) */}
+    {/* Connect action: like = connection request; messaging opens
+                        only once the other mom accepts. */}
                     <div className="flex justify-center">
-                      <Button
-                        onClick={() => handleConnect(selectedProfile)}
-                        disabled={swipeMutation.isPending || swipeStates[selectedProfile.id] === "liked"}
-                        size="lg"
-                        className="w-full rounded-full text-white"
-                        style={{
-                          background:
-                            "linear-gradient(to right, var(--primary-pink), var(--accent-coral))",
-                        }}
-                        data-testid="button-connect"
-                      >
-                        <UserPlus className="w-5 h-5 mr-2" />
-                        {swipeStates[selectedProfile.id] === "liked" ? t("connected") : t("connect")}
-                      </Button>
+                      {(() => {
+                        const state = markerStateOf(selectedProfile);
+                        const incoming = connectionStatus[selectedProfile.userId] === "pending_received";
+                        const label =
+                          state === "connected"
+                            ? t("connected")
+                            : incoming
+                              ? t("accept")
+                              : state === "pending"
+                                ? t("requestPending")
+                                : t("connect");
+                        const disabled =
+                          swipeMutation.isPending ||
+                          state === "connected" ||
+                          (state === "pending" && !incoming);
+                        return (
+                          <Button
+                            onClick={() => handleConnect(selectedProfile)}
+                            disabled={disabled}
+                            size="lg"
+                            className="w-full rounded-full text-white"
+                            style={{
+                              background:
+                                "linear-gradient(to right, var(--primary-pink), var(--accent-coral))",
+                            }}
+                            data-testid="button-connect"
+                          >
+                            <UserPlus className="w-5 h-5 mr-2" />
+                            {label}
+                          </Button>
+                        );
+                      })()}
                     </div>
                   </div>
                 </InfoWindow>
@@ -737,11 +792,6 @@ export default function Discover() {
 
       {/* Navigation */}
       <Navigation includeMarketplace={true} />
-
-      {/* Services Modal */}
-      {showServicesModal && (
-        <ServicesModal onClose={() => setShowServicesModal(false)} />
-      )}
 
       {/* Settings Modal */}
       {showSettingsModal && (

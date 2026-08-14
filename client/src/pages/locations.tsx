@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { ArrowLeft, MapPin, Clock, Star, Filter, Search, Plus, X } from "lucide-react";
+import { ArrowLeft, MapPin, Clock, Star, Filter, Search, Plus, X, Briefcase, MessageCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -9,6 +9,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import Navigation from "@/components/navigation";
 import LocationModal from "@/components/location-modal";
 import GooglePlacesAutocomplete from "@/components/google-places-autocomplete";
@@ -18,7 +19,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { Location } from "@shared/schema";
+import type { Location, Profile, Service } from "@shared/schema";
 import heyMamaLogo from "@assets/logo_gradient_text-min_1757514869714.png";
 import barImage from "@assets/bar_1757514529485.jpg";
 import libraryImage from "@assets/library_1757514529486.jpg";
@@ -30,21 +31,20 @@ import { translations } from "@/lib/translations";
 // Category keys for translation
 const categoryKeys = ["categoryAll", "categoryPark", "categoryCafe", "categoryPlayground", "categoryLibrary", "categoryWaterPark", "categoryActivityCenter", "categoryRestaurants"] as const;
 const addLocationCategoryKeys = ["categoryPark", "categoryCafe", "categoryPlayground", "categoryLibrary", "categoryWaterPark", "categoryActivityCenter", "categoryRestaurants"] as const;
-const provinces = ["Ontario", "Quebec", "British Columbia", "Alberta", "Manitoba", "Saskatchewan", "Nova Scotia", "New Brunswick", "Newfoundland and Labrador", "Prince Edward Island", "Northwest Territories", "Nunavut", "Yukon"];
 const ageGroupKeys = ["ageAll", "age0to2", "age3to5", "age6to8", "age9to12", "age13plus"] as const;
 const amenityKeys = ["amenityParking", "amenityWashrooms", "amenityStrollerFriendly", "amenityHighChair", "amenityNursingRoom", "amenityPlayArea", "amenityOutdoorSpace", "amenityFoodAvailable"] as const;
 
 const addLocationSchema = z.object({
-  name: z.string().min(1, "Name is required"),
-  category: z.string().min(1, "Category is required"),
-  address: z.string().min(1, "Address is required"),
-  province: z.string().min(1, "Province is required"),
-  description: z.string().min(1, "Description is required"),
+  name: z.string().min(1, "Il nome è obbligatorio"),
+  category: z.string().min(1, "La categoria è obbligatoria"),
+  address: z.string().min(1, "L'indirizzo è obbligatorio"),
+  province: z.string().min(1, "La provincia è obbligatoria"),
+  description: z.string().min(1, "La descrizione è obbligatoria"),
   imageUrl: z.string().default("https://via.placeholder.com/300x200?text=Location"),
   amenities: z.array(z.string()),
   ageGroups: z.array(z.string()),
-  coordinates: z.string().min(1, "Location coordinates are required"),
-  openingHours: z.string().min(1, "Opening hours are required"),
+  coordinates: z.string().min(1, "Seleziona il luogo dalla ricerca"),
+  openingHours: z.string().min(1, "Gli orari di apertura sono obbligatori"),
   googleMapsUrl: z.string().optional()
 });
 
@@ -362,6 +362,127 @@ function AddLocationDialog() {
 }
 
 
+interface ProfessionalWithServices extends Profile {
+  services: Service[];
+}
+
+// "Professionisti" tab: local professional accounts with the services they offer
+function ProfessionalsTab() {
+  const [, setLocation] = useLocation();
+  const { t } = useLanguage();
+
+  const { data: professionals = [], isLoading } = useQuery<ProfessionalWithServices[]>({
+    queryKey: ["/api/professionals"],
+  });
+
+  if (isLoading) {
+    return (
+      <div className="space-y-3 p-4">
+        {[1, 2, 3].map((i) => (
+          <div key={i} className="h-36 rounded-2xl bg-gray-100 animate-pulse" />
+        ))}
+      </div>
+    );
+  }
+
+  if (professionals.length === 0) {
+    return (
+      <div className="text-center py-16 px-6">
+        <div
+          className="w-16 h-16 mx-auto rounded-full flex items-center justify-center mb-4"
+          style={{ background: "linear-gradient(135deg, #fce7f3, #fbcfe8)" }}
+        >
+          <Briefcase className="h-8 w-8" style={{ color: "var(--primary-pink)" }} />
+        </div>
+        <h3 className="font-semibold text-gray-900">{t("noProfessionalsYet")}</h3>
+        <p className="text-sm text-gray-500 mt-1 max-w-xs mx-auto">{t("professionalsIntro")}</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-4 space-y-3">
+      {professionals.map((pro) => {
+        const displayName = pro.businessName || `${pro.firstName} ${pro.lastName}`.trim();
+        const firstService = pro.services[0];
+        return (
+          <div
+            key={pro.id}
+            className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden"
+            data-testid={`professional-card-${pro.id}`}
+          >
+            <div className="flex p-4 gap-3">
+              {pro.photoUrls?.[0] ? (
+                <img
+                  src={pro.photoUrls[0]}
+                  alt={displayName}
+                  className="w-16 h-16 object-cover rounded-xl flex-shrink-0"
+                />
+              ) : (
+                <div className="w-16 h-16 rounded-xl bg-pink-50 flex items-center justify-center flex-shrink-0">
+                  <Briefcase className="h-7 w-7 text-pink-400" />
+                </div>
+              )}
+              <div className="flex-1 min-w-0">
+                <h3 className="font-semibold text-gray-900 truncate">{displayName}</h3>
+                {pro.professionalCategory && (
+                  <Badge variant="secondary" className="mt-1 bg-pink-50 text-pink-700 border-0 text-xs">
+                    {pro.professionalCategory}
+                  </Badge>
+                )}
+                {pro.location && (
+                  <div className="flex items-center gap-1 text-sm text-gray-500 mt-1">
+                    <MapPin className="h-3 w-3 shrink-0" />
+                    <span className="truncate">{pro.location}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {pro.bio && (
+              <p className="px-4 -mt-1 pb-1 text-sm text-gray-600 line-clamp-2">{pro.bio}</p>
+            )}
+
+            {pro.services.length > 0 && (
+              <div className="px-4 py-2">
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1.5">
+                  {t("servicesOffered")}
+                </p>
+                <div className="space-y-1.5">
+                  {pro.services.slice(0, 3).map((s) => (
+                    <div key={s.id} className="flex items-center justify-between text-sm">
+                      <span className="text-gray-700 truncate">{s.title}</span>
+                      {s.hourlyRate != null && (
+                        <span className="font-medium shrink-0 ml-2" style={{ color: "var(--primary-pink)" }}>
+                          €{(s.hourlyRate / 100).toFixed(0)}{t("perHour")}
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {firstService && (
+              <div className="px-4 pb-4 pt-1">
+                <Button
+                  className="w-full rounded-full text-white"
+                  style={{ background: "linear-gradient(to right, var(--primary-pink), var(--accent-coral))" }}
+                  onClick={() => setLocation(`/market-chat/service:${firstService.id}/${pro.userId}`)}
+                  data-testid={`button-contact-${pro.id}`}
+                >
+                  <MessageCircle className="h-4 w-4 mr-2" />
+                  {t("contact")}
+                </Button>
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function getCategoryImage(category: string): string {
   const categoryLower = category.toLowerCase();
   if (categoryLower.includes('bar') || categoryLower.includes('cafe')) {
@@ -448,23 +569,45 @@ export default function Locations() {
   }
 
   return (
-    <>
+    <Tabs defaultValue="places" className="min-h-screen bg-gray-50">
       {/* Header */}
-      <header className="bg-white shadow-sm sticky top-0 z-50">
+      <header className="bg-white/85 backdrop-blur-xl shadow-sm sticky top-0 z-50">
         <div className="flex items-center justify-center p-4 relative">
-          <div className="text-center flex items-center">
-            <img 
-              src={heyMamaLogo} 
-              alt="HeyMama" 
-              className="h-10 w-auto object-contain"
-            />
+          <div className="text-center">
+            <h1 className="text-xl font-bold text-gray-900">{t("aroundYou")}</h1>
           </div>
           <div className="absolute right-4">
             <AddLocationDialog />
           </div>
         </div>
+        {/* Tabs: Luoghi / Professionisti (same pattern as products/services) */}
+        <div className="px-4 pb-3">
+          <TabsList className="grid w-full grid-cols-2 rounded-full bg-gray-100 p-1">
+            <TabsTrigger
+              value="places"
+              className="rounded-full data-[state=active]:bg-white data-[state=active]:shadow-sm"
+              data-testid="tab-places"
+            >
+              <MapPin className="h-4 w-4 mr-1.5" />
+              {t("places")}
+            </TabsTrigger>
+            <TabsTrigger
+              value="professionals"
+              className="rounded-full data-[state=active]:bg-white data-[state=active]:shadow-sm"
+              data-testid="tab-professionals"
+            >
+              <Briefcase className="h-4 w-4 mr-1.5" />
+              {t("professionals")}
+            </TabsTrigger>
+          </TabsList>
+        </div>
       </header>
 
+      <TabsContent value="professionals" className="mt-0 pb-nav">
+        <ProfessionalsTab />
+      </TabsContent>
+
+      <TabsContent value="places" className="mt-0">
       {/* Search and Filter Section */}
       <div className="p-4 bg-white border-b space-y-4">
         {/* Address Search with Google Places Autocomplete */}
@@ -561,7 +704,7 @@ export default function Locations() {
                         <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
                         <span className="text-sm font-medium text-gray-700">{(location as any).averageRating || location.rating}</span>
                       </div>
-                      <span className="text-sm text-gray-500">• {(location as any).reviewCount || 0} reviews</span>
+                      <span className="text-sm text-gray-500">• {(location as any).reviewCount || 0} recensioni</span>
                     </div>
 
                     
@@ -577,10 +720,10 @@ export default function Locations() {
           </div>
         )}
       </div>
+      </TabsContent>
 
       {/* Navigation */}
-      <Navigation includeMarketplace={true} />
-
+      <Navigation />
 
       {/* Location Modal */}
       {selectedLocation && (
@@ -589,6 +732,6 @@ export default function Locations() {
           onClose={() => setSelectedLocation(null)}
         />
       )}
-    </>
+    </Tabs>
   );
 }

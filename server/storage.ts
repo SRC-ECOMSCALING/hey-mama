@@ -1,4 +1,4 @@
-import { type User, type InsertUser, type Profile, type InsertProfile, type Match, type InsertMatch, type Message, type InsertMessage, type Swipe, type InsertSwipe, type Location, type InsertLocation, type Review, type InsertReview, type MarketplaceItem, type InsertMarketplaceItem, type MarketplaceMessage, type InsertMarketplaceMessage, type LookingForPost, type InsertLookingForPost, type Service, type InsertService, type ServiceLookingForPost, type InsertServiceLookingForPost, type SavedItem, type InsertSavedItem, type Notification, type InsertNotification, type Block, type Report, type InsertReport, type Registration, type Login } from "@shared/schema";
+import { type User, type InsertUser, type Profile, type InsertProfile, type Match, type InsertMatch, type Message, type InsertMessage, type Swipe, type InsertSwipe, type Location, type InsertLocation, type Review, type InsertReview, type MarketplaceItem, type InsertMarketplaceItem, type MarketplaceMessage, type InsertMarketplaceMessage, type LookingForPost, type InsertLookingForPost, type Service, type InsertService, type ServiceLookingForPost, type InsertServiceLookingForPost, type SavedItem, type InsertSavedItem, type Notification, type InsertNotification, type Block, type Report, type InsertReport, type Event, type InsertEvent, type Registration, type Login } from "@shared/schema";
 import { randomUUID } from "crypto";
 import bcrypt from "bcryptjs";
 import { db, withDbRetry } from "./db";
@@ -21,6 +21,7 @@ import {
   appSettings,
   blocks,
   reports,
+  events,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -1834,7 +1835,7 @@ export class DatabaseStorage implements IStorage {
     return bcrypt.hash(password, 10);
   }
 
-  async register(registrationData: Registration): Promise<{ user: User; profile: Profile }> {
+  async register(registrationData: Registration & { isEmailVerified?: boolean }): Promise<{ user: User; profile: Profile }> {
     // Hash password
     const passwordHash = await this.hashPassword(registrationData.password);
 
@@ -1842,12 +1843,15 @@ export class DatabaseStorage implements IStorage {
     const [user] = await this.db.insert(users).values({
       email: registrationData.email,
       passwordHash,
-      isEmailVerified: false,
+      isEmailVerified: registrationData.isEmailVerified ?? false,
     }).returning();
 
     // Create profile
     const [profile] = await this.db.insert(profiles).values({
       userId: user.id,
+      accountType: registrationData.accountType ?? "mom",
+      businessName: registrationData.businessName?.trim() || null,
+      professionalCategory: registrationData.professionalCategory?.trim() || null,
       firstName: registrationData.firstName,
       lastName: registrationData.lastName,
       age: registrationData.age,
@@ -1857,6 +1861,7 @@ export class DatabaseStorage implements IStorage {
       photoUrls: registrationData.photoUrls,
       kidsNumber: registrationData.kidsNumber,
       kidsAges: registrationData.kidsAges,
+      kidsGenders: registrationData.kidsGenders ?? [],
       hobbies: registrationData.hobbies,
       distanceAway: "0 km",
     }).returning();
@@ -1916,18 +1921,30 @@ export class DatabaseStorage implements IStorage {
     const swipedUserIds = await this.db.select({ targetUserId: swipes.targetUserId })
       .from(swipes)
       .where(eq(swipes.userId, userId));
-    
+
     const swipedIds = swipedUserIds.map(s => s.targetUserId);
-    
+
     const discoveryProfiles = await this.db.select()
       .from(profiles)
       .where(and(
         ne(profiles.userId, userId),
+        ne(profiles.accountType, "professional"), // professionals never appear in the swipe deck
         swipedIds.length > 0 ? notInArray(profiles.userId, swipedIds) : undefined
       ))
       .limit(10);
-    
+
     return discoveryProfiles;
+  }
+
+  // Mom profiles only (for the map); professionals live in "Intorno a te".
+  async getAllMomProfiles(): Promise<Profile[]> {
+    return this.db.select().from(profiles)
+      .where(ne(profiles.accountType, "professional"));
+  }
+
+  async getProfessionalProfiles(): Promise<Profile[]> {
+    return this.db.select().from(profiles)
+      .where(eq(profiles.accountType, "professional"));
   }
 
   // Swipe operations
@@ -1970,6 +1987,60 @@ export class DatabaseStorage implements IStorage {
     const [match] = await this.db.select().from(matches)
       .where(eq(matches.id, matchId));
     return match;
+  }
+
+  // ===== Connection request flow =====
+  // A match row with isMatch=false is a pending request from userId to
+  // matchedUserId; accepting flips isMatch to true and enables messaging.
+  async acceptMatch(matchId: string): Promise<Match | undefined> {
+    const [match] = await this.db.update(matches)
+      .set({ isMatch: true })
+      .where(eq(matches.id, matchId))
+      .returning();
+    return match;
+  }
+
+  async deleteMatch(matchId: string): Promise<void> {
+    await this.db.delete(matches).where(eq(matches.id, matchId));
+  }
+
+  // Incoming pending requests (someone asked to connect with userId)
+  async getIncomingRequests(userId: string): Promise<Match[]> {
+    return this.db.select().from(matches)
+      .where(and(eq(matches.matchedUserId, userId), eq(matches.isMatch, false)));
+  }
+
+  // Outgoing pending requests (userId asked, not yet accepted)
+  async getOutgoingRequests(userId: string): Promise<Match[]> {
+    return this.db.select().from(matches)
+      .where(and(eq(matches.userId, userId), eq(matches.isMatch, false)));
+  }
+
+  // ===== Events =====
+  async createEvent(event: InsertEvent & { status?: string }): Promise<Event> {
+    const [newEvent] = await this.db.insert(events).values(event).returning();
+    return newEvent;
+  }
+
+  async getEvent(id: string): Promise<Event | undefined> {
+    const [event] = await this.db.select().from(events).where(eq(events.id, id));
+    return event;
+  }
+
+  async getAllEvents(): Promise<Event[]> {
+    return this.db.select().from(events).orderBy(sql`${events.eventDate} ASC`);
+  }
+
+  async updateEventStatus(id: string, status: string): Promise<Event | undefined> {
+    const [event] = await this.db.update(events)
+      .set({ status })
+      .where(eq(events.id, id))
+      .returning();
+    return event;
+  }
+
+  async deleteEvent(id: string): Promise<void> {
+    await this.db.delete(events).where(eq(events.id, id));
   }
 
   // Placeholder implementations for other required methods
@@ -2322,6 +2393,7 @@ export class DatabaseStorage implements IStorage {
     await this.db.delete(matches).where(or(eq(matches.userId, userId), eq(matches.matchedUserId, userId)));
     await this.db.delete(swipes).where(or(eq(swipes.userId, userId), eq(swipes.targetUserId, userId)));
     await this.db.delete(blocks).where(or(eq(blocks.blockerId, userId), eq(blocks.blockedId, userId)));
+    await this.db.delete(events).where(eq(events.createdByUserId, userId));
     await this.db.delete(reports).where(eq(reports.reporterId, userId));
     await this.db.delete(profiles).where(eq(profiles.userId, userId));
     await this.db.delete(users).where(eq(users.id, userId));

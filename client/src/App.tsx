@@ -17,7 +17,7 @@ import AddProduct from "@/pages/add-product";
 import AddService from "@/pages/add-service";
 import Login from "@/pages/login";
 import Register from "@/pages/register";
-import Notifications from "@/pages/notifications";
+import Events from "@/pages/events";
 import Settings from "@/pages/settings";
 import Admin from "@/pages/admin";
 import Privacy from "@/pages/privacy";
@@ -75,7 +75,7 @@ function Router() {
         <Route path="/profile" component={Profile} />
         <Route path="/profile/edit" component={ProfileEdit} />
         <Route path="/settings" component={Settings} />
-        <Route path="/notifications" component={Notifications} />
+        <Route path="/events" component={Events} />
         <Route path="/privacy" component={Privacy} />
         <Route path="/terms" component={Terms} />
         <Route path="/support" component={Support} />

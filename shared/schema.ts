@@ -17,7 +17,7 @@ export const users = pgTable("users", {
   subscriptionStatus: varchar("subscription_status"), // active, canceled, past_due, etc.
   subscriptionEndDate: timestamp("subscription_end_date"),
   // User preferences
-  language: varchar("language").default("en").notNull(), // 'en' or 'it'
+  language: varchar("language").default("it").notNull(), // 'it' (default) or 'en'
   // Legal: when the user accepted Terms of Use + Privacy Policy (null = not yet)
   termsAcceptedAt: timestamp("terms_accepted_at"),
   // Admin granted from the dashboard (in addition to ADMIN_EMAILS env bootstrap)
@@ -29,6 +29,11 @@ export const users = pgTable("users", {
 export const profiles = pgTable("profiles", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull(), // Foreign key to users table
+  // 'mom' (default) or 'professional'. Professionals offer services and are
+  // listed in "Intorno a te"; they never appear in discovery/swipe.
+  accountType: varchar("account_type").default("mom").notNull(),
+  businessName: text("business_name"), // professionals only
+  professionalCategory: text("professional_category"), // professionals only
   firstName: text("first_name").notNull(),
   lastName: text("last_name").notNull(),
   age: integer("age"), // optional (App Store 5.1.1: not required at signup)
@@ -183,29 +188,70 @@ export const updateProfileSchema = insertProfileSchema.partial().omit({
 
 // Registration schema combining user and profile data
 export const registrationSchema = z.object({
-  email: z.string().email("Please enter a valid email address"),
-  password: z.string().min(8, "Password must be at least 8 characters"),
+  email: z.string().email("Inserisci un indirizzo email valido"),
+  password: z.string().min(8, "La password deve avere almeno 8 caratteri"),
   confirmPassword: z.string(),
-  firstName: z.string().min(1, "First name is required"),
-  lastName: z.string().min(1, "Last name is required"),
-  age: z.number().min(18, "Must be at least 18 years old").max(100, "Must be under 100 years old").optional(),
+  accountType: z.enum(["mom", "professional"]).default("mom"),
+  businessName: z.string().optional(),
+  professionalCategory: z.string().optional(),
+  firstName: z.string().min(1, "Il nome è obbligatorio"),
+  lastName: z.string().min(1, "Il cognome è obbligatorio"),
+  age: z.number().min(18, "Devi avere almeno 18 anni").max(100, "Età non valida").optional(),
   sex: z.enum(["female", "male", "other"]).optional(),
-  bio: z.string().min(10, "Bio must be at least 10 characters"),
-  location: z.string().min(1, "Location is required"),
-  photoUrls: z.array(z.string().url()).min(1, "At least one photo is required"),
-  kidsNumber: z.number().min(0, "Number of kids cannot be negative"),
+  bio: z.string().min(10, "La bio deve avere almeno 10 caratteri"),
+  location: z.string().min(1, "La posizione è obbligatoria"),
+  photoUrls: z.array(z.string().url()).min(1, "Almeno una foto è obbligatoria"),
+  kidsNumber: z.number().min(0, "Il numero di figli non può essere negativo"),
   kidsAges: z.array(z.string()),
-  hobbies: z.array(z.string()).min(1, "At least one hobby is required"),
+  kidsGenders: z.array(z.string()).optional(),
+  hobbies: z.array(z.string()),
 }).refine((data) => data.password === data.confirmPassword, {
-  message: "Passwords don't match",
+  message: "Le password non coincidono",
   path: ["confirmPassword"],
+}).refine((data) => data.accountType !== "professional" || !!data.businessName?.trim(), {
+  message: "Il nome dell'attività è obbligatorio",
+  path: ["businessName"],
+}).refine((data) => data.accountType !== "professional" || !!data.professionalCategory?.trim(), {
+  message: "La categoria è obbligatoria",
+  path: ["professionalCategory"],
+}).refine((data) => data.accountType === "professional" || data.hobbies.length >= 1, {
+  message: "Seleziona almeno un interesse",
+  path: ["hobbies"],
 });
 
 // Login schema
 export const loginSchema = z.object({
-  email: z.string().email("Please enter a valid email address"),
-  password: z.string().min(1, "Password is required"),
+  email: z.string().email("Inserisci un indirizzo email valido"),
+  password: z.string().min(1, "La password è obbligatoria"),
 });
+
+// Community events (created by users, approved by admins)
+export const events = pgTable("events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  createdByUserId: varchar("created_by_user_id").notNull(),
+  title: text("title").notNull(),
+  description: text("description").notNull(),
+  eventDate: timestamp("event_date").notNull(),
+  location: text("location").notNull(), // free-text place (e.g. "Biblioteca Salaborsa, Bologna")
+  link: text("link"), // optional website / registration link
+  // 'public' = whole community, 'private' = only the organizer's connections
+  visibility: varchar("visibility").default("public").notNull(),
+  // 'pending' | 'approved' | 'rejected' — events go live only when approved
+  status: varchar("status").default("pending").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertEventSchema = createInsertSchema(events).omit({
+  id: true,
+  createdAt: true,
+  status: true,
+}).extend({
+  eventDate: z.coerce.date(),
+  visibility: z.enum(["public", "private"]).default("public"),
+});
+
+export type Event = typeof events.$inferSelect;
+export type InsertEvent = z.infer<typeof insertEventSchema>;
 
 export const insertMarketplaceItemSchema = createInsertSchema(marketplaceItems).omit({
   id: true,

@@ -17,9 +17,26 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ObjectUploader } from "@/components/ObjectUploader";
-import { Eye, EyeOff, Plus, X, Upload, Check, ChevronsUpDown } from "lucide-react";
+import { Eye, EyeOff, Plus, X, Upload, Check, ChevronsUpDown, Heart, Briefcase } from "lucide-react";
 import heyMamaLogo from "@assets/logo_gradient_text-min_1757514869714.png";
 import { useLanguage } from "@/contexts/LanguageContext";
+
+const PROFESSIONAL_CATEGORIES = [
+  "Babysitter / Tata",
+  "Asilo nido",
+  "Pediatra",
+  "Psicologia / Supporto genitoriale",
+  "Ostetrica",
+  "Consulente allattamento",
+  "Nutrizionista",
+  "Fisioterapista",
+  "Logopedista",
+  "Corsi e laboratori",
+  "Animazione feste",
+  "Fotografia",
+  "Negozio per bambini",
+  "Altro",
+];
 
 const ITALIAN_PROVINCES = [
   "Agrigento", "Alessandria", "Ancona", "Aosta", "Arezzo", "Ascoli Piceno", "Asti", "Avellino",
@@ -61,6 +78,9 @@ export default function Register() {
       email: "",
       password: "",
       confirmPassword: "",
+      accountType: "mom",
+      businessName: "",
+      professionalCategory: "",
       firstName: "",
       lastName: "",
       age: undefined,
@@ -74,6 +94,9 @@ export default function Register() {
       hobbies: [],
     },
   });
+
+  const accountType = form.watch("accountType");
+  const isProfessional = accountType === "professional";
 
   const registerMutation = useMutation({
     mutationFn: async (data: Registration) => {
@@ -200,6 +223,10 @@ export default function Register() {
     registerMutation.mutate({
       ...data,
       photoUrls: uploadedPhotos,
+      // Professionals have no kids/hobbies sections
+      ...(data.accountType === "professional"
+        ? { kidsNumber: 0, kidsAges: [], kidsGenders: [], hobbies: [] }
+        : {}),
     });
   };
 
@@ -228,9 +255,93 @@ export default function Register() {
               <>
                 <Form {...form}>
                   <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+                    {/* Account type: mom or professional */}
+                    <div className="space-y-3">
+                      <h3 className="text-lg font-medium">{t("accountTypeQuestion")}</h3>
+                      <div className="grid grid-cols-2 gap-3">
+                        <button
+                          type="button"
+                          onClick={() => form.setValue("accountType", "mom")}
+                          className={`rounded-2xl border-2 p-4 text-left transition-all ${
+                            !isProfessional
+                              ? "border-pink-400 bg-pink-50/60 shadow-sm"
+                              : "border-gray-200 bg-white hover:border-gray-300"
+                          }`}
+                          data-testid="button-account-mom"
+                        >
+                          <Heart className={`h-6 w-6 mb-2 ${!isProfessional ? "text-pink-500" : "text-gray-400"}`} />
+                          <p className="font-semibold text-sm text-gray-900">{t("iAmMom")}</p>
+                          <p className="text-xs text-gray-500 mt-1">{t("iAmMomDesc")}</p>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => form.setValue("accountType", "professional")}
+                          className={`rounded-2xl border-2 p-4 text-left transition-all ${
+                            isProfessional
+                              ? "border-pink-400 bg-pink-50/60 shadow-sm"
+                              : "border-gray-200 bg-white hover:border-gray-300"
+                          }`}
+                          data-testid="button-account-professional"
+                        >
+                          <Briefcase className={`h-6 w-6 mb-2 ${isProfessional ? "text-pink-500" : "text-gray-400"}`} />
+                          <p className="font-semibold text-sm text-gray-900">{t("iAmProfessional")}</p>
+                          <p className="text-xs text-gray-500 mt-1">{t("iAmProfessionalDesc")}</p>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Professional business details */}
+                    {isProfessional && (
+                      <div className="space-y-4">
+                        <h3 className="text-lg font-medium">{t("professionalAccount")}</h3>
+                        <FormField
+                          control={form.control}
+                          name="businessName"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>{t("businessNameLabel")}</FormLabel>
+                              <FormControl>
+                                <Input
+                                  placeholder={t("businessNamePlaceholder")}
+                                  data-testid="input-businessName"
+                                  {...field}
+                                  value={field.value || ""}
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={form.control}
+                          name="professionalCategory"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>{t("professionalCategoryLabel")}</FormLabel>
+                              <Select onValueChange={field.onChange} value={field.value || ""}>
+                                <FormControl>
+                                  <SelectTrigger data-testid="select-professionalCategory">
+                                    <SelectValue placeholder={t("selectProfessionalCategory")} />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                  {PROFESSIONAL_CATEGORIES.map((cat) => (
+                                    <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+                    )}
+
                     {/* Basic Info */}
                     <div className="space-y-4">
-                      <h3 className="text-lg font-medium">{t("basicInformation")}</h3>
+                      <h3 className="text-lg font-medium">
+                        {isProfessional ? t("referentName") : t("basicInformation")}
+                      </h3>
                       
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <FormField
@@ -488,7 +599,7 @@ export default function Register() {
                           <FormLabel>{t("aboutYou")}</FormLabel>
                           <FormControl>
                             <Textarea
-                              placeholder={t("aboutYouPlaceholder")}
+                              placeholder={isProfessional ? t("professionalBioPlaceholder") : t("aboutYouPlaceholder")}
                               className="min-h-[100px]"
                               data-testid="textarea-bio"
                               {...field}
@@ -500,7 +611,7 @@ export default function Register() {
                     />
 
                     {/* Kids Info */}
-                    <div className="space-y-4">
+                    <div className={`space-y-4 ${isProfessional ? "hidden" : ""}`}>
                       <h3 className="text-lg font-medium">{t("aboutYourKids")}</h3>
                       
                       <FormField
@@ -596,7 +707,7 @@ export default function Register() {
                     </div>
 
                     {/* Hobbies */}
-                    <div className="space-y-4">
+                    <div className={`space-y-4 ${isProfessional ? "hidden" : ""}`}>
                       <h3 className="text-lg font-medium">{t("yourInterestsHobbies")}</h3>
                       <p className="text-sm text-muted-foreground">{t("interestsPlaceholder")}</p>
                       

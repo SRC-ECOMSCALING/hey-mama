@@ -5,6 +5,7 @@ import {
   Upload, MapPin, CheckCircle, XCircle, LogOut, Users, BarChart3,
   Settings as SettingsIcon, Trash2, TreePine, Loader2, FlaskConical, Eye, EyeOff,
   ShoppingBag, Wrench, Home, Search, ShieldCheck, BadgeCheck, CreditCard, Flag,
+  CalendarDays,
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -23,10 +24,16 @@ import adminLogo from "@assets/admin_logo_gradient_text.png";
 interface UploadResult { success: number; failed: number; errors: string[] }
 interface AdminStats {
   users: number; verifiedUsers: number; subscribedUsers: number;
-  profiles: number; testProfiles: number;
+  profiles: number; testProfiles: number; professionals: number;
   locations: number; pendingLocations: number;
   marketplaceItems: number; services: number;
   openReports: number;
+  events: number; pendingEvents: number;
+}
+interface AdminEvent {
+  id: string; createdByUserId: string; title: string; description: string;
+  eventDate: string; location: string; link: string | null;
+  visibility: string; status: string; createdAt: string; creatorName: string;
 }
 interface AdminReport {
   id: string; reporterId: string; reportedUserId: string | null;
@@ -51,13 +58,14 @@ const LOCATION_CATEGORIES = [
   { value: "teatro", label: "🎭 Teatro" }, { value: "altro", label: "📍 Altro" },
 ];
 
-type SectionKey = "dashboard" | "users" | "admins" | "test" | "locations" | "marketplace" | "services" | "reports" | "settings";
+type SectionKey = "dashboard" | "users" | "admins" | "test" | "locations" | "events" | "marketplace" | "services" | "reports" | "settings";
 const NAV: { key: SectionKey; label: string; icon: typeof Home }[] = [
   { key: "dashboard", label: "Dashboard", icon: BarChart3 },
   { key: "users", label: "Utenti", icon: Users },
   { key: "admins", label: "Amministratori", icon: ShieldCheck },
   { key: "test", label: "Profili Test", icon: FlaskConical },
   { key: "locations", label: "Luoghi", icon: MapPin },
+  { key: "events", label: "Eventi", icon: CalendarDays },
   { key: "marketplace", label: "Marketplace", icon: ShoppingBag },
   { key: "services", label: "Servizi", icon: Wrench },
   { key: "reports", label: "Segnalazioni", icon: Flag },
@@ -92,11 +100,12 @@ export default function Admin() {
   const { data: adminItems = [] } = useQuery<AdminItem[]>({ queryKey: ["/api/admin/marketplace"], enabled: isAdmin });
   const { data: adminServices = [] } = useQuery<AdminService[]>({ queryKey: ["/api/admin/services"], enabled: isAdmin });
   const { data: adminReports = [] } = useQuery<AdminReport[]>({ queryKey: ["/api/admin/reports"], enabled: isAdmin });
+  const { data: adminEvents = [] } = useQuery<AdminEvent[]>({ queryKey: ["/api/admin/events"], enabled: isAdmin });
 
   const invalidate = (...keys: string[]) =>
     keys.forEach((k) => queryClient.invalidateQueries({ queryKey: [k] }));
   const invalidateAll = () =>
-    invalidate("/api/admin/stats", "/api/admin/users", "/api/admin/locations", "/api/admin/settings", "/api/admin/marketplace", "/api/admin/services", "/api/admin/reports");
+    invalidate("/api/admin/stats", "/api/admin/users", "/api/admin/locations", "/api/admin/settings", "/api/admin/marketplace", "/api/admin/services", "/api/admin/reports", "/api/admin/events", "/api/events");
 
   const toggleTest = useMutation({
     mutationFn: async (d: { profileId: string; isTestProfile: boolean }) =>
@@ -159,6 +168,17 @@ export default function Admin() {
     mutationFn: async (id: string) => (await apiRequest("DELETE", `/api/admin/services/${id}`)).json(),
     onSuccess: () => { invalidateAll(); toast({ title: "Servizio eliminato" }); },
     onError: () => toast({ title: "Errore", description: "Impossibile eliminare il servizio", variant: "destructive" }),
+  });
+  const setEventStatus = useMutation({
+    mutationFn: async (d: { id: string; status: "approved" | "rejected" | "pending" }) =>
+      (await apiRequest("PATCH", `/api/admin/events/${d.id}`, { status: d.status })).json(),
+    onSuccess: () => invalidateAll(),
+    onError: () => toast({ title: "Errore", description: "Impossibile aggiornare l'evento", variant: "destructive" }),
+  });
+  const deleteEvent = useMutation({
+    mutationFn: async (id: string) => (await apiRequest("DELETE", `/api/events/${id}`)).json(),
+    onSuccess: () => { invalidateAll(); toast({ title: "Evento eliminato" }); },
+    onError: () => toast({ title: "Errore", description: "Impossibile eliminare l'evento", variant: "destructive" }),
   });
   const setReportStatus = useMutation({
     mutationFn: async (d: { id: string; status: "open" | "resolved" }) =>
@@ -279,6 +299,9 @@ export default function Admin() {
               {key === "locations" && (stats?.pendingLocations ?? 0) > 0 && (
                 <span className="ml-auto text-xs bg-orange-100 text-orange-700 rounded-full px-2 py-0.5">{stats?.pendingLocations}</span>
               )}
+              {key === "events" && (stats?.pendingEvents ?? 0) > 0 && (
+                <span className="ml-auto text-xs bg-amber-100 text-amber-700 rounded-full px-2 py-0.5">{stats?.pendingEvents}</span>
+              )}
               {key === "reports" && (stats?.openReports ?? 0) > 0 && (
                 <span className="ml-auto text-xs bg-red-100 text-red-700 rounded-full px-2 py-0.5">{stats?.openReports}</span>
               )}
@@ -329,6 +352,9 @@ export default function Admin() {
                 <StatCard icon={ShoppingBag} label="Annunci market" value={stats?.marketplaceItems} />
                 <StatCard icon={Wrench} label="Servizi" value={stats?.services} />
                 <StatCard icon={Flag} label="Segnalazioni aperte" value={stats?.openReports} accent="text-red-600" />
+                <StatCard icon={CalendarDays} label="Eventi" value={stats?.events} />
+                <StatCard icon={CalendarDays} label="Eventi in attesa" value={stats?.pendingEvents} accent="text-amber-600" />
+                <StatCard icon={Wrench} label="Professionisti" value={stats?.professionals} />
               </div>
               {TestVisibilityCard}
             </div>
@@ -581,6 +607,85 @@ export default function Admin() {
                 </CardContent>
               </Card>
             </div>
+          )}
+
+          {/* EVENTS */}
+          {section === "events" && (
+            <Card className="max-w-6xl">
+              <CardHeader>
+                <CardTitle>Eventi ({adminEvents.length})</CardTitle>
+                <CardDescription>
+                  Gli eventi creati dalle utenti restano "in attesa" finché non li approvi.
+                  Gli eventi privati sono visibili solo alle connessioni dell'organizzatrice.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Titolo</TableHead>
+                      <TableHead className="hidden md:table-cell">Organizzatrice</TableHead>
+                      <TableHead>Data</TableHead>
+                      <TableHead className="hidden md:table-cell">Luogo</TableHead>
+                      <TableHead className="text-center">Visibilità</TableHead>
+                      <TableHead className="text-center">Stato</TableHead>
+                      <TableHead className="text-right">Azioni</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {adminEvents.map((ev) => (
+                      <TableRow key={ev.id} className={ev.status === "rejected" ? "opacity-60" : ""} data-testid={`row-event-${ev.id}`}>
+                        <TableCell className="font-medium max-w-[14rem]">
+                          <p className="truncate">{ev.title}</p>
+                          <p className="text-xs text-gray-400 truncate">{ev.description}</p>
+                        </TableCell>
+                        <TableCell className="hidden md:table-cell text-gray-500">{ev.creatorName}</TableCell>
+                        <TableCell className="text-gray-500 whitespace-nowrap">
+                          {new Date(ev.eventDate).toLocaleString("it-IT", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
+                        </TableCell>
+                        <TableCell className="hidden md:table-cell text-gray-500 truncate max-w-[12rem]">{ev.location}</TableCell>
+                        <TableCell className="text-center">
+                          {ev.visibility === "private"
+                            ? <Badge variant="outline" className="text-purple-600 border-purple-300">privato</Badge>
+                            : <Badge variant="outline" className="text-blue-600 border-blue-300">pubblico</Badge>}
+                        </TableCell>
+                        <TableCell className="text-center">
+                          {ev.status === "approved" && <Badge className="bg-green-100 text-green-700">online</Badge>}
+                          {ev.status === "pending" && <Badge className="bg-amber-100 text-amber-700">in attesa</Badge>}
+                          {ev.status === "rejected" && <Badge className="bg-red-100 text-red-700">rifiutato</Badge>}
+                        </TableCell>
+                        <TableCell className="text-right whitespace-nowrap">
+                          {ev.status !== "approved" && (
+                            <Button variant="ghost" size="icon" title="Approva"
+                              onClick={() => setEventStatus.mutate({ id: ev.id, status: "approved" })}
+                              disabled={setEventStatus.isPending}
+                              data-testid={`button-approve-event-${ev.id}`}>
+                              <CheckCircle className="w-4 h-4 text-green-600" />
+                            </Button>
+                          )}
+                          {ev.status !== "rejected" && (
+                            <Button variant="ghost" size="icon" title="Rifiuta"
+                              onClick={() => setEventStatus.mutate({ id: ev.id, status: "rejected" })}
+                              disabled={setEventStatus.isPending}
+                              data-testid={`button-reject-event-${ev.id}`}>
+                              <XCircle className="w-4 h-4 text-orange-500" />
+                            </Button>
+                          )}
+                          <Button variant="ghost" size="icon" className="text-red-500 hover:text-red-700"
+                            onClick={() => confirm(`Eliminare "${ev.title}"?`) && deleteEvent.mutate(ev.id)}
+                            data-testid={`button-delete-event-${ev.id}`}>
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {adminEvents.length === 0 && (
+                      <TableRow><TableCell colSpan={7} className="text-center text-gray-400 py-8">Nessun evento</TableCell></TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
           )}
 
           {/* MARKETPLACE */}

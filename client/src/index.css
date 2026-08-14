@@ -24,8 +24,8 @@
   --accent-foreground: hsl(24, 9.8%, 10%);
   --destructive: hsl(0, 84.2%, 60.2%);
   --destructive-foreground: hsl(60, 9.1%, 97.8%);
-  --ring: hsl(20, 14.3%, 4.1%);
-  --radius: 0.5rem;
+  --ring: hsl(331, 64%, 72%); /* brand pink focus ring */
+  --radius: 0.75rem; /* softer 2026 corners across all shadcn components */
   
   /* MomConnect custom colors */
   --primary-pink: hsl(331, 64%, 82%);
@@ -42,10 +42,51 @@
     @apply border-border;
   }
 
+  html {
+    -webkit-tap-highlight-color: transparent;
+    scroll-behavior: smooth;
+  }
+
   body {
     @apply font-sans antialiased text-foreground bg-background;
     background: linear-gradient(to bottom right, var(--secondary-rose), var(--secondary-alice));
+    text-rendering: optimizeLegibility;
   }
+}
+
+/* --- 2026 refresh: micro-interactions & polish -------------------------- */
+/* Gentle press feedback on every button (respects reduced motion). */
+button {
+  transition: transform 0.15s ease, box-shadow 0.2s ease;
+}
+button:active:not(:disabled) {
+  transform: scale(0.97);
+}
+@media (prefers-reduced-motion: reduce) {
+  button, button:active:not(:disabled) {
+    transition: none;
+    transform: none;
+  }
+}
+
+/* Soft shimmer for skeleton placeholders (used with animate-pulse blocks). */
+@keyframes shimmer {
+  0% { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+.skeleton-shimmer {
+  background: linear-gradient(90deg, #f3f4f6 25%, #fdf2f8 50%, #f3f4f6 75%);
+  background-size: 800px 100%;
+  animation: shimmer 1.4s infinite linear;
+}
+
+/* Subtle entrance for page content. */
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+.animate-fade-up {
+  animation: fade-up 0.3s ease both;
 }
 
 /* --- Native safe areas (Capacitor) ------------------------------------- */

@@ -20,13 +20,13 @@ import { apiRequest } from "@/lib/queryClient";
 // Extended schema for the add service form
 const addServiceSchema = insertServiceSchema.extend({
   // Ensure required fields
-  title: z.string().min(1, "Service title is required"),
-  description: z.string().min(10, "Description must be at least 10 characters"),
-  serviceType: z.string().min(1, "Please select a service type"),
-  location: z.string().min(1, "Location is required"),
-  availability: z.string().min(1, "Please specify your availability"),
-  ageGroups: z.string().min(1, "Please specify age groups you work with"),
-  hourlyRate: z.number().min(0, "Hourly rate must be 0 or greater").optional(),
+  title: z.string().min(1, "Il titolo del servizio è obbligatorio"),
+  description: z.string().min(10, "La descrizione deve avere almeno 10 caratteri"),
+  serviceType: z.string().min(1, "Seleziona un tipo di servizio"),
+  location: z.string().min(1, "La posizione è obbligatoria"),
+  availability: z.string().min(1, "Indica la tua disponibilità"),
+  ageGroups: z.string().min(1, "Indica le fasce d'età con cui lavori"),
+  hourlyRate: z.number({ invalid_type_error: "Inserisci una tariffa valida" }).min(0, "Inserisci una tariffa valida").optional(),
 }).omit({
   providerId: true, // Will be set by backend
   isAvailable: true, // Default value
@@ -36,30 +36,32 @@ type AddServiceFormData = z.infer<typeof addServiceSchema>;
 
 const serviceTypes = [
   { value: "Babysitting", label: "Babysitting" },
-  { value: "Tutoring", label: "Tutoring" },
-  { value: "Cleaning", label: "House Cleaning" },
-  { value: "Pet Care", label: "Pet Care" },
-  { value: "Meal Prep", label: "Meal Preparation" },
-  { value: "Transportation", label: "Transportation" },
-  { value: "Elderly Care", label: "Elderly Care" },
-  { value: "Personal Training", label: "Personal Training" },
-  { value: "Music Lessons", label: "Music Lessons" },
-  { value: "Language Tutoring", label: "Language Tutoring" },
-  { value: "Other", label: "Other" }
+  { value: "Tutoring", label: "Ripetizioni" },
+  { value: "Cleaning", label: "Pulizie domestiche" },
+  { value: "Pet Care", label: "Cura animali" },
+  { value: "Meal Prep", label: "Preparazione pasti" },
+  { value: "Transportation", label: "Trasporto" },
+  { value: "Elderly Care", label: "Assistenza anziani" },
+  { value: "Personal Training", label: "Personal training" },
+  { value: "Music Lessons", label: "Lezioni di musica" },
+  { value: "Language Tutoring", label: "Lezioni di lingua" },
+  { value: "Other", label: "Altro" }
 ];
 
 const ageGroupOptions = [
-  "0-2 years",
-  "3-5 years", 
-  "6-12 years",
-  "13+ years",
-  "Adults",
-  "All ages"
+  "0-2 anni",
+  "3-5 anni", 
+  "6-12 anni",
+  "13+ anni",
+  "Adulti",
+  "Tutte le età"
 ];
 
 export default function AddService() {
   const [, setLocation] = useLocation();
   const [selectedAgeGroups, setSelectedAgeGroups] = useState<string[]>([]);
+  // Free-text price editing (comma or dot decimals), parsed on change
+  const [rateText, setRateText] = useState("");
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -88,22 +90,22 @@ export default function AddService() {
       
       const response = await apiRequest("POST", "/api/services", serviceData);
       if (!response.ok) {
-        throw new Error("Failed to create service");
+        throw new Error("Impossibile creare il servizio");
       }
       return response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/services"] });
       toast({
-        title: "Service Created!",
-        description: "Your service has been successfully posted.",
+        title: "Servizio pubblicato!",
+        description: "Il tuo servizio è stato pubblicato con successo.",
       });
       setLocation("/marketplace");
     },
     onError: (error) => {
       toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to create service",
+        title: "Errore",
+        description: error instanceof Error ? error.message : "Impossibile creare il servizio",
         variant: "destructive",
       });
     },
@@ -147,8 +149,8 @@ export default function AddService() {
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Add New Service</h1>
-            <p className="text-gray-600">Share your skills with other mothers</p>
+            <h1 className="text-2xl font-bold text-gray-900">Aggiungi Servizio</h1>
+            <p className="text-gray-600">Condividi le tue competenze con le altre mamme</p>
           </div>
         </div>
 
@@ -158,17 +160,17 @@ export default function AddService() {
               <CardContent className="p-6 space-y-6">
                 {/* Basic Information */}
                 <div className="space-y-4">
-                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Basic Information</h3>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Informazioni di base</h3>
                   
                   <FormField
                     control={form.control}
                     name="title"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Service Title *</FormLabel>
+                        <FormLabel>Titolo del servizio *</FormLabel>
                         <FormControl>
                           <Input
-                            placeholder="e.g., Experienced babysitter available weekends"
+                            placeholder="es. Babysitter esperta disponibile nei weekend"
                             {...field}
                             data-testid="input-title"
                           />
@@ -183,10 +185,10 @@ export default function AddService() {
                     name="description"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Description *</FormLabel>
+                        <FormLabel>Descrizione *</FormLabel>
                         <FormControl>
                           <Textarea
-                            placeholder="Describe your service, experience, and what makes you special..."
+                            placeholder="Descrivi il tuo servizio, la tua esperienza e cosa ti rende speciale..."
                             className="min-h-[120px]"
                             {...field}
                             data-testid="textarea-description"
@@ -203,11 +205,11 @@ export default function AddService() {
                       name="serviceType"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Service Type *</FormLabel>
+                          <FormLabel>Tipo di servizio *</FormLabel>
                           <Select onValueChange={field.onChange} value={field.value}>
                             <FormControl>
                               <SelectTrigger data-testid="select-service-type">
-                                <SelectValue placeholder="Select service type" />
+                                <SelectValue placeholder="Seleziona tipo di servizio" />
                               </SelectTrigger>
                             </FormControl>
                             <SelectContent>
@@ -228,17 +230,28 @@ export default function AddService() {
                       name="hourlyRate"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Hourly Rate (€)</FormLabel>
+                          <FormLabel>Tariffa oraria (€)</FormLabel>
                           <FormControl>
-                            <Input
-                              type="number"
-                              step="0.01"
-                              placeholder="e.g., 15.00"
-                              {...field}
-                              value={field.value || ""}
-                              onChange={(e) => field.onChange(e.target.value ? parseFloat(e.target.value) : undefined)}
-                              data-testid="input-hourly-rate"
-                            />
+                            <div className="relative">
+                              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">€</span>
+                              <Input
+                                type="text"
+                                inputMode="decimal"
+                                placeholder="es. 15,00"
+                                className="pl-8"
+                                name={field.name}
+                                ref={field.ref}
+                                onBlur={field.onBlur}
+                                value={rateText}
+                                onChange={(e) => {
+                                  const raw = e.target.value.replace(/[^\d.,]/g, "");
+                                  setRateText(raw);
+                                  const parsed = parseFloat(raw.replace(",", "."));
+                                  field.onChange(Number.isFinite(parsed) ? parsed : undefined);
+                                }}
+                                data-testid="input-hourly-rate"
+                              />
+                            </div>
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -251,10 +264,10 @@ export default function AddService() {
                     name="location"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Location *</FormLabel>
+                        <FormLabel>Posizione *</FormLabel>
                         <FormControl>
                           <Input
-                            placeholder="e.g., Milan, Barcelona, etc."
+                            placeholder="es. Milano, Roma, Bologna..."
                             {...field}
                             data-testid="input-location"
                           />
@@ -267,17 +280,17 @@ export default function AddService() {
 
                 {/* Availability & Experience */}
                 <div className="space-y-4">
-                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Availability & Experience</h3>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Disponibilità ed esperienza</h3>
                   
                   <FormField
                     control={form.control}
                     name="availability"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Availability *</FormLabel>
+                        <FormLabel>Disponibilità *</FormLabel>
                         <FormControl>
                           <Textarea
-                            placeholder="e.g., Weekday evenings 6-10pm, weekend mornings, flexible schedule..."
+                            placeholder="es. Sere feriali 18-22, weekend mattina, orari flessibili..."
                             className="min-h-[80px]"
                             {...field}
                             data-testid="textarea-availability"
@@ -294,10 +307,10 @@ export default function AddService() {
                       name="experience"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Years of Experience</FormLabel>
+                          <FormLabel>Anni di esperienza</FormLabel>
                           <FormControl>
                             <Input
-                              placeholder="e.g., 5 years"
+                              placeholder="es. 5 anni"
                               {...field}
                               value={field.value || ""}
                               data-testid="input-experience"
@@ -313,10 +326,10 @@ export default function AddService() {
                       name="certifications"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Certifications</FormLabel>
+                          <FormLabel>Certificazioni</FormLabel>
                           <FormControl>
                             <Input
-                              placeholder="e.g., First Aid, CPR, Teaching degree"
+                              placeholder="es. Primo soccorso, laurea in scienze dell'educazione"
                               {...field}
                               value={field.value || ""}
                               data-testid="input-certifications"
@@ -331,10 +344,10 @@ export default function AddService() {
 
                 {/* Age Groups */}
                 <div className="space-y-4">
-                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Age Groups You Work With *</h3>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Fasce d'età con cui lavori *</h3>
                   
                   <div className="space-y-3">
-                    <Label>Select age groups (choose at least one):</Label>
+                    <Label>Seleziona le fasce d'età (almeno una):</Label>
                     <div className="flex flex-wrap gap-2">
                       {ageGroupOptions.map((ageGroup) => (
                         <Button
@@ -382,7 +395,7 @@ export default function AddService() {
                   
                   {form.formState.errors.ageGroups && selectedAgeGroups.length === 0 && (
                     <p className="text-sm font-medium text-destructive mt-2">
-                      Please select at least one age group you work with.
+                      Seleziona almeno una fascia d'età con cui lavori.
                     </p>
                   )}
                 </div>
@@ -396,7 +409,7 @@ export default function AddService() {
                     className="flex-1"
                     data-testid="button-cancel"
                   >
-                    Cancel
+                    Annulla
                   </Button>
                   <Button
                     type="submit"
@@ -407,10 +420,10 @@ export default function AddService() {
                     {createServiceMutation.isPending ? (
                       <>
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Creating...
+                        Pubblicazione...
                       </>
                     ) : (
-                      'Create Service'
+                      'Pubblica Servizio'
                     )}
                   </Button>
                 </div>

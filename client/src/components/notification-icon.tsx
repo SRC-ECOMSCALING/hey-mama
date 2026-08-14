@@ -1,45 +1,28 @@
-import { Bell } from "lucide-react";
+import { CalendarDays } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 interface NotificationIconProps {
   className?: string;
 }
 
+// Header icon: community events (replaces the old notifications bell).
 export default function NotificationIcon({ className = "" }: NotificationIconProps) {
   const [, setLocation] = useLocation();
-
-  // Fetch unread notification count
-  const { data: unreadData } = useQuery<{ count: number }>({
-    queryKey: ["/api/notifications/unread-count"],
-    refetchInterval: 30000, // Refresh every 30 seconds
-  });
-
-  const unreadCount = unreadData?.count || 0;
-
-  const handleNotificationClick = () => {
-    setLocation("/notifications");
-  };
+  const { t } = useLanguage();
 
   return (
     <Button
       variant="ghost"
       size="icon"
+      aria-label={t("events")}
+      title={t("events")}
       className={`relative rounded-full ${className}`}
-      onClick={handleNotificationClick}
-      data-testid="button-notifications"
+      onClick={() => setLocation("/events")}
+      data-testid="button-events"
     >
-      <Bell className="h-5 w-5 text-gray-600" />
-      {unreadCount > 0 && (
-        <div 
-          className="absolute -top-1 -right-1 h-5 w-5 rounded-full text-xs font-medium flex items-center justify-center text-white"
-          style={{ backgroundColor: "var(--primary-pink)" }}
-          data-testid="badge-notification-count"
-        >
-          {unreadCount > 99 ? "99+" : unreadCount}
-        </div>
-      )}
+      <CalendarDays className="h-5 w-5 text-gray-600" />
     </Button>
   );
 }

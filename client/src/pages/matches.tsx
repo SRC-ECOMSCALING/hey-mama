@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, MessageCircle, MapPin, Calendar } from "lucide-react";
+import { ArrowLeft, MessageCircle, MapPin, Calendar, Check, X, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import Navigation from "@/components/navigation";
@@ -29,6 +29,46 @@ export default function Matches() {
 
   const { data: matches = [], isLoading } = useQuery<MatchWithProfile[]>({
     queryKey: ["/api/matches", CURRENT_USER_ID],
+  });
+
+  interface ConnectionRequest extends Match {
+    otherUserId: string;
+    profile: Profile;
+  }
+
+  // Pending connection requests (incoming must be accepted before messaging)
+  const { data: requests } = useQuery<{ incoming: ConnectionRequest[]; outgoing: ConnectionRequest[] }>({
+    queryKey: ["/api/connections/requests"],
+  });
+  const incoming = requests?.incoming ?? [];
+  const outgoing = requests?.outgoing ?? [];
+
+  const invalidateConnections = () => {
+    queryClient.invalidateQueries({ queryKey: ["/api/connections/requests"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/connections/status"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/matches", CURRENT_USER_ID] });
+  };
+
+  const acceptMutation = useMutation({
+    mutationFn: async (matchId: string) => apiRequest("POST", `/api/connections/${matchId}/accept`),
+    onSuccess: () => {
+      toast({ title: t("requestAccepted"), description: t("nowSendMessages") });
+      invalidateConnections();
+    },
+    onError: () => {
+      toast({ title: t("error"), description: t("somethingWentWrong"), variant: "destructive" });
+    },
+  });
+
+  const declineMutation = useMutation({
+    mutationFn: async (matchId: string) => apiRequest("POST", `/api/connections/${matchId}/decline`),
+    onSuccess: () => {
+      toast({ title: t("requestDeclined") });
+      invalidateConnections();
+    },
+    onError: () => {
+      toast({ title: t("error"), description: t("somethingWentWrong"), variant: "destructive" });
+    },
   });
 
   const startConversationMutation = useMutation({
@@ -97,8 +137,110 @@ export default function Matches() {
       </header>
 
       {/* Matches List */}
-      <div className="p-4 pb-nav">
-        {matches.length === 0 ? (
+      <div className="p-4 pb-nav space-y-6">
+        {/* Incoming connection requests */}
+        {incoming.length > 0 && (
+          <section>
+            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">
+              {t("requestsReceived")}
+            </h2>
+            <div className="space-y-3">
+              {incoming.map((req) => (
+                <div
+                  key={req.id}
+                  className="bg-white rounded-2xl shadow-sm border border-pink-100 p-4 flex items-center gap-3"
+                  data-testid={`request-incoming-${req.id}`}
+                >
+                  <div className="w-14 h-14 rounded-full bg-gray-200 overflow-hidden flex-shrink-0">
+                    {req.profile?.photoUrls?.[0] && (
+                      <img
+                        src={req.profile.photoUrls[0]}
+                        alt={req.profile.firstName}
+                        className="w-full h-full object-cover"
+                      />
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h3 className="font-semibold text-gray-800 truncate">
+                      {req.profile?.firstName} {req.profile?.lastName}
+                    </h3>
+                    <p className="text-xs text-gray-500 truncate">{req.profile?.location}</p>
+                  </div>
+                  <div className="flex gap-2 shrink-0">
+                    <Button
+                      size="icon"
+                      className="w-10 h-10 rounded-full text-white"
+                      style={{ background: "linear-gradient(to right, var(--primary-pink), var(--accent-coral))" }}
+                      onClick={() => acceptMutation.mutate(req.id)}
+                      disabled={acceptMutation.isPending || declineMutation.isPending}
+                      aria-label={t("accept")}
+                      data-testid={`button-accept-${req.id}`}
+                    >
+                      <Check className="w-5 h-5" />
+                    </Button>
+                    <Button
+                      size="icon"
+                      variant="outline"
+                      className="w-10 h-10 rounded-full text-gray-500"
+                      onClick={() => declineMutation.mutate(req.id)}
+                      disabled={acceptMutation.isPending || declineMutation.isPending}
+                      aria-label={t("decline")}
+                      data-testid={`button-decline-${req.id}`}
+                    >
+                      <X className="w-5 h-5" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* Outgoing pending requests */}
+        {outgoing.length > 0 && (
+          <section>
+            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">
+              {t("requestsSent")}
+            </h2>
+            <div className="space-y-3">
+              {outgoing.map((req) => (
+                <div
+                  key={req.id}
+                  className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 flex items-center gap-3"
+                  data-testid={`request-outgoing-${req.id}`}
+                >
+                  <div className="w-14 h-14 rounded-full bg-gray-200 overflow-hidden flex-shrink-0">
+                    {req.profile?.photoUrls?.[0] && (
+                      <img
+                        src={req.profile.photoUrls[0]}
+                        alt={req.profile.firstName}
+                        className="w-full h-full object-cover"
+                      />
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h3 className="font-semibold text-gray-800 truncate">
+                      {req.profile?.firstName} {req.profile?.lastName}
+                    </h3>
+                    <p className="text-xs text-gray-500 truncate">{req.profile?.location}</p>
+                  </div>
+                  <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-600 bg-amber-50 rounded-full px-2.5 py-1 shrink-0">
+                    <Clock className="w-3 h-3" />
+                    {t("requestPending")}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {(incoming.length > 0 || outgoing.length > 0) && matches.length > 0 && (
+          <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide -mb-2">
+            {t("activeConnections")}
+          </h2>
+        )}
+
+        {matches.length === 0 && incoming.length === 0 && outgoing.length === 0 ? (
           <div className="text-center py-12">
             <div className="text-6xl mb-4">💕</div>
             <h2 className="text-2xl font-bold text-gray-800 mb-2">{t("noMatchesYet")}</h2>

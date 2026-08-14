@@ -62,14 +62,14 @@ export default function LocationModal({ location, onClose }: LocationModalProps)
       setReviewRating(5);
       queryClient.invalidateQueries({ queryKey: ["/api/locations", location.id, "reviews"] });
       toast({
-        title: "Review Added!",
-        description: "Thank you for sharing your experience with other moms!",
+        title: "Recensione aggiunta!",
+        description: "Grazie per aver condiviso la tua esperienza con le altre mamme!",
       });
     },
     onError: () => {
       toast({
-        title: "Error",
-        description: "Failed to add review. Please try again.",
+        title: "Errore",
+        description: "Impossibile inviare la recensione. Riprova.",
         variant: "destructive",
       });
     },
@@ -78,8 +78,8 @@ export default function LocationModal({ location, onClose }: LocationModalProps)
   const handleSubmitReview = () => {
     if (!reviewComment.trim() || !visitedWith.trim()) {
       toast({
-        title: "Missing Information",
-        description: "Please fill in your review and who you visited with.",
+        title: "Informazioni mancanti",
+        description: "Compila la recensione e indica con chi hai visitato il luogo.",
         variant: "destructive",
       });
       return;
@@ -182,7 +182,7 @@ export default function LocationModal({ location, onClose }: LocationModalProps)
           <p className="text-gray-600 text-sm mb-6 leading-relaxed">{location.description}</p>
 
           <div className="mb-6">
-            <h3 className="font-semibold text-gray-800 mb-3">Amenities</h3>
+            <h3 className="font-semibold text-gray-800 mb-3">Servizi</h3>
             <div className="flex flex-wrap gap-2">
               {location.amenities.map((amenity, index) => (
                 <span
@@ -202,7 +202,7 @@ export default function LocationModal({ location, onClose }: LocationModalProps)
           {/* Reviews Section */}
           <div className="mb-6">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="font-semibold text-gray-800">Mom Reviews</h3>
+              <h3 className="font-semibold text-gray-800">Recensioni delle mamme</h3>
               <Button
                 size="sm"
                 className="text-white"
@@ -234,7 +234,7 @@ export default function LocationModal({ location, onClose }: LocationModalProps)
                     type="text"
                     value={visitedWith}
                     onChange={(e) => setVisitedWith(e.target.value)}
-                    placeholder="e.g., 3-year-old daughter"
+                    placeholder="es. figlia di 3 anni"
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-pink focus:border-transparent"
                   />
                 </div>
@@ -246,7 +246,7 @@ export default function LocationModal({ location, onClose }: LocationModalProps)
                   <Textarea
                     value={reviewComment}
                     onChange={(e) => setReviewComment(e.target.value)}
-                    placeholder="Share your experience with other moms..."
+                    placeholder="Condividi la tua esperienza con le altre mamme..."
                     className="w-full min-h-[80px] resize-none"
                   />
                 </div>
@@ -280,7 +280,7 @@ export default function LocationModal({ location, onClose }: LocationModalProps)
               ) : reviews.length === 0 ? (
                 <div className="text-center py-8 text-gray-500">
                   <div className="text-4xl mb-2">💭</div>
-                  <p>No reviews yet. Be the first to share your experience!</p>
+                  <p>Nessuna recensione ancora. Sii la prima a condividere la tua esperienza!</p>
                 </div>
               ) : (
                 reviews.map((review) => (

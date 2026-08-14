@@ -54,6 +54,7 @@ export default function ProfileEdit() {
   const { data: profile, isLoading } = useQuery<Profile>({
     queryKey: ["/api/profiles", CURRENT_USER_ID],
   });
+  const isProfessional = profile?.accountType === "professional";
 
   const form = useForm<UpdateProfile>({
     resolver: zodResolver(updateProfileSchema),
@@ -70,6 +71,8 @@ export default function ProfileEdit() {
       kidsGenders: profile?.kidsGenders || [],
       hobbies: profile?.hobbies || [],
       vintedUrl: profile?.vintedUrl || "",
+      businessName: profile?.businessName || "",
+      professionalCategory: profile?.professionalCategory || "",
     },
   });
 
@@ -89,6 +92,8 @@ export default function ProfileEdit() {
         kidsGenders: profile.kidsGenders,
         hobbies: profile.hobbies,
         vintedUrl: profile.vintedUrl,
+        businessName: profile.businessName || "",
+        professionalCategory: profile.professionalCategory || "",
       });
       setUploadedPhotos(profile.photoUrls);
     }
@@ -218,9 +223,52 @@ export default function ProfileEdit() {
           <CardContent>
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+                {/* Professional business info */}
+                {isProfessional && (
+                  <div className="space-y-4">
+                    <h3 className="text-lg font-medium">{t("professionalAccount")}</h3>
+                    <FormField
+                      control={form.control}
+                      name="businessName"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>{t("businessNameLabel")}</FormLabel>
+                          <FormControl>
+                            <Input
+                              placeholder={t("businessNamePlaceholder")}
+                              data-testid="input-businessName"
+                              {...field}
+                              value={field.value ?? ""}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="professionalCategory"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>{t("professionalCategoryLabel")}</FormLabel>
+                          <FormControl>
+                            <Input
+                              placeholder={t("selectProfessionalCategory")}
+                              data-testid="input-professionalCategory"
+                              {...field}
+                              value={field.value ?? ""}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                )}
+
                 {/* Basic Info */}
                 <div className="space-y-4">
-                  <h3 className="text-lg font-medium">{t("basicInformation")}</h3>
+                  <h3 className="text-lg font-medium">{isProfessional ? t("referentName") : t("basicInformation")}</h3>
                   
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <FormField
@@ -258,15 +306,18 @@ export default function ProfileEdit() {
                       name="age"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Age</FormLabel>
+                          <FormLabel>{t("age")}</FormLabel>
                           <FormControl>
                             <Input
                               type="number"
                               min="18"
                               max="65"
                               data-testid="input-age"
-                              {...field}
-                              onChange={(e) => field.onChange(parseInt(e.target.value))}
+                              name={field.name}
+                              ref={field.ref}
+                              onBlur={field.onBlur}
+                              value={field.value ?? ""}
+                              onChange={(e) => field.onChange(e.target.value === "" ? undefined : parseInt(e.target.value))}
                             />
                           </FormControl>
                           <FormMessage />
@@ -280,7 +331,7 @@ export default function ProfileEdit() {
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>{t("gender")}</FormLabel>
-                          <Select onValueChange={field.onChange} defaultValue={field.value} data-testid="select-sex">
+                          <Select onValueChange={field.onChange} defaultValue={field.value ?? undefined} data-testid="select-sex">
                             <FormControl>
                               <SelectTrigger>
                                 <SelectValue placeholder={t("selectGender")} />
@@ -442,7 +493,7 @@ export default function ProfileEdit() {
                 />
 
                 {/* Kids Info */}
-                <div className="space-y-4">
+                <div className={`space-y-4 ${isProfessional ? "hidden" : ""}`}>
                   <h3 className="text-lg font-medium">{t("aboutYourKids")}</h3>
                   
                   <FormField
@@ -467,7 +518,7 @@ export default function ProfileEdit() {
                   />
 
                   {/* Dynamic age and gender inputs for each kid */}
-                  {form.watch("kidsNumber") > 0 && (
+                  {(form.watch("kidsNumber") ?? 0) > 0 && (
                     <div className="space-y-3">
                       <FormLabel>{t("kidsInformation")}</FormLabel>
                       <div className="space-y-4">
@@ -540,7 +591,7 @@ export default function ProfileEdit() {
                 </div>
 
                 {/* Hobbies */}
-                <div className="space-y-4">
+                <div className={`space-y-4 ${isProfessional ? "hidden" : ""}`}>
                   <h3 className="text-lg font-medium">{t("hobbiesInterests")}</h3>
                   
                   <div className="flex gap-2">

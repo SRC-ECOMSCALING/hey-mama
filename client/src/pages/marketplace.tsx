@@ -55,9 +55,9 @@ const editProductSchema = insertMarketplaceItemSchema.pick({
   condition: true,
   negotiable: true,
 }).extend({
-  title: z.string().min(1, "Title is required"),
-  description: z.string().min(10, "Description must be at least 10 characters"),
-  price: z.number().min(1, "Price must be greater than 0"),
+  title: z.string().min(1, "Il titolo è obbligatorio"),
+  description: z.string().min(10, "La descrizione deve avere almeno 10 caratteri"),
+  price: z.number().min(0.01, "Inserisci un prezzo valido"),
 });
 
 type EditProductFormData = z.infer<typeof editProductSchema>;
@@ -676,7 +676,7 @@ export default function Marketplace() {
                           <button
                             onClick={() => window.open(item.vintedUrl!, '_blank')}
                             className="w-10 h-10 bg-teal-500 hover:bg-teal-600 rounded-lg flex items-center justify-center transition-colors shrink-0"
-                            title="View on Vinted"
+                            title="Vedi su Vinted"
                           >
                             <span className="text-white font-bold text-base">V</span>
                           </button>
@@ -795,7 +795,7 @@ export default function Marketplace() {
                                   window.open(item.vintedUrl!, '_blank');
                                 }}
                                 className="w-10 h-10 bg-teal-500 hover:bg-teal-600 rounded-lg flex items-center justify-center transition-colors"
-                                title="View on Vinted"
+                                title="Vedi su Vinted"
                               >
                                 <span className="text-white font-bold text-base">V</span>
                               </button>
@@ -1173,7 +1173,7 @@ export default function Marketplace() {
                             : "text-gray-600"
                         }`}
                       />
-                      {isItemSaved(selectedItem.id) ? "Saved" : "Save"}
+                      {isItemSaved(selectedItem.id) ? "Salvato" : "Salva"}
                     </Button>
                     
                     {selectedItem.vintedUrl && (
@@ -1243,11 +1243,11 @@ export default function Marketplace() {
                       name="title"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Title</FormLabel>
+                          <FormLabel>Titolo</FormLabel>
                           <FormControl>
                             <Input 
                               {...field}
-                              placeholder="Product title"
+                              placeholder="Titolo del prodotto"
                               data-testid="input-edit-title"
                             />
                           </FormControl>
@@ -1261,11 +1261,11 @@ export default function Marketplace() {
                       name="description"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Description</FormLabel>
+                          <FormLabel>Descrizione</FormLabel>
                           <FormControl>
                             <Textarea 
                               {...field}
-                              placeholder="Product description"
+                              placeholder="Descrizione del prodotto"
                               className="min-h-[100px]"
                               data-testid="textarea-edit-description"
                             />
@@ -1280,7 +1280,7 @@ export default function Marketplace() {
                       name="price"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Price (€)</FormLabel>
+                          <FormLabel>Prezzo (€)</FormLabel>
                           <FormControl>
                             <Input 
                               {...field}
@@ -1302,11 +1302,11 @@ export default function Marketplace() {
                       name="condition"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Condition</FormLabel>
+                          <FormLabel>Condizione</FormLabel>
                           <Select onValueChange={field.onChange} defaultValue={field.value}>
                             <FormControl>
                               <SelectTrigger data-testid="select-edit-condition">
-                                <SelectValue placeholder="Select condition" />
+                                <SelectValue placeholder="Seleziona condizione" />
                               </SelectTrigger>
                             </FormControl>
                             <SelectContent>

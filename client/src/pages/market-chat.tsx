@@ -6,11 +6,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { apiRequest } from "@/lib/queryClient";
 import { formatDistanceToNow } from "date-fns";
-import type { MarketplaceItem, MarketplaceMessage, Profile } from "@shared/schema";
+import type { MarketplaceItem, MarketplaceMessage, Profile, Service } from "@shared/schema";
 import ReportBlockControls from "@/components/report-block";
 
 interface ThreadResponse {
   item: MarketplaceItem | null;
+  service: Service | null;
   otherProfile: Profile | null;
   messages: MarketplaceMessage[];
 }
@@ -79,6 +80,12 @@ export default function MarketChat() {
   const messages = thread?.messages ?? [];
   const other = thread?.otherProfile;
   const item = thread?.item;
+  const service = thread?.service;
+  const subjectTitle = item
+    ? `📦 ${item.title} · €${(item.price / 100).toFixed(0)}`
+    : service
+      ? `🛠 ${service.title}${service.hourlyRate ? ` · €${(service.hourlyRate / 100).toFixed(0)}/ora` : ""}`
+      : "Annuncio";
 
   return (
     <div className="flex flex-col h-[100dvh] bg-gray-50">
@@ -110,7 +117,7 @@ export default function MarketChat() {
               {other ? `${other.firstName} ${other.lastName}` : "Utente"}
             </h2>
             <p className="text-xs text-gray-500 truncate" data-testid="text-item-title">
-              {item ? `📦 ${item.title} · €${(item.price / 100).toFixed(0)}` : "Annuncio"}
+              {subjectTitle}
             </p>
           </div>
           {otherUserId && (
@@ -132,7 +139,7 @@ export default function MarketChat() {
             <div className="text-5xl mb-3">💬</div>
             <p className="text-gray-700 font-medium mb-1">Inizia la conversazione</p>
             <p className="text-gray-500 text-sm">
-              Scrivi a {other?.firstName ?? "questa mamma"} per "{item?.title ?? "questo annuncio"}"
+              Scrivi a {other?.firstName ?? "questa persona"} per "{item?.title ?? service?.title ?? "questo annuncio"}"
             </p>
           </div>
         ) : (

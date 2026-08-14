@@ -93,11 +93,27 @@ export default function Profile() {
               <span className="text-gray-500 text-sm text-center px-2">{t("yourProfilePhoto")}</span>
             </div>
           )}
-          <h2 className="text-2xl font-bold text-gray-800 mb-1">{profile.firstName} {profile.lastName}</h2>
-          {profile.age != null && <p className="text-gray-600">{profile.age} {t("yearsOld")}</p>}
+          <h2 className="text-2xl font-bold text-gray-800 mb-1">
+            {profile.accountType === "professional" && profile.businessName
+              ? profile.businessName
+              : `${profile.firstName} ${profile.lastName}`}
+          </h2>
+          {profile.accountType === "professional" ? (
+            <div className="flex flex-col items-center gap-1">
+              {profile.professionalCategory && (
+                <span className="px-3 py-1 rounded-full text-sm font-medium bg-pink-50" style={{ color: "var(--primary-pink)" }}>
+                  {profile.professionalCategory}
+                </span>
+              )}
+              <p className="text-gray-500 text-sm">{t("referentName")}: {profile.firstName} {profile.lastName}</p>
+            </div>
+          ) : (
+            profile.age != null && <p className="text-gray-600">{profile.age} {t("yearsOld")}</p>
+          )}
         </div>
 
         <div className="space-y-6">
+          {profile.accountType !== "professional" && (
           <div className="p-4 rounded-2xl" style={{ backgroundColor: "var(--warm-gray)" }}>
             <h3 className="font-semibold text-gray-800 mb-3">{t("myKids")}</h3>
             <div className="flex gap-2">
@@ -115,6 +131,7 @@ export default function Profile() {
               ))}
             </div>
           </div>
+          )}
 
           <div className="p-4 rounded-2xl" style={{ backgroundColor: "var(--warm-gray)" }}>
             <h3 className="font-semibold text-gray-800 mb-3">{t("interests")}</h3>
