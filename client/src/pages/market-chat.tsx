@@ -8,6 +8,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { formatDistanceToNow } from "date-fns";
 import type { MarketplaceItem, MarketplaceMessage, Profile, Service } from "@shared/schema";
 import ReportBlockControls from "@/components/report-block";
+import PageSkeleton from "@/components/page-skeleton";
 
 interface ThreadResponse {
   item: MarketplaceItem | null;
@@ -70,11 +71,7 @@ export default function MarketChat() {
   };
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-screen">
-        <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-pink-500"></div>
-      </div>
-    );
+    return <PageSkeleton variant="chat" />;
   }
 
   const messages = thread?.messages ?? [];

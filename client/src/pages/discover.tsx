@@ -9,7 +9,6 @@ import {
   InfoWindow,
 } from "@vis.gl/react-google-maps";
 import SettingsModal from "@/components/settings-modal";
-import Navigation from "@/components/navigation";
 import NotificationIcon from "@/components/notification-icon";
 import {
   Settings,
@@ -40,6 +39,7 @@ import { Textarea } from "@/components/ui/textarea";
 import type { Profile, Location } from "@shared/schema";
 import heyMamaLogo from "@assets/logo_gradient_text-min_1757514869714.png";
 import { useLanguage } from "@/contexts/LanguageContext";
+import PageSkeleton from "@/components/page-skeleton";
 
 // Category icon and color mapping
 const getCategoryStyle = (category: string) => {
@@ -391,9 +391,7 @@ export default function Discover() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-screen">
-        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-primary-pink"></div>
-      </div>
+      <PageSkeleton variant="map" />
     );
   }
 
@@ -789,9 +787,6 @@ export default function Discover() {
           </APIProvider>
         )}
       </main>
-
-      {/* Navigation */}
-      <Navigation includeMarketplace={true} />
 
       {/* Settings Modal */}
       {showSettingsModal && (

@@ -19,6 +19,7 @@ import { ObjectUploader } from "@/components/ObjectUploader";
 import { ArrowLeft, Plus, X, Upload, Check, ChevronsUpDown } from "lucide-react";
 import heyMamaLogo from "@assets/logo_gradient_text-min_1757514869714.png";
 import { useLanguage } from "@/contexts/LanguageContext";
+import PageSkeleton from "@/components/page-skeleton";
 
 const ITALIAN_PROVINCES = [
   "Agrigento", "Alessandria", "Ancona", "Aosta", "Arezzo", "Ascoli Piceno", "Asti", "Avellino",
@@ -180,9 +181,7 @@ export default function ProfileEdit() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-screen">
-        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-primary-pink"></div>
-      </div>
+      <PageSkeleton variant="form" />
     );
   }
 

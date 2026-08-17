@@ -10,7 +10,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import Navigation from "@/components/navigation";
 import LocationModal from "@/components/location-modal";
 import GooglePlacesAutocomplete from "@/components/google-places-autocomplete";
 import { useLocation } from "wouter";
@@ -27,6 +26,7 @@ import parkImage from "@assets/park_1757514529486.jpg";
 import playgroundImage from "@assets/playground_1757514529486.jpg";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { translations } from "@/lib/translations";
+import PageSkeleton from "@/components/page-skeleton";
 
 // Category keys for translation
 const categoryKeys = ["categoryAll", "categoryPark", "categoryCafe", "categoryPlayground", "categoryLibrary", "categoryWaterPark", "categoryActivityCenter", "categoryRestaurants"] as const;
@@ -379,7 +379,7 @@ function ProfessionalsTab() {
     return (
       <div className="space-y-3 p-4">
         {[1, 2, 3].map((i) => (
-          <div key={i} className="h-36 rounded-2xl bg-gray-100 animate-pulse" />
+          <div key={i} className="h-36 rounded-2xl skeleton-shimmer" />
         ))}
       </div>
     );
@@ -415,6 +415,8 @@ function ProfessionalsTab() {
               {pro.photoUrls?.[0] ? (
                 <img
                   src={pro.photoUrls[0]}
+                    loading="lazy"
+                    decoding="async"
                   alt={displayName}
                   className="w-16 h-16 object-cover rounded-xl flex-shrink-0"
                 />
@@ -562,9 +564,7 @@ export default function Locations() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-screen">
-        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-primary-pink"></div>
-      </div>
+      <PageSkeleton variant="list" />
     );
   }
 
@@ -684,6 +684,8 @@ export default function Locations() {
                   {/* Category Image */}
                   <img
                     src={getCategoryImage(location.category)}
+                    loading="lazy"
+                    decoding="async"
                     alt={location.category}
                     className="w-16 h-16 object-cover rounded-lg flex-shrink-0"
                   />
@@ -721,9 +723,6 @@ export default function Locations() {
         )}
       </div>
       </TabsContent>
-
-      {/* Navigation */}
-      <Navigation />
 
       {/* Location Modal */}
       {selectedLocation && (

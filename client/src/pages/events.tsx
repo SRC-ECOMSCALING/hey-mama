@@ -18,7 +18,6 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useLanguage } from "@/contexts/LanguageContext";
-import Navigation from "@/components/navigation";
 
 interface EventItem {
   id: string;
@@ -185,7 +184,7 @@ export default function Events() {
   );
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-28">
+    <div className="min-h-screen bg-gray-50 pb-nav">
       {/* Header */}
       <header className="bg-white/85 backdrop-blur-xl shadow-sm sticky top-0 z-40">
         <div className="flex items-center p-4 gap-3">
@@ -321,7 +320,7 @@ export default function Events() {
         {isLoading ? (
           <div className="space-y-3">
             {[1, 2, 3].map((i) => (
-              <div key={i} className="h-32 rounded-2xl bg-gray-100 animate-pulse" />
+              <div key={i} className="h-32 rounded-2xl skeleton-shimmer" />
             ))}
           </div>
         ) : events.length === 0 ? (
@@ -361,7 +360,6 @@ export default function Events() {
         )}
       </div>
 
-      <Navigation />
     </div>
   );
 }

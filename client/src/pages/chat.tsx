@@ -10,6 +10,7 @@ import type { Message, Profile } from "@shared/schema";
 import heyMamaLogo from "@assets/logo_gradient_text-min_1757514869714.png";
 import { useLanguage } from "@/contexts/LanguageContext";
 import ReportBlockControls from "@/components/report-block";
+import PageSkeleton from "@/components/page-skeleton";
 
 interface CurrentUser {
   id: string;
@@ -134,9 +135,7 @@ export default function Chat() {
 
   if (messagesLoading) {
     return (
-      <div className="flex items-center justify-center h-screen">
-        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-primary-pink"></div>
-      </div>
+      <PageSkeleton variant="chat" />
     );
   }
 

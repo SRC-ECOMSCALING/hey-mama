@@ -15,7 +15,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Heart, Search, Filter, Euro, MapPin, ExternalLink, Plus, Clock, ChevronLeft, ChevronRight, X, Edit, Trash2, Loader2, Info, SlidersHorizontal, ShoppingBag, Wrench, Tag, HandCoins } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import Navigation from "@/components/navigation";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { MarketplaceItem, LookingForPost, Service, ServiceLookingForPost, Profile } from "@shared/schema";
@@ -25,6 +24,7 @@ import UserInfoModal from "@/components/user-info-modal";
 import ReportBlockControls from "@/components/report-block";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { translations } from "@/lib/translations";
+import PageSkeleton from "@/components/page-skeleton";
 
 // Category keys for translation
 const categoryKeys = [
@@ -312,11 +312,7 @@ export default function Marketplace() {
 
 
   if (isLoading) {
-    return (
-      <div className="h-screen flex items-center justify-center bg-white bg-black">
-        <div className="animate-spin w-8 h-8 border-4 border-pink-500 border-t-transparent rounded-full" />
-      </div>
-    );
+    return <PageSkeleton variant="grid" />;
   }
 
   const getTimeSince = (dateString: string | Date) => {
@@ -582,6 +578,8 @@ export default function Marketplace() {
                     {item.imageUrls && item.imageUrls.length > 0 ? (
                       <img
                         src={item.imageUrls[0]}
+                    loading="lazy"
+                    decoding="async"
                         alt={item.title}
                         className="w-full h-full object-cover rounded-lg"
                         onError={(e) => {
@@ -724,6 +722,8 @@ export default function Marketplace() {
                         {item.imageUrls && item.imageUrls.length > 0 ? (
                           <img
                             src={item.imageUrls[0]}
+                    loading="lazy"
+                    decoding="async"
                             alt={item.title}
                             className="w-full h-full object-cover rounded-lg"
                             onError={(e) => {
@@ -1454,8 +1454,6 @@ export default function Marketplace() {
         onOpenChange={setShowUserInfoModal}
       />
 
-      {/* Navigation */}
-      <Navigation includeMarketplace={true} />
     </div>
   );
 }

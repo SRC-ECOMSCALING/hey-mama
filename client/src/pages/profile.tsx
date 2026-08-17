@@ -1,12 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, Edit, LogOut, ShoppingBag, ExternalLink, Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import Navigation from "@/components/navigation";
 import { useLocation } from "wouter";
 import type { Profile } from "@shared/schema";
 import { useAuth } from "@/hooks/useAuth";
 import { useLanguage } from "@/contexts/LanguageContext";
 import heyMamaLogo from "@assets/logo_gradient_text-min_1757514869714.png";
+import PageSkeleton from "@/components/page-skeleton";
 
 const CURRENT_USER_ID = "current-user";
 
@@ -21,9 +21,7 @@ export default function Profile() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-screen">
-        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-primary-pink"></div>
-      </div>
+      <PageSkeleton variant="profile" />
     );
   }
 
@@ -228,8 +226,6 @@ export default function Profile() {
         </div>
       </div>
 
-      {/* Navigation */}
-      <Navigation />
     </>
   );
 }

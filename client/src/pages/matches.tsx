@@ -2,7 +2,6 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, MessageCircle, MapPin, Calendar, Check, X, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import Navigation from "@/components/navigation";
 import { useLocation } from "wouter";
 import { useState } from "react";
 import { apiRequest } from "@/lib/queryClient";
@@ -11,6 +10,7 @@ import type { Match, Profile } from "@shared/schema";
 import heyMamaLogo from "@assets/logo_gradient_text-min_1757514869714.png";
 import { useLanguage } from "@/contexts/LanguageContext";
 import ReportBlockControls from "@/components/report-block";
+import PageSkeleton from "@/components/page-skeleton";
 
 const CURRENT_USER_ID = "current-user";
 
@@ -107,9 +107,7 @@ export default function Matches() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-screen">
-        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-primary-pink"></div>
-      </div>
+      <PageSkeleton variant="list" />
     );
   }
 
@@ -155,6 +153,8 @@ export default function Matches() {
                     {req.profile?.photoUrls?.[0] && (
                       <img
                         src={req.profile.photoUrls[0]}
+                    loading="lazy"
+                    decoding="async"
                         alt={req.profile.firstName}
                         className="w-full h-full object-cover"
                       />
@@ -213,6 +213,8 @@ export default function Matches() {
                     {req.profile?.photoUrls?.[0] && (
                       <img
                         src={req.profile.photoUrls[0]}
+                    loading="lazy"
+                    decoding="async"
                         alt={req.profile.firstName}
                         className="w-full h-full object-cover"
                       />
@@ -322,9 +324,6 @@ export default function Matches() {
           </div>
         )}
       </div>
-
-      {/* Navigation */}
-      <Navigation includeMarketplace={true} />
 
       {/* Profile Details Modal */}
       {showProfileModal && selectedProfile && (
