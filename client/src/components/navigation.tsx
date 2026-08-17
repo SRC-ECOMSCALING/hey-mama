@@ -1,4 +1,4 @@
-import { Search, Users, MessageCircle, User, MapPin, ShoppingBag } from "lucide-react";
+import { Search, Users, MessageCircle, MapPin, ShoppingBag } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
@@ -20,13 +20,14 @@ export default function Navigation({ includeMarketplace: _includeMarketplace }: 
   });
   const incomingCount = requests?.incoming?.length || 0;
 
+  // Profile is reachable from Impostazioni (gear on the home header): five
+  // icons keep the bar airy on small screens.
   const navItems = [
     { path: "/", icon: Search, label: t("discover") },
     { path: "/locations", icon: MapPin, label: t("aroundYou") },
     { path: "/matches", icon: Users, label: t("connections"), badge: incomingCount },
     { path: "/messages", icon: MessageCircle, label: t("messages") },
     { path: "/marketplace", icon: ShoppingBag, label: t("marketplace") },
-    { path: "/profile", icon: User, label: t("profile") },
   ];
 
   return (
