@@ -27,6 +27,8 @@ import playgroundImage from "@assets/playground_1757514529486.jpg";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { translations } from "@/lib/translations";
 import PageSkeleton from "@/components/page-skeleton";
+import AppHeader from "@/components/app-header";
+import Fab from "@/components/fab";
 
 // Category keys for translation
 const categoryKeys = ["categoryAll", "categoryPark", "categoryCafe", "categoryPlayground", "categoryLibrary", "categoryWaterPark", "categoryActivityCenter", "categoryRestaurants"] as const;
@@ -144,16 +146,9 @@ function AddLocationDialog() {
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger asChild>
-        <Button 
-          size="icon" 
-          className="h-10 w-10 rounded-full text-white shadow-lg"
-          data-testid="button-add-location"
-          style={{ 
-            background: "linear-gradient(to right, var(--primary-pink), var(--accent-coral))"
-          }}
-        >
-          <Plus className="h-5 w-5" />
-        </Button>
+        <Fab data-testid="button-add-location" aria-label={t("addNewLocation")}>
+          <Plus className="h-6 w-6" />
+        </Fab>
       </DialogTrigger>
       <DialogContent className="max-w-md mx-auto max-h-[90vh] overflow-y-auto">
         <DialogHeader>
@@ -570,18 +565,12 @@ export default function Locations() {
 
   return (
     <Tabs defaultValue="places" className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white/85 backdrop-blur-xl shadow-sm sticky top-0 z-50">
-        <div className="flex items-center justify-center p-4 relative">
-          <div className="text-center">
-            <h1 className="text-xl font-bold text-gray-900">{t("aroundYou")}</h1>
-          </div>
-          <div className="absolute right-4">
-            <AddLocationDialog />
-          </div>
-        </div>
-        {/* Tabs: Luoghi / Professionisti (same pattern as products/services) */}
-        <div className="px-4 pb-3">
+      <AppHeader />
+
+      {/* Title + tabs: Luoghi / Professionisti */}
+      <div className="bg-white border-b border-gray-100">
+        <h1 className="px-4 pt-3 text-xl font-bold text-gray-900">{t("aroundYou")}</h1>
+        <div className="px-4 py-3">
           <TabsList className="grid w-full grid-cols-2 rounded-full bg-gray-100 p-1">
             <TabsTrigger
               value="places"
@@ -601,13 +590,14 @@ export default function Locations() {
             </TabsTrigger>
           </TabsList>
         </div>
-      </header>
+      </div>
 
       <TabsContent value="professionals" className="mt-0 pb-nav">
         <ProfessionalsTab />
       </TabsContent>
 
       <TabsContent value="places" className="mt-0">
+      <AddLocationDialog />
       {/* Search and Filter Section */}
       <div className="p-4 bg-white border-b space-y-4">
         {/* Address Search with Google Places Autocomplete */}

@@ -5,8 +5,8 @@ import { useLocation } from "wouter";
 import type { Profile } from "@shared/schema";
 import { useAuth } from "@/hooks/useAuth";
 import { useLanguage } from "@/contexts/LanguageContext";
-import heyMamaLogo from "@assets/logo_gradient_text-min_1757514869714.png";
 import PageSkeleton from "@/components/page-skeleton";
+import AppHeader from "@/components/app-header";
 
 const CURRENT_USER_ID = "current-user";
 
@@ -47,35 +47,7 @@ export default function Profile() {
 
   return (
     <>
-      {/* Header */}
-      <header className="bg-white shadow-sm sticky top-0 z-50">
-        <div className="flex items-center justify-between p-4">
-          <Button 
-            variant="ghost" 
-            size="icon" 
-            className="rounded-full"
-            onClick={() => setLocation("/")}
-          >
-            <ArrowLeft className="h-5 w-5 text-gray-600" />
-          </Button>
-          <div className="text-center flex items-center">
-            <img 
-              src={heyMamaLogo} 
-              alt="HeyMama" 
-              className="h-10 w-auto object-contain"
-            />
-          </div>
-          <Button 
-            variant="ghost" 
-            size="icon" 
-            className="rounded-full"
-            onClick={() => setLocation("/profile/edit")}
-            data-testid="button-edit-profile"
-          >
-            <Edit className="h-5 w-5 text-gray-600" />
-          </Button>
-        </div>
-      </header>
+      <AppHeader />
 
       {/* Profile Content */}
       <div className="p-6 pb-nav">

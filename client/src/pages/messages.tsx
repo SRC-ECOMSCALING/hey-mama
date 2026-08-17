@@ -5,10 +5,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useLocation } from "wouter";
 import type { Match, Profile, Message, MarketplaceItem, MarketplaceMessage } from "@shared/schema";
 import { formatDistanceToNow } from "date-fns";
-import heyMamaLogo from "@assets/logo_gradient_text-min_1757514869714.png";
-import NotificationIcon from "@/components/notification-icon";
 import { useLanguage } from "@/contexts/LanguageContext";
 import PageSkeleton from "@/components/page-skeleton";
+import AppHeader from "@/components/app-header";
 
 const CURRENT_USER_ID = "current-user";
 
@@ -52,28 +51,7 @@ export default function Messages() {
 
   return (
     <>
-      {/* Header */}
-      <header className="bg-white shadow-sm sticky top-0 z-50">
-        <div className="flex items-center justify-between p-4">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="rounded-full"
-            onClick={() => setLocation("/")}
-            data-testid="button-back"
-          >
-            <ArrowLeft className="h-5 w-5 text-gray-600" />
-          </Button>
-          <div className="flex items-center">
-            <img
-              src={heyMamaLogo}
-              alt="HeyMama"
-              className="h-10 w-auto object-contain"
-            />
-          </div>
-          <NotificationIcon />
-        </div>
-      </header>
+      <AppHeader />
 
       {/* Tabs: Match chats / Market chats */}
       <div className="p-4 pb-nav">

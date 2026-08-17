@@ -18,6 +18,8 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useLanguage } from "@/contexts/LanguageContext";
+import AppHeader from "@/components/app-header";
+import Fab from "@/components/fab";
 
 interface EventItem {
   id: string;
@@ -185,33 +187,19 @@ export default function Events() {
 
   return (
     <div className="min-h-screen bg-gray-50 pb-nav">
-      {/* Header */}
-      <header className="bg-white/85 backdrop-blur-xl shadow-sm sticky top-0 z-40">
-        <div className="flex items-center p-4 gap-3">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="rounded-full"
-            onClick={() => setLocation("/")}
-            data-testid="button-back"
-          >
-            <ArrowLeft className="h-5 w-5 text-gray-600" />
-          </Button>
-          <div className="flex-1">
-            <h1 className="text-xl font-bold text-gray-900">{t("events")}</h1>
-            <p className="text-xs text-gray-500">{t("eventsIntro")}</p>
-          </div>
+      <AppHeader right={null} />
 
-          <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+      {/* Title */}
+      <div className="px-4 pt-4">
+        <h1 className="text-xl font-bold text-gray-900">{t("events")}</h1>
+        <p className="text-xs text-gray-500">{t("eventsIntro")}</p>
+      </div>
+
+      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
             <DialogTrigger asChild>
-              <Button
-                size="icon"
-                className="rounded-full text-white shadow-md"
-                style={{ background: "linear-gradient(135deg, var(--primary-pink), var(--accent-coral))" }}
-                data-testid="button-create-event"
-              >
-                <Plus className="h-5 w-5" />
-              </Button>
+              <Fab data-testid="button-create-event" aria-label={t("createEvent")}>
+                <Plus className="h-6 w-6" />
+              </Fab>
             </DialogTrigger>
             <DialogContent className="max-w-md rounded-2xl max-h-[85vh] overflow-y-auto">
               <DialogHeader>
@@ -311,9 +299,7 @@ export default function Events() {
                 </Button>
               </div>
             </DialogContent>
-          </Dialog>
-        </div>
-      </header>
+      </Dialog>
 
       {/* Content */}
       <div className="p-4 space-y-6">

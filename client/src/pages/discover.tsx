@@ -8,10 +8,7 @@ import {
   AdvancedMarker,
   InfoWindow,
 } from "@vis.gl/react-google-maps";
-import SettingsModal from "@/components/settings-modal";
-import NotificationIcon from "@/components/notification-icon";
 import {
-  Settings,
   X,
   MapPin,
   Users,
@@ -40,6 +37,7 @@ import type { Profile, Location } from "@shared/schema";
 import heyMamaLogo from "@assets/logo_gradient_text-min_1757514869714.png";
 import { useLanguage } from "@/contexts/LanguageContext";
 import PageSkeleton from "@/components/page-skeleton";
+import AppHeader from "@/components/app-header";
 
 // Category icon and color mapping
 const getCategoryStyle = (category: string) => {
@@ -152,7 +150,6 @@ export default function Discover() {
   const [selectedLocation, setSelectedLocation] =
     useState<LocationWithReviews | null>(null);
   const [showReviewModal, setShowReviewModal] = useState(false);
-  const [showSettingsModal, setShowSettingsModal] = useState(false);
 
   // Load saved map position from localStorage
   const getSavedMapPosition = (): SavedMapPosition => {
@@ -416,27 +413,7 @@ export default function Discover() {
       {/* Map Content */}
       <main className="relative h-[100dvh] overflow-hidden bg-white">
         {/* Header - Floating on top of map */}
-        <header className="absolute left-4 right-4 bg-white shadow-lg rounded-2xl z-50 top-[calc(1rem_+_env(safe-area-inset-top))]">
-          <div className="flex items-center justify-between p-4">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="rounded-full"
-              onClick={() => setShowSettingsModal(true)}
-              data-testid="button-settings"
-            >
-              <Settings className="h-5 w-5 text-gray-600" />
-            </Button>
-            <div className="text-center flex items-center">
-              <img
-                src={heyMamaLogo}
-                alt="HeyMama"
-                className="h-10 w-auto object-contain"
-              />
-            </div>
-            <NotificationIcon />
-          </div>
-        </header>
+        <AppHeader left="settings" floating />
 
         {profilesWithCoords.length === 0 ? (
           <div className="flex items-center justify-center h-full px-6 bg-white">
@@ -787,11 +764,6 @@ export default function Discover() {
           </APIProvider>
         )}
       </main>
-
-      {/* Settings Modal */}
-      {showSettingsModal && (
-        <SettingsModal onClose={() => setShowSettingsModal(false)} />
-      )}
 
       {/* Review Modal */}
       <Dialog open={showReviewModal} onOpenChange={setShowReviewModal}>

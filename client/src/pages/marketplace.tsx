@@ -25,6 +25,8 @@ import ReportBlockControls from "@/components/report-block";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { translations } from "@/lib/translations";
 import PageSkeleton from "@/components/page-skeleton";
+import AppHeader from "@/components/app-header";
+import Fab from "@/components/fab";
 
 // Category keys for translation
 const categoryKeys = [
@@ -445,10 +447,11 @@ export default function Marketplace() {
       )}
 
       {/* Header */}
-      <div className="bg-white/90 backdrop-blur-md border-b border-gray-100 sticky top-0 z-10 safe-top">
+      <AppHeader />
+      <div className="bg-white border-b border-gray-100">
         <div className="px-4 pt-4 pb-3">
-          <div className="flex items-center gap-2 mb-3 pr-14">
-            <h1 className="text-2xl font-bold text-gray-900 flex-1">{t("marketplace")}</h1>
+          <div className="flex items-center gap-2 mb-3">
+            <h1 className="text-xl font-bold text-gray-900 flex-1">{t("marketplace")}</h1>
             {prefs?.city && (
               <button
                 onClick={clearCityFilter}
@@ -991,18 +994,10 @@ export default function Marketplace() {
           </TabsContent>
         </Tabs>
 
-        {/* Add Button - Top Right */}
-        <Button
-          className="fixed right-4 h-10 w-10 rounded-full text-white shadow-lg z-50 top-[calc(1rem_+_env(safe-area-inset-top))]"
-          size="icon"
-          onClick={() => setShowChoiceDialog(true)}
-          data-testid="button-open-add-choice"
-          style={{ 
-            background: "linear-gradient(to right, var(--primary-pink), var(--accent-coral))"
-          }}
-        >
-          <Plus className="h-5 w-5" />
-        </Button>
+        {/* Add Button */}
+        <Fab onClick={() => setShowChoiceDialog(true)} data-testid="button-open-add-choice">
+          <Plus className="h-6 w-6" />
+        </Fab>
       </div>
 
       {/* Product Detail Modal */}
