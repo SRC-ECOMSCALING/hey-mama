@@ -61,9 +61,11 @@ async function queryOverpass(query: string): Promise<OverpassResponse> {
 }
 
 export async function importOsmParks(city: string): Promise<OsmImportResult> {
+  // Escape quotes/backslashes so the city name can't break the Overpass query
+  const safeCity = city.replace(/[\\"]/g, (c) => `\\${c}`);
   // admin_level=8 is the Italian "comune" boundary
   const query = `[out:json][timeout:60];
-area["name"="${city}"]["boundary"="administrative"]["admin_level"="8"]->.a;
+area["name"="${safeCity}"]["boundary"="administrative"]["admin_level"="8"]->.a;
 (
   node["leisure"="park"](area.a);
   way["leisure"="park"](area.a);

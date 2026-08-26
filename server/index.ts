@@ -5,6 +5,10 @@ import { registerRoutes } from "./routes";
 import { serveStatic, log } from "./static";
 
 const app = express();
+// Railway (and any hosted proxy) terminates TLS in front of the app: without
+// trust proxy, req.secure is false and express-session never sets the secure
+// production cookie.
+app.set("trust proxy", 1);
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
@@ -45,8 +49,10 @@ app.use((req, res, next) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
 
-    res.status(status).json({ message });
-    throw err;
+    console.error("Request error:", err);
+    if (!res.headersSent) {
+      res.status(status).json({ message });
+    }
   });
 
   // importantly only setup vite in development and after
@@ -74,4 +80,7 @@ app.use((req, res, next) => {
   }, () => {
     log(`serving on port ${port}`);
   });
-})();
+})().catch((err) => {
+  console.error("Fatal startup error:", err);
+  process.exit(1);
+});

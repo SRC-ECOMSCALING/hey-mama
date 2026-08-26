@@ -40,7 +40,9 @@ const addLocationSchema = z.object({
   name: z.string().min(1, "Il nome è obbligatorio"),
   category: z.string().min(1, "La categoria è obbligatoria"),
   address: z.string().min(1, "L'indirizzo è obbligatorio"),
-  province: z.string().min(1, "La provincia è obbligatoria"),
+  // Populated from the Google suggestion; may legitimately be empty when
+  // Google returns no province component
+  province: z.string().default(""),
   description: z.string().min(1, "La descrizione è obbligatoria"),
   imageUrl: z.string().default("https://via.placeholder.com/300x200?text=Location"),
   amenities: z.array(z.string()),
@@ -143,6 +145,20 @@ function AddLocationDialog() {
     addLocationMutation.mutate(data);
   };
 
+  // name/address/coordinates have no visible form field (they come from the
+  // Google search), so a validation failure there must surface as a toast —
+  // otherwise the submit button appears dead.
+  const onInvalid = (errors: Record<string, any>) => {
+    const firstError = Object.values(errors).find(
+      (e: any) => typeof e?.message === "string" && e.message,
+    ) as { message?: string } | undefined;
+    toast({
+      title: t("error"),
+      description: firstError?.message,
+      variant: "destructive",
+    });
+  };
+
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger asChild>
@@ -156,7 +172,7 @@ function AddLocationDialog() {
         </DialogHeader>
         
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+          <form onSubmit={form.handleSubmit(onSubmit, onInvalid)} className="space-y-4">
             {/* Google Places Search */}
             <div className="space-y-2">
               <FormLabel>{t("searchForPlace")}</FormLabel>

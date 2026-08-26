@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -77,8 +77,10 @@ export default function ProfileEdit() {
     },
   });
 
-  // Update form when profile data is loaded
-  useState(() => {
+  // Update form when profile data is loaded. Must be an effect keyed on the
+  // query result: with useState this ran once before the profile arrived and
+  // saving the still-empty form wiped the real profile.
+  useEffect(() => {
     if (profile) {
       form.reset({
         firstName: profile.firstName,
@@ -98,7 +100,7 @@ export default function ProfileEdit() {
       });
       setUploadedPhotos(profile.photoUrls);
     }
-  });
+  }, [profile]);
 
   const updateMutation = useMutation({
     mutationFn: async (data: UpdateProfile) => {
@@ -106,9 +108,13 @@ export default function ProfileEdit() {
       return response.json();
     },
     onSuccess: () => {
-      // Invalidate profile queries to refresh data
+      // Invalidate every cache holding profile data (own profile, map markers,
+      // matches/conversations embed the profile too)
       queryClient.invalidateQueries({ queryKey: ["/api/profiles"] });
-      
+      queryClient.invalidateQueries({ queryKey: ["/api/profiles/map"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/matches"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
+
       toast({
         title: t("profileUpdated"),
         description: t("profileUpdatedSuccess"),

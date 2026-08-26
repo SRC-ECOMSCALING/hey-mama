@@ -254,9 +254,9 @@ export default function Settings() {
             <CardTitle>{t("legal")}</CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col gap-2">
-            <Link href="/terms"><a className="text-sm text-pink-600 hover:text-pink-700 underline" data-testid="link-settings-terms">{t("termsOfUse")}</a></Link>
-            <Link href="/privacy"><a className="text-sm text-pink-600 hover:text-pink-700 underline" data-testid="link-settings-privacy">{t("privacyPolicy")}</a></Link>
-            <Link href="/support"><a className="text-sm text-pink-600 hover:text-pink-700 underline" data-testid="link-settings-support">Supporto</a></Link>
+            <Link href="/terms" className="text-sm text-pink-600 hover:text-pink-700 underline" data-testid="link-settings-terms">{t("termsOfUse")}</Link>
+            <Link href="/privacy" className="text-sm text-pink-600 hover:text-pink-700 underline" data-testid="link-settings-privacy">{t("privacyPolicy")}</Link>
+            <Link href="/support" className="text-sm text-pink-600 hover:text-pink-700 underline" data-testid="link-settings-support">Supporto</Link>
           </CardContent>
         </Card>
 

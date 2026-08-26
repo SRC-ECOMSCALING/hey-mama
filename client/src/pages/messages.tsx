@@ -5,6 +5,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useLocation } from "wouter";
 import type { Match, Profile, Message, MarketplaceItem, MarketplaceMessage } from "@shared/schema";
 import { formatDistanceToNow } from "date-fns";
+import { it as itLocale } from "date-fns/locale";
 import { useLanguage } from "@/contexts/LanguageContext";
 import PageSkeleton from "@/components/page-skeleton";
 import AppHeader from "@/components/app-header";
@@ -31,7 +32,7 @@ interface MarketConversation {
 
 export default function Messages() {
   const [, setLocation] = useLocation();
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
 
   const { data: conversations = [], isLoading } = useQuery<Conversation[]>({
     queryKey: ["/api/conversations", CURRENT_USER_ID],
@@ -115,7 +116,7 @@ export default function Messages() {
                         {conversation.profile?.firstName} {conversation.profile?.lastName}
                       </h3>
                       <span className="text-xs text-gray-500 flex-shrink-0 ml-2">
-                        {formatDistanceToNow(new Date(conversation.lastMessage.createdAt), { addSuffix: true })}
+                        {formatDistanceToNow(new Date(conversation.lastMessage.createdAt), { addSuffix: true, locale: language === "en" ? undefined : itLocale })}
                       </span>
                     </div>
                     <p className="text-sm text-gray-600 truncate">
@@ -189,7 +190,7 @@ export default function Messages() {
                           : "Utente"}
                       </h3>
                       <span className="text-xs text-gray-500 flex-shrink-0 ml-2">
-                        {formatDistanceToNow(new Date(conversation.lastMessage.createdAt), { addSuffix: true })}
+                        {formatDistanceToNow(new Date(conversation.lastMessage.createdAt), { addSuffix: true, locale: language === "en" ? undefined : itLocale })}
                       </span>
                     </div>
                     <p className="text-xs text-pink-600 font-medium truncate mb-0.5">

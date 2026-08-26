@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -119,6 +119,14 @@ type UploadedImage = {
 export default function AddProduct() {
   const [, setLocation] = useLocation();
   const [uploadedImages, setUploadedImages] = useState<UploadedImage[]>([]);
+
+  // Revoke every preview object URL on unmount (removeImage only frees the
+  // one it removes)
+  const uploadedImagesRef = useRef(uploadedImages);
+  uploadedImagesRef.current = uploadedImages;
+  useEffect(() => () => {
+    uploadedImagesRef.current.forEach((img) => URL.revokeObjectURL(img.previewUrl));
+  }, []);
   // The price is edited as free text (comma or dot decimals) and parsed on
   // change: no pre-filled 0 to fight against while typing.
   const [priceText, setPriceText] = useState("");
@@ -176,12 +184,15 @@ export default function AddProduct() {
     return `${url.origin}${url.pathname}`;
   };
 
-  // Function to upload a single image
-  const uploadImage = async (file: File, index: number) => {
+  // Function to upload a single image. Identified by its previewUrl (unique
+  // per image): using the array index raced with removals — removing an
+  // earlier image while an upload was in flight shifted the array and the
+  // completion marked the wrong slot.
+  const uploadImage = async (file: File, previewUrl: string) => {
     try {
       // Mark as uploading
-      setUploadedImages(prev => prev.map((img, i) => 
-        i === index ? { ...img, isUploading: true, uploadError: undefined } : img
+      setUploadedImages(prev => prev.map((img) =>
+        img.previewUrl === previewUrl ? { ...img, isUploading: true, uploadError: undefined } : img
       ));
 
       // Get upload URL and upload file
@@ -189,19 +200,19 @@ export default function AddProduct() {
       const objectUrl = await uploadFileToStorage(file, uploadUrl);
 
       // Mark as completed
-      setUploadedImages(prev => prev.map((img, i) => 
-        i === index ? { ...img, uploadUrl: objectUrl, isUploading: false } : img
+      setUploadedImages(prev => prev.map((img) =>
+        img.previewUrl === previewUrl ? { ...img, uploadUrl: objectUrl, isUploading: false } : img
       ));
 
     } catch (error) {
       console.error('Upload error:', error);
-      
+
       // Mark as failed
-      setUploadedImages(prev => prev.map((img, i) => 
-        i === index ? { 
-          ...img, 
-          isUploading: false, 
-          uploadError: error instanceof Error ? error.message : 'Upload failed' 
+      setUploadedImages(prev => prev.map((img) =>
+        img.previewUrl === previewUrl ? {
+          ...img,
+          isUploading: false,
+          uploadError: error instanceof Error ? error.message : 'Upload failed'
         } : img
       ));
 
@@ -270,10 +281,13 @@ export default function AddProduct() {
     setUploadedImages(prev => [...prev, ...newImages]);
 
     // Start uploading each image
-    const startIndex = currentImageCount;
-    for (let i = 0; i < newImages.length; i++) {
-      uploadImage(filesToAdd[i], startIndex + i);
+    for (const image of newImages) {
+      uploadImage(image.file, image.previewUrl);
     }
+
+    // Reset the input so removing a photo and re-picking the same file
+    // fires onChange again
+    event.target.value = "";
   };
 
   const removeImage = (index: number) => {
@@ -288,7 +302,7 @@ export default function AddProduct() {
   const retryUpload = (index: number) => {
     const image = uploadedImages[index];
     if (image && !image.isUploading) {
-      uploadImage(image.file, index);
+      uploadImage(image.file, image.previewUrl);
     }
   };
 

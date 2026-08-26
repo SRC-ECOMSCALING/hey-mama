@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import Uppy from "@uppy/core";
 import { DashboardModal } from "@uppy/react";
@@ -74,6 +74,12 @@ export function ObjectUploader({
         onComplete?.(result);
       })
   );
+
+  // The Uppy instance is created once: keep its restrictions in sync when the
+  // caller's limits change (e.g. fewer photo slots left after loading a profile)
+  useEffect(() => {
+    uppy.setOptions({ restrictions: { maxNumberOfFiles, maxFileSize } });
+  }, [uppy, maxNumberOfFiles, maxFileSize]);
 
   return (
     <div>

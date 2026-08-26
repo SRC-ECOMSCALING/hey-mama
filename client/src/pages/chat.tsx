@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { formatDistanceToNow } from "date-fns";
+import { it as itLocale } from "date-fns/locale";
 import type { Message, Profile } from "@shared/schema";
 import heyMamaLogo from "@assets/logo_gradient_text-min_1757514869714.png";
 import { useLanguage } from "@/contexts/LanguageContext";
@@ -30,7 +31,7 @@ export default function Chat() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
 
   // Get current user info to determine which messages are yours
   const { data: currentUser } = useQuery<CurrentUser>({
@@ -200,7 +201,7 @@ export default function Chat() {
               <div key={msg.id} data-testid={`message-${msg.id}`}>
                 {showTime && (
                   <div className="text-center text-xs text-gray-400 mb-2">
-                    {formatDistanceToNow(new Date(msg.createdAt), { addSuffix: true })}
+                    {formatDistanceToNow(new Date(msg.createdAt), { addSuffix: true, locale: language === "en" ? undefined : itLocale })}
                   </div>
                 )}
                 <div className={`flex ${isCurrentUser ? 'justify-end' : 'justify-start'} mb-2`}>

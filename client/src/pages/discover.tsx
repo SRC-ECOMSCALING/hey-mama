@@ -237,12 +237,10 @@ export default function Discover() {
     return () => clearInterval(interval);
   }, []);
 
-  // Refresh profiles periodically to show updated online statuses
+  // Refresh the map profiles periodically to show updated online statuses
   useEffect(() => {
     const interval = setInterval(() => {
-      queryClient.invalidateQueries({
-        queryKey: ["/api/profiles/discover", CURRENT_USER_ID],
-      });
+      queryClient.invalidateQueries({ queryKey: ["/api/profiles/map"] });
     }, 60000);
     return () => clearInterval(interval);
   }, []);
@@ -299,7 +297,7 @@ export default function Discover() {
           description: t("requestSentDesc").replace("{name}", connectedUser?.firstName || ""),
         });
       }
-      queryClient.invalidateQueries({ queryKey: ["/api/profiles/discover"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/profiles/map"] });
       queryClient.invalidateQueries({ queryKey: ["/api/matches"] });
       queryClient.invalidateQueries({ queryKey: ["/api/connections/status"] });
       queryClient.invalidateQueries({ queryKey: ["/api/connections/requests"] });
@@ -308,7 +306,8 @@ export default function Discover() {
       });
     },
     onError: (error: any) => {
-      if (error.status === 429) {
+      // apiRequest throws plain Errors whose message starts with the HTTP status
+      if (typeof error?.message === "string" && error.message.startsWith("429:")) {
         toast({
           title: t("dailyLimitReached"),
           description: t("dailyLimitMessage"),

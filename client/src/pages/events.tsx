@@ -86,6 +86,9 @@ export default function Events() {
       queryClient.invalidateQueries({ queryKey: ["/api/events"] });
       toast({ title: t("eventDeleted") });
     },
+    onError: () => {
+      toast({ title: t("error"), variant: "destructive" });
+    },
   });
 
   const now = new Date();

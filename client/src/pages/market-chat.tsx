@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { apiRequest } from "@/lib/queryClient";
 import { formatDistanceToNow } from "date-fns";
+import { it as itLocale } from "date-fns/locale";
+import { useLanguage } from "@/contexts/LanguageContext";
 import type { MarketplaceItem, MarketplaceMessage, Profile, Service } from "@shared/schema";
 import ReportBlockControls from "@/components/report-block";
 import PageSkeleton from "@/components/page-skeleton";
@@ -25,6 +27,7 @@ interface CurrentUser {
 export default function MarketChat() {
   const [, params] = useRoute("/market-chat/:itemId/:otherUserId");
   const [, setLocation] = useLocation();
+  const { language } = useLanguage();
   const [newMessage, setNewMessage] = useState("");
   const queryClient = useQueryClient();
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -150,7 +153,7 @@ export default function MarketChat() {
               <div key={msg.id} data-testid={`market-message-${msg.id}`}>
                 {showTime && (
                   <div className="text-center text-xs text-gray-400 mb-2">
-                    {formatDistanceToNow(new Date(msg.createdAt), { addSuffix: true })}
+                    {formatDistanceToNow(new Date(msg.createdAt), { addSuffix: true, locale: language === "en" ? undefined : itLocale })}
                   </div>
                 )}
                 <div className={`flex ${isMine ? "justify-end" : "justify-start"} mb-2`}>

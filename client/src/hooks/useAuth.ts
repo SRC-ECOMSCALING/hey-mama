@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 interface User {
   id: string;
@@ -12,6 +13,7 @@ interface User {
 export function useAuth() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { t } = useLanguage();
 
   const { data: user, isLoading, error } = useQuery({
     queryKey: ["/api/auth/me"],
@@ -28,8 +30,8 @@ export function useAuth() {
       queryClient.setQueryData(["/api/auth/me"], null);
       queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
       toast({
-        title: "Logged out",
-        description: "You've been logged out successfully.",
+        title: t("loggedOut"),
+        description: t("loggedOutMessage"),
       });
     },
     onError: () => {

@@ -17,18 +17,20 @@ export function isValidImageId(id: string): boolean {
   return UUID_RE.test(id);
 }
 
+// Insert-only: image ids are public once referenced in photo URLs, so allowing
+// overwrites would let anyone replace an existing user's picture. Returns false
+// when the id already exists.
 export async function saveImage(
   id: string,
   data: Buffer,
   contentType: string,
-): Promise<void> {
-  await db
+): Promise<boolean> {
+  const inserted = await db
     .insert(uploadedImages)
     .values({ id, data, contentType })
-    .onConflictDoUpdate({
-      target: uploadedImages.id,
-      set: { data, contentType },
-    });
+    .onConflictDoNothing({ target: uploadedImages.id })
+    .returning({ id: uploadedImages.id });
+  return inserted.length > 0;
 }
 
 export async function getImage(id: string): Promise<UploadedImage | null> {

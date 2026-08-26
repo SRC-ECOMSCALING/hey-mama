@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -197,8 +197,15 @@ export default function Admin() {
     onError: (e: any) => toast({ title: "Errore import OSM", description: e.message, variant: "destructive" }),
   });
 
+  // Redirect from an effect: navigating during render triggers React's
+  // "cannot update a component while rendering" warning.
+  useEffect(() => {
+    if (!isLoading && !isAdmin) {
+      setLocation("/");
+    }
+  }, [isLoading, isAdmin, setLocation]);
+
   if (!isLoading && !isAdmin) {
-    setLocation("/");
     return null;
   }
 

@@ -31,6 +31,9 @@ export function useSwipe(options: SwipeOptions = {}) {
 
     const handleStart = (clientX: number, clientY: number) => {
       startRef.current = { x: clientX, y: clientY };
+      // Reset the end point too: a tap with no move would otherwise compute
+      // the delta against the previous gesture's end point.
+      endRef.current = { x: clientX, y: clientY };
     };
 
     const handleMove = (clientX: number, clientY: number, event?: Event) => {

@@ -180,8 +180,29 @@ export default function Marketplace() {
     }
   };
 
+  // Stored item categories are the Italian labels (hierarchical), so filter
+  // with the Italian label regardless of the display language. The category
+  // must travel as a ?category= query param: joining it into the path would
+  // hit the /api/marketplace/items/:id route instead.
+  const categoryFilter =
+    selectedCategory === "categoryAll"
+      ? undefined
+      : translations.it[selectedCategory as keyof (typeof translations)["it"]];
+
   const { data: items = [], isLoading } = useQuery<MarketplaceItemWithSeller[]>({
-    queryKey: ["/api/marketplace/items", selectedCategory === "categoryAll" ? undefined : t(selectedCategory as keyof (typeof translations)["it"])],
+    // Two-element key so invalidateQueries(["/api/marketplace/items"]) still
+    // clears every category variant; the explicit queryFn sends the category
+    // as a real query param (the default queryFn would join it into the path
+    // and hit /api/marketplace/items/:id).
+    queryKey: ["/api/marketplace/items", categoryFilter ?? "all"],
+    queryFn: async () => {
+      const url = categoryFilter
+        ? `/api/marketplace/items?category=${encodeURIComponent(categoryFilter)}`
+        : "/api/marketplace/items";
+      const res = await fetch(url, { credentials: "include" });
+      if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
+      return res.json();
+    },
   });
 
   // Saved items queries and mutations
@@ -231,7 +252,15 @@ export default function Marketplace() {
   });
 
   const { data: lookingForPosts = [], isLoading: isLoadingLookingFor } = useQuery<LookingForPost[]>({
-    queryKey: ["/api/marketplace/looking-for", selectedCategory === "categoryAll" ? undefined : t(selectedCategory as keyof (typeof translations)["it"])],
+    queryKey: ["/api/marketplace/looking-for", categoryFilter ?? "all"],
+    queryFn: async () => {
+      const url = categoryFilter
+        ? `/api/marketplace/looking-for?category=${encodeURIComponent(categoryFilter)}`
+        : "/api/marketplace/looking-for";
+      const res = await fetch(url, { credentials: "include" });
+      if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
+      return res.json();
+    },
   });
 
   const { data: services = [], isLoading: isLoadingServices } = useQuery<Service[]>({
@@ -290,6 +319,27 @@ export default function Marketplace() {
   // Check if an item is saved
   const isItemSaved = (itemId: string) => {
     return savedItems.some(item => item.id === itemId);
+  };
+
+  // Delete one of the user's own service requests ("Le mie richieste")
+  const handleDeleteServiceRequest = async (postId: string) => {
+    if (!window.confirm(t("deleteConfirm"))) return;
+    try {
+      const response = await fetch(`/api/services/looking-for/${postId}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+      if (!response.ok) {
+        throw new Error('Failed to delete service request');
+      }
+      queryClient.invalidateQueries({ queryKey: ["/api/services/looking-for"] });
+    } catch (error) {
+      console.error('Error deleting service request:', error);
+      toast({
+        title: t("error"),
+        variant: "destructive",
+      });
+    }
   };
 
   // Delete item functionality
@@ -675,7 +725,10 @@ export default function Marketplace() {
                       <div className="flex items-center gap-2 sm:gap-3 flex-1 justify-end">
                         {item.vintedUrl && (
                           <button
-                            onClick={() => window.open(item.vintedUrl!, '_blank')}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              window.open(item.vintedUrl!, '_blank');
+                            }}
                             className="w-10 h-10 bg-teal-500 hover:bg-teal-600 rounded-lg flex items-center justify-center transition-colors shrink-0"
                             title="Vedi su Vinted"
                           >
@@ -746,7 +799,7 @@ export default function Marketplace() {
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            setEditingItem(item);
+                            handleEditItem(item);
                           }}
                           className="absolute top-2 right-2 p-1.5 rounded-full bg-white/80 hover:bg-white transition-colors"
                           data-testid={`button-edit-${item.id}`}
@@ -808,7 +861,7 @@ export default function Marketplace() {
                               className="text-white px-6 h-10 rounded-lg"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                setEditingItem(item);
+                                handleEditItem(item);
                               }}
                               data-testid={`button-edit-product-main-${item.id}`}
                               style={{ 
@@ -974,14 +1027,14 @@ export default function Marketplace() {
                             <div className="text-xs text-gray-400">
                               {getTimeSince(post.createdAt!)}
                             </div>
-                            <Button 
-                              size="default" 
-                              className="text-white px-6 h-10 rounded-lg"
-                              style={{ 
-                                background: "linear-gradient(to right, var(--primary-pink), var(--accent-coral))"
-                              }}
+                            <Button
+                              size="default"
+                              variant="outline"
+                              className="px-6 h-10 rounded-lg text-red-600 border-red-200 hover:bg-red-50"
+                              onClick={() => handleDeleteServiceRequest(post.id)}
+                              data-testid={`button-delete-service-request-${post.id}`}
                             >
-                              {t("respond")}
+                              {t("delete")}
                             </Button>
                           </div>
                         </CardContent>

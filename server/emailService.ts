@@ -10,14 +10,16 @@ interface SendEmailParams {
 }
 
 export class EmailService {
-  private apiKey: string;
   private apiUrl = 'https://api.brevo.com/v3/smtp/email';
 
-  constructor() {
-    this.apiKey = process.env.BREVO_API_KEY!;
-    if (!this.apiKey) {
+  // Read lazily so a missing BREVO_API_KEY degrades to "email unavailable"
+  // (registration falls back to no-verification) instead of crashing at boot.
+  private get apiKey(): string {
+    const key = process.env.BREVO_API_KEY;
+    if (!key) {
       throw new Error('BREVO_API_KEY environment variable is required');
     }
+    return key;
   }
 
   async sendEmail({ to, subject, htmlContent, textContent }: SendEmailParams): Promise<BrevoEmailResponse> {

@@ -12,8 +12,6 @@ import libraryImage from "@assets/library_1757514529486.jpg";
 import parkImage from "@assets/park_1757514529486.jpg";
 import playgroundImage from "@assets/playground_1757514529486.jpg";
 
-const CURRENT_USER_ID = "current-user";
-
 function getCategoryImage(category: string): string {
   const categoryLower = category.toLowerCase();
   if (categoryLower.includes('bar') || categoryLower.includes('cafe')) {
@@ -51,7 +49,8 @@ export default function LocationModal({ location, onClose }: LocationModalProps)
   });
 
   const reviewMutation = useMutation({
-    mutationFn: async (reviewData: { locationId: string; userId: string; rating: number; comment: string; visitedWith: string }) => {
+    // The server sets userId from the session
+    mutationFn: async (reviewData: { locationId: string; rating: number; comment: string; visitedWith: string }) => {
       const response = await apiRequest("POST", "/api/reviews", reviewData);
       return response.json();
     },
@@ -87,7 +86,6 @@ export default function LocationModal({ location, onClose }: LocationModalProps)
 
     reviewMutation.mutate({
       locationId: location.id,
-      userId: CURRENT_USER_ID,
       rating: reviewRating,
       comment: reviewComment.trim(),
       visitedWith: visitedWith.trim(),

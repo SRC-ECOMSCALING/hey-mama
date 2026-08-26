@@ -25,6 +25,11 @@ import { parse } from "csv-parse/sync";
 
 // Session middleware configuration
 const SESSION_SECRET = process.env.SESSION_SECRET || "your-secret-key-here";
+if (!process.env.SESSION_SECRET && process.env.NODE_ENV === "production") {
+  console.error(
+    "[SECURITY] SESSION_SECRET is not set — sessions are signed with a public default. Set SESSION_SECRET on the server.",
+  );
+}
 const SESSION_COOKIE_NAME = "heymama.sid";
 const PgSession = connectPgSimple(session);
 
@@ -41,12 +46,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
   const pgPool = new pg.Pool({
     connectionString: process.env.DATABASE_URL,
   });
+  // Neon drops idle TCP connections; without this listener the pool's 'error'
+  // event is unhandled and crashes the whole process.
+  pgPool.on("error", (err) => {
+    console.error("Session pool error (recovered):", err.message);
+  });
 
   // CORS — required so native (Capacitor) WebViews, served from
   // capacitor://localhost / http://localhost, can call this backend.
+  // Credentialed CORS must not reflect arbitrary origins: allow only the
+  // native WebView origins, localhost dev, the app's own host, and any extra
+  // origins from CORS_ORIGINS (comma-separated).
+  const EXTRA_CORS_ORIGINS = (process.env.CORS_ORIGINS || "")
+    .split(",")
+    .map((o) => o.trim().replace(/\/$/, ""))
+    .filter(Boolean);
+  const isAllowedOrigin = (req: any, origin: string): boolean => {
+    if (/^(capacitor|ionic):\/\/localhost$/i.test(origin)) return true;
+    if (/^https?:\/\/localhost(:\d+)?$/i.test(origin)) return true;
+    if (EXTRA_CORS_ORIGINS.includes(origin)) return true;
+    try {
+      return new URL(origin).host === req.headers.host; // same-site (web app)
+    } catch {
+      return false;
+    }
+  };
   app.use((req, res, next) => {
     const origin = req.headers.origin;
-    if (origin) {
+    if (origin && isAllowedOrigin(req, origin)) {
       res.header("Access-Control-Allow-Origin", origin);
       res.header("Vary", "Origin");
       res.header("Access-Control-Allow-Credentials", "true");
@@ -137,16 +164,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Admin middleware
   const requireAdmin = async (req: any, res: any, next: any) => {
-    if (!req.session.userId) {
-      return res.status(401).json({ message: "Authentication required" });
-    }
+    try {
+      if (!req.session.userId) {
+        return res.status(401).json({ message: "Authentication required" });
+      }
 
-    const user = await storage.getUserById(req.session.userId);
-    if (!isUserAdmin(user)) {
-      return res.status(403).json({ message: "Admin access required" });
-    }
+      const user = await storage.getUserById(req.session.userId);
+      if (!isUserAdmin(user)) {
+        return res.status(403).json({ message: "Admin access required" });
+      }
 
-    next();
+      next();
+    } catch (error) {
+      console.error("Admin check error:", error);
+      res.status(500).json({ message: "Failed to verify admin access" });
+    }
   };
 
 
@@ -200,10 +232,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         verificationCode = emailService.generateVerificationCode();
         const verificationExpiry = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
         await emailService.sendVerificationEmail(registrationData.email, verificationCode);
-        // Store registration data temporarily in session
+        // Store registration data temporarily in session. The password is
+        // hashed before staging so no plaintext password sits in the session
+        // table while the user verifies the email.
+        const { password: _pw, confirmPassword: _cpw, ...pendingData } = registrationData;
         req.session.pendingRegistration = {
-          ...registrationData,
+          ...pendingData,
+          passwordHash: await storage.hashPassword(registrationData.password),
           verificationCode,
+          verificationAttempts: 0,
           verificationExpiry: verificationExpiry.toISOString()
         };
         emailSent = true;
@@ -292,9 +329,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       if (pendingRegistration.verificationCode !== verificationCode) {
+        // Brute-force guard: a 6-digit code with unlimited attempts is guessable
+        pendingRegistration.verificationAttempts =
+          (pendingRegistration.verificationAttempts ?? 0) + 1;
+        if (pendingRegistration.verificationAttempts >= 5) {
+          delete req.session.pendingRegistration;
+          return res.status(429).json({ message: "Too many attempts. Please register again." });
+        }
         return res.status(400).json({ message: "Invalid verification code" });
       }
-      
+
       // Create the user account
       const { user, profile } = await storage.register({
         ...pendingRegistration,
@@ -468,10 +512,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ) {
           return res.status(400).json({ error: "Only images are accepted" });
         }
+        // SVG can carry scripts and would be served same-origin: raster only.
+        if (contentType.toLowerCase().includes("svg")) {
+          return res.status(400).json({ error: "SVG images are not accepted" });
+        }
         if (!Buffer.isBuffer(req.body) || req.body.length === 0) {
           return res.status(400).json({ error: "Empty upload" });
         }
-        await saveImage(id, req.body, contentType);
+        const inserted = await saveImage(id, req.body, contentType);
+        if (!inserted) {
+          // Uploads are write-once so a public image URL can never be replaced
+          // with different content. A retry of the same upload is fine.
+          const existing = await getImage(id);
+          if (existing && existing.data.equals(req.body)) {
+            return res.sendStatus(200); // idempotent retry
+          }
+          return res.status(409).json({ error: "Image already uploaded" });
+        }
         res.sendStatus(200);
       } catch (error) {
         console.error("Error storing upload:", error);
@@ -496,6 +553,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         "Content-Type": image.contentType,
         "Content-Length": String(image.data.length),
         "Cache-Control": "public, max-age=31536000, immutable",
+        "X-Content-Type-Options": "nosniff",
       });
       res.end(image.data);
     } catch (error) {
@@ -713,7 +771,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         allProfiles = allProfiles.filter((p) => !p.isTestProfile);
       }
       const blocked = await getBlockedSet(req.session.userId);
-      allProfiles = allProfiles.filter((p) => !blocked.has(p.userId));
+      // Never show the requester her own marker (she can't connect to herself)
+      allProfiles = allProfiles.filter(
+        (p) => !blocked.has(p.userId) && p.userId !== req.session.userId,
+      );
       res.json(allProfiles.map((p) => normalizeProfileImages(req, p)));
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch profiles" });
@@ -827,6 +888,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Always use the authenticated user as the actor (ignore client "current-user").
       const parsed = insertSwipeSchema.parse(req.body);
       const swipeData = { ...parsed, userId: (req as any).session.userId };
+
+      if (swipeData.targetUserId === swipeData.userId) {
+        return res.status(400).json({ message: "Cannot swipe on yourself" });
+      }
 
       const swipe = await storage.createSwipe(swipeData);
 
@@ -990,19 +1055,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get matches for a user
-  app.get("/api/matches/:userId", async (req, res) => {
+  // Get matches for a user (own matches only)
+  app.get("/api/matches/:userId", requireAuth, async (req, res) => {
     try {
       let { userId } = req.params;
-      
+
       // Handle "current-user" placeholder
       if (userId === "current-user") {
-        if (!req.session.userId) {
-          return res.status(401).json({ message: "User not authenticated" });
-        }
-        userId = req.session.userId;
+        userId = req.session.userId!;
       }
-      
+      // Matches are private: only the owner can list them.
+      if (userId !== req.session.userId) {
+        return res.status(403).json({ message: "Cannot view another user's matches" });
+      }
+
       // Accepted connections only (isMatch=true); pending requests live in
       // /api/connections/requests. Blocked users' connections are hidden.
       const blocked = await getBlockedSet(userId);
@@ -1037,10 +1103,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get messages for a match
-  app.get("/api/messages/:matchId", async (req, res) => {
+  // Get messages for a match (participants only)
+  app.get("/api/messages/:matchId", requireAuth, async (req, res) => {
     try {
       const { matchId } = req.params;
+      const match = await storage.getMatchById(matchId);
+      if (!match) {
+        return res.status(404).json({ message: "Match not found" });
+      }
+      const userId = req.session.userId;
+      if (match.userId !== userId && match.matchedUserId !== userId) {
+        return res.status(403).json({ message: "Not part of this match" });
+      }
       const messages = await storage.getMessagesByMatch(matchId);
       res.json(messages);
     } catch (error) {
@@ -1052,11 +1126,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/conversations", async (req, res) => {
     try {
       const { matchedUserId } = req.body;
-      
+
       if (!req.session.userId) {
         return res.status(401).json({ message: "User not authenticated" });
       }
-      
+      if (!matchedUserId || typeof matchedUserId !== "string") {
+        return res.status(400).json({ message: "matchedUserId is required" });
+      }
+
       // Blocked users can't start conversations with each other
       if (await storage.isBlockedBetween(req.session.userId, matchedUserId)) {
         return res.status(403).json({ message: "User is blocked" });
@@ -1090,18 +1167,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get conversations for a user (matches with messages)
-  app.get("/api/conversations/:userId", async (req, res) => {
+  // Get conversations for a user (own conversations only)
+  app.get("/api/conversations/:userId", requireAuth, async (req, res) => {
     try {
       let { userId } = req.params;
-      
+
       if (userId === "current-user") {
-        if (!req.session.userId) {
-          return res.status(401).json({ message: "User not authenticated" });
-        }
-        userId = req.session.userId;
+        userId = req.session.userId!;
       }
-      
+      // Conversations are private: only the owner can list them.
+      if (userId !== req.session.userId) {
+        return res.status(403).json({ message: "Cannot view another user's conversations" });
+      }
+
       const blocked = await getBlockedSet(userId);
       const matches = await storage.getMatchesByUser(userId);
 
@@ -1534,8 +1612,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Update subscription plan
-  app.put("/api/users/:userId/subscription", async (req, res) => {
+  // Update subscription plan (admin only: there is no self-serve payment flow,
+  // so nobody but an admin may flip subscription status)
+  app.put("/api/users/:userId/subscription", requireAdmin, async (req, res) => {
     try {
       const { userId } = req.params;
       const { plan } = req.body;
@@ -1559,13 +1638,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
 
-  // Update user activity (keep them online)
-  app.post("/api/users/:userId/activity", async (req, res) => {
+  // Update user activity (keep them online). The client sends "current-user";
+  // always resolve to the session user so the ping actually lands.
+  app.post("/api/users/:userId/activity", requireAuth, async (req, res) => {
     try {
-      const { userId } = req.params;
-      if (storage.updateUserActivity) {
-        await storage.updateUserActivity(userId);
-      }
+      await storage.updateUserActivity(req.session.userId!);
       res.json({ message: "Activity updated" });
     } catch (error) {
       res.status(500).json({ message: "Failed to update activity" });
@@ -1646,7 +1723,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Temporary route to fix existing marketplace images ACL
-  app.post("/api/fix-marketplace-images", requireAuth, async (req: any, res) => {
+  app.post("/api/fix-marketplace-images", requireAdmin, async (req: any, res) => {
     try {
       const items = await storage.getAllMarketplaceItems();
       let fixedCount = 0;
@@ -1702,31 +1779,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put("/api/marketplace/items/:id", async (req, res) => {
+  // Only the seller (or an admin) can modify a listing.
+  const updateMarketplaceItemHandler = async (req: any, res: any) => {
     try {
       const { id } = req.params;
-      const item = await storage.updateMarketplaceItem(id, req.body);
-      if (!item) {
+      const existing = await storage.getMarketplaceItem(id);
+      if (!existing) {
         return res.status(404).json({ message: "Item not found" });
       }
+      const user = await storage.getUserById(req.session.userId);
+      if (existing.sellerId !== req.session.userId && !isUserAdmin(user)) {
+        return res.status(403).json({ message: "Not your item" });
+      }
+      const { sellerId: _ignored, id: _id, ...updateData } = req.body || {};
+      const item = await storage.updateMarketplaceItem(id, updateData);
       res.json(item);
     } catch (error) {
       res.status(500).json({ message: "Failed to update marketplace item" });
     }
-  });
-
-  app.patch("/api/marketplace/items/:id", async (req, res) => {
-    try {
-      const { id } = req.params;
-      const item = await storage.updateMarketplaceItem(id, req.body);
-      if (!item) {
-        return res.status(404).json({ message: "Item not found" });
-      }
-      res.json(item);
-    } catch (error) {
-      res.status(500).json({ message: "Failed to update marketplace item" });
-    }
-  });
+  };
+  app.put("/api/marketplace/items/:id", requireAuth, updateMarketplaceItemHandler);
+  app.patch("/api/marketplace/items/:id", requireAuth, updateMarketplaceItemHandler);
 
   // Saved items API routes
   app.post("/api/marketplace/saved-items", async (req, res) => {
@@ -1787,9 +1860,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/marketplace/items/:id", async (req, res) => {
+  app.delete("/api/marketplace/items/:id", requireAuth, async (req: any, res) => {
     try {
       const { id } = req.params;
+      const existing = await storage.getMarketplaceItem(id);
+      if (!existing) {
+        return res.status(404).json({ message: "Item not found" });
+      }
+      const user = await storage.getUserById(req.session.userId);
+      if (existing.sellerId !== req.session.userId && !isUserAdmin(user)) {
+        return res.status(403).json({ message: "Not your item" });
+      }
       await storage.deleteMarketplaceItem(id);
       res.json({ message: "Item deleted successfully" });
     } catch (error) {
@@ -1812,7 +1893,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { category } = req.query;
       let posts = category && typeof category === 'string'
-        ? await storage.getLookingForPostsByType(category)
+        ? await storage.getLookingForPostsByCategory(category)
         : await storage.getAllLookingForPosts();
       // Hide posts from blocked users
       const blocked = await getBlockedSet(req.session.userId);
@@ -1853,23 +1934,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put("/api/marketplace/looking-for/:id", async (req, res) => {
+  app.put("/api/marketplace/looking-for/:id", requireAuth, async (req: any, res) => {
     try {
       const { id } = req.params;
-      const updateData = req.body;
-      const post = await storage.updateLookingForPost(id, updateData);
-      if (!post) {
+      const existing = await storage.getLookingForPost(id);
+      if (!existing) {
         return res.status(404).json({ message: "Looking for post not found" });
       }
+      const user = await storage.getUserById(req.session.userId);
+      if (existing.userId !== req.session.userId && !isUserAdmin(user)) {
+        return res.status(403).json({ message: "Not your post" });
+      }
+      const { userId: _ignored, id: _id, ...updateData } = req.body || {};
+      const post = await storage.updateLookingForPost(id, updateData);
       res.json(post);
     } catch (error) {
       res.status(500).json({ message: "Failed to update looking for post" });
     }
   });
 
-  app.delete("/api/marketplace/looking-for/:id", async (req, res) => {
+  app.delete("/api/marketplace/looking-for/:id", requireAuth, async (req: any, res) => {
     try {
       const { id } = req.params;
+      const existing = await storage.getLookingForPost(id);
+      if (!existing) {
+        return res.status(404).json({ message: "Looking for post not found" });
+      }
+      const user = await storage.getUserById(req.session.userId);
+      if (existing.userId !== req.session.userId && !isUserAdmin(user)) {
+        return res.status(403).json({ message: "Not your post" });
+      }
       await storage.deleteLookingForPost(id);
       res.json({ message: "Looking for post deleted successfully" });
     } catch (error) {
@@ -1911,6 +2005,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.error("Create service error:", error);
         res.status(500).json({ message: "Failed to create service" });
       }
+    }
+  });
+
+  // NOTE: registered before /api/services/:id — otherwise Express would route
+  // /api/services/looking-for to the :id handler and always 404.
+  app.get("/api/services/looking-for", async (req, res) => {
+    try {
+      const { serviceType } = req.query;
+      let posts = serviceType && typeof serviceType === 'string'
+        ? await storage.getServiceLookingForPostsByType(serviceType)
+        : await storage.getAllServiceLookingForPosts();
+      // Hide posts from blocked users
+      const blocked = await getBlockedSet(req.session.userId);
+      posts = posts.filter((p) => !blocked.has(p.userId));
+      res.json(posts);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch service looking for posts" });
     }
   });
 
@@ -1974,22 +2085,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Service Looking For Posts API routes
-  app.get("/api/services/looking-for", async (req, res) => {
-    try {
-      const { serviceType } = req.query;
-      let posts = serviceType && typeof serviceType === 'string'
-        ? await storage.getServiceLookingForPostsByType(serviceType)
-        : await storage.getAllServiceLookingForPosts();
-      // Hide posts from blocked users
-      const blocked = await getBlockedSet(req.session.userId);
-      posts = posts.filter((p) => !blocked.has(p.userId));
-      res.json(posts);
-    } catch (error) {
-      res.status(500).json({ message: "Failed to fetch service looking for posts" });
-    }
-  });
-
+  // Service Looking For Posts API routes (list GET is registered above,
+  // before /api/services/:id, to avoid route shadowing)
   app.post("/api/services/looking-for", requireAuth, async (req: any, res) => {
     try {
       const postData = insertServiceLookingForPostSchema.parse({
@@ -2020,23 +2117,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put("/api/services/looking-for/:id", async (req, res) => {
+  app.put("/api/services/looking-for/:id", requireAuth, async (req: any, res) => {
     try {
       const { id } = req.params;
-      const updateData = req.body;
-      const post = await storage.updateServiceLookingForPost(id, updateData);
-      if (!post) {
+      const existing = await storage.getServiceLookingForPost(id);
+      if (!existing) {
         return res.status(404).json({ message: "Service looking for post not found" });
       }
+      const user = await storage.getUserById(req.session.userId);
+      if (existing.userId !== req.session.userId && !isUserAdmin(user)) {
+        return res.status(403).json({ message: "Not your post" });
+      }
+      const { userId: _ignored, id: _id, ...updateData } = req.body || {};
+      const post = await storage.updateServiceLookingForPost(id, updateData);
       res.json(post);
     } catch (error) {
       res.status(500).json({ message: "Failed to update service looking for post" });
     }
   });
 
-  app.delete("/api/services/looking-for/:id", async (req, res) => {
+  app.delete("/api/services/looking-for/:id", requireAuth, async (req: any, res) => {
     try {
       const { id } = req.params;
+      const existing = await storage.getServiceLookingForPost(id);
+      if (!existing) {
+        return res.status(404).json({ message: "Service looking for post not found" });
+      }
+      const user = await storage.getUserById(req.session.userId);
+      if (existing.userId !== req.session.userId && !isUserAdmin(user)) {
+        return res.status(403).json({ message: "Not your post" });
+      }
       await storage.deleteServiceLookingForPost(id);
       res.json({ message: "Service looking for post deleted successfully" });
     } catch (error) {
@@ -2205,7 +2315,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Admin routes
-  const upload = multer({ storage: multer.memoryStorage() });
+  const upload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 5 * 1024 * 1024, files: 1 }, // CSVs only — keep RAM bounded
+  });
 
   app.post("/api/admin/upload-csv", requireAdmin, upload.single('csv'), async (req, res) => {
     try {
@@ -2222,6 +2335,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const records = parse(csvContent, {
         skip_empty_lines: true,
         trim: true,
+        relax_column_count: true, // one malformed row must not abort the whole file
       });
 
       const results = {
@@ -2230,7 +2344,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         errors: [] as string[],
       };
 
-      const GOOGLE_MAPS_API_KEY = process.env.VITE_GOOGLE_MAPS_API_KEY;
+      const GOOGLE_MAPS_API_KEY = process.env.VITE_GOOGLE_MAPS_API_KEY || process.env.GOOGLE_MAPS_API_KEY;
 
       for (let i = 0; i < records.length; i++) {
         const row = records[i];

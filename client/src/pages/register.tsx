@@ -211,6 +211,20 @@ export default function Register() {
     form.setValue("hobbies", currentHobbies.filter(hobby => hobby !== hobbyToRemove));
   };
 
+  // photoUrls and hobbies have no registered form field, so react-hook-form
+  // can't focus them on validation failure: without this callback the submit
+  // button would silently do nothing.
+  const onInvalid = (errors: Record<string, any>) => {
+    const firstError = Object.values(errors).find(
+      (e: any) => typeof e?.message === "string" && e.message,
+    ) as { message?: string } | undefined;
+    toast({
+      title: t("registrationFailed"),
+      description: firstError?.message,
+      variant: "destructive",
+    });
+  };
+
   const onSubmit = (data: Registration) => {
     if (!acceptedTerms) {
       toast({
@@ -254,7 +268,7 @@ export default function Register() {
             {!showVerification ? (
               <>
                 <Form {...form}>
-                  <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+                  <form onSubmit={form.handleSubmit(onSubmit, onInvalid)} className="space-y-6">
                     {/* Account type: mom or professional */}
                     <div className="space-y-3">
                       <h3 className="text-lg font-medium">{t("accountTypeQuestion")}</h3>
@@ -765,16 +779,12 @@ export default function Register() {
                       <span className="text-sm text-muted-foreground">
                         {t("registerAcceptTerms")}{" "}
                         (
-                        <Link href="/terms">
-                          <a className="text-pink-600 hover:text-pink-700 underline" data-testid="link-register-terms">
-                            {t("termsOfUse")}
-                          </a>
+                        <Link href="/terms" className="text-pink-600 hover:text-pink-700 underline" data-testid="link-register-terms">
+                          {t("termsOfUse")}
                         </Link>
                         {" · "}
-                        <Link href="/privacy">
-                          <a className="text-pink-600 hover:text-pink-700 underline" data-testid="link-register-privacy">
-                            {t("privacyPolicy")}
-                          </a>
+                        <Link href="/privacy" className="text-pink-600 hover:text-pink-700 underline" data-testid="link-register-privacy">
+                          {t("privacyPolicy")}
                         </Link>
                         )
                       </span>

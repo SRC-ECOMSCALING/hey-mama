@@ -22,9 +22,9 @@ export function loadGoogleMapsAPI(): Promise<void> {
       return;
     }
 
-    // Get API key from environment
-    const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || process.env.GOOGLE_MAPS_API_KEY;
-    
+    // Get API key from environment (browser code: only Vite env vars exist)
+    const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
+
     if (!apiKey) {
       console.error('Google Maps API key not found in environment');
       reject(new Error('Google Maps API key not found'));
