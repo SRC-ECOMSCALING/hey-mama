@@ -2,10 +2,32 @@
 // Replit object-storage sidecar (127.0.0.1:1106), which only exists on Replit,
 // so every upload failed on Railway/local. Images now live in the
 // uploaded_images table and are served by this server.
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import type { Request } from "express";
 import { db } from "./db";
 import { uploadedImages, type UploadedImage } from "@shared/schema";
+
+// The live DB gets schema changes via additive SQL (drizzle push is unsafe
+// against it). This table shipped without that step, so every upload/serve
+// 500ed in production. Idempotent bootstrap: safe to run at every boot.
+export async function ensureUploadedImagesTable(): Promise<void> {
+  try {
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS uploaded_images (
+        id varchar PRIMARY KEY,
+        data bytea NOT NULL,
+        content_type varchar NOT NULL,
+        created_at timestamp DEFAULT now() NOT NULL
+      )
+    `);
+    // Probe so a broken table shape shows up in the logs at boot, not as
+    // opaque 500s on user uploads.
+    await db.select({ id: uploadedImages.id }).from(uploadedImages).limit(1);
+    console.log("[IMAGES] uploaded_images table ready");
+  } catch (error) {
+    console.error("[IMAGES] uploaded_images bootstrap FAILED — photo uploads will not work:", error);
+  }
+}
 
 // Max accepted upload size. Uppy limits client-side to 10MB; keep a margin.
 export const MAX_IMAGE_BYTES = 12 * 1024 * 1024;

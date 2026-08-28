@@ -4,6 +4,7 @@ import { randomUUID } from "crypto";
 import { storage } from "./storage";
 import {
   MAX_IMAGE_BYTES,
+  ensureUploadedImagesTable,
   getImage,
   imageIdFromPath,
   isValidImageId,
@@ -41,7 +42,10 @@ declare module 'express-session' {
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  
+
+  // Make sure the photo storage table exists before serving any upload
+  await ensureUploadedImagesTable();
+
   // Create PostgreSQL connection pool for sessions
   const pgPool = new pg.Pool({
     connectionString: process.env.DATABASE_URL,
