@@ -1,10 +1,9 @@
-import { Pool, neonConfig } from '@neondatabase/serverless';
-import { drizzle } from 'drizzle-orm/neon-serverless';
-import ws from "ws";
+// Standard node-postgres driver: works with any hosted Postgres (Supabase,
+// Neon over TCP, Railway). Replaced the Neon-only WebSocket driver
+// (@neondatabase/serverless) as part of the migration off Replit-owned Neon.
+import pg from "pg";
+import { drizzle } from "drizzle-orm/node-postgres";
 import * as schema from "@shared/schema";
-
-// Configure Neon with proper WebSocket constructor
-neonConfig.webSocketConstructor = ws;
 
 if (!process.env.DATABASE_URL) {
   throw new Error(
@@ -12,9 +11,17 @@ if (!process.env.DATABASE_URL) {
   );
 }
 
+// Managed Postgres (Supabase pooler, Neon) requires TLS but presents provider
+// CAs; verify-full would need bundling their CA cert, so encrypt without
+// verification, matching the previous sslmode=require behavior.
+const ssl = process.env.DATABASE_URL.includes("sslmode=")
+  ? { rejectUnauthorized: false }
+  : undefined;
+
 // Configure connection pool with proper error handling and timeouts
-export const pool = new Pool({ 
+export const pool = new pg.Pool({
   connectionString: process.env.DATABASE_URL,
+  ssl,
   // Connection pool configuration
   max: 10,                    // Maximum number of clients in the pool
   idleTimeoutMillis: 30000,   // How long a client is allowed to remain idle
@@ -62,14 +69,14 @@ export async function withDbRetry<T>(
   delayMs: number = 1000
 ): Promise<T> {
   let lastError: Error | undefined;
-  
+
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
       return await operation();
     } catch (error) {
       lastError = error as Error;
       console.warn(`Database operation attempt ${attempt} failed:`, error);
-      
+
       // Don't retry on certain types of errors (like validation errors)
       if (error && typeof error === 'object' && 'code' in error) {
         const dbError = error as any;
@@ -78,16 +85,16 @@ export async function withDbRetry<T>(
           throw error;
         }
       }
-      
+
       if (attempt === maxRetries) {
         break;
       }
-      
+
       // Wait before retrying with exponential backoff
       const delay = delayMs * Math.pow(2, attempt - 1);
       await new Promise(resolve => setTimeout(resolve, delay));
     }
   }
-  
+
   throw new Error(`Database operation failed after ${maxRetries} attempts: ${lastError?.message || 'Unknown error'}`);
 }

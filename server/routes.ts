@@ -20,7 +20,7 @@ import connectPgSimple from "connect-pg-simple";
 import cookieSignature from "cookie-signature";
 import { emailService } from "./emailService";
 import { importOsmParks } from "./osmImport";
-import pg from "pg";
+import { pool } from "./db";
 import multer from "multer";
 import { parse } from "csv-parse/sync";
 
@@ -46,15 +46,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Make sure the photo storage table exists before serving any upload
   await ensureUploadedImagesTable();
 
-  // Create PostgreSQL connection pool for sessions
-  const pgPool = new pg.Pool({
-    connectionString: process.env.DATABASE_URL,
-  });
-  // Neon drops idle TCP connections; without this listener the pool's 'error'
-  // event is unhandled and crashes the whole process.
-  pgPool.on("error", (err) => {
-    console.error("Session pool error (recovered):", err.message);
-  });
+  // Sessions share the app's pg pool (server/db.ts), which carries the TLS
+  // config managed Postgres (Supabase/Neon) needs and its own error handler.
+  const pgPool = pool;
 
   // CORS — required so native (Capacitor) WebViews, served from
   // capacitor://localhost / http://localhost, can call this backend.
