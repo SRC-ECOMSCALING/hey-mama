@@ -9,23 +9,45 @@ import { uploadedImages, type UploadedImage } from "@shared/schema";
 
 // The live DB gets schema changes via additive SQL (drizzle push is unsafe
 // against it). This table shipped without that step, so every upload/serve
-// 500ed in production. Idempotent bootstrap: safe to run at every boot.
+// 500ed in production. Idempotent bootstrap: safe to run at every boot, and
+// retried in the background so a DB outage at boot (e.g. a disabled Neon
+// endpoint) doesn't leave the table missing until the next redeploy.
+let uploadedImagesReady = false;
+
+async function tryEnsureUploadedImagesTable(): Promise<boolean> {
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS uploaded_images (
+      id varchar PRIMARY KEY,
+      data bytea NOT NULL,
+      content_type varchar NOT NULL,
+      created_at timestamp DEFAULT now() NOT NULL
+    )
+  `);
+  // Probe so a broken table shape shows up in the logs, not as opaque 500s
+  // on user uploads.
+  await db.select({ id: uploadedImages.id }).from(uploadedImages).limit(1);
+  return true;
+}
+
 export async function ensureUploadedImagesTable(): Promise<void> {
   try {
-    await db.execute(sql`
-      CREATE TABLE IF NOT EXISTS uploaded_images (
-        id varchar PRIMARY KEY,
-        data bytea NOT NULL,
-        content_type varchar NOT NULL,
-        created_at timestamp DEFAULT now() NOT NULL
-      )
-    `);
-    // Probe so a broken table shape shows up in the logs at boot, not as
-    // opaque 500s on user uploads.
-    await db.select({ id: uploadedImages.id }).from(uploadedImages).limit(1);
+    uploadedImagesReady = await tryEnsureUploadedImagesTable();
     console.log("[IMAGES] uploaded_images table ready");
-  } catch (error) {
-    console.error("[IMAGES] uploaded_images bootstrap FAILED — photo uploads will not work:", error);
+  } catch (error: any) {
+    console.error(
+      "[IMAGES] uploaded_images bootstrap failed — photo uploads will not work until the DB is reachable:",
+      error?.message || error,
+    );
+    const retry = setInterval(async () => {
+      try {
+        uploadedImagesReady = await tryEnsureUploadedImagesTable();
+        console.log("[IMAGES] uploaded_images table ready (recovered)");
+        clearInterval(retry);
+      } catch {
+        /* DB still unreachable — keep retrying */
+      }
+    }, 60_000);
+    retry.unref?.();
   }
 }
 
