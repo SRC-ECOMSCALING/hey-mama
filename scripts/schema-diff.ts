@@ -1,14 +1,15 @@
 // Confronta lo schema Drizzle (shared/schema.ts) con le colonne reali del DB
 // e stampa ciò che manca nel DB. Solo lettura: non modifica nulla.
 import "dotenv/config";
-import { Pool, neonConfig } from "@neondatabase/serverless";
-import ws from "ws";
+import pg from "pg";
 import { getTableColumns, getTableName } from "drizzle-orm";
 import { PgTable } from "drizzle-orm/pg-core";
 import * as schema from "../shared/schema";
 
-neonConfig.webSocketConstructor = ws;
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+const pool = new pg.Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: { rejectUnauthorized: false },
+});
 
 const dbCols = new Map<string, Set<string>>();
 const res = await pool.query(
