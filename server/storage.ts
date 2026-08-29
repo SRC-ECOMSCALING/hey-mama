@@ -408,15 +408,16 @@ export class DatabaseStorage implements IStorage {
     // otherwise hash the plaintext password now.
     const passwordHash = registrationData.passwordHash ?? await this.hashPassword(registrationData.password);
 
-    // Create user
-    const [user] = await this.db.insert(users).values({
+    // User + profile in one transaction: a failed profile insert must not
+    // leave an orphaned user that makes every retry fail with "email exists".
+    return this.db.transaction(async (tx) => {
+    const [user] = await tx.insert(users).values({
       email: registrationData.email,
       passwordHash,
       isEmailVerified: registrationData.isEmailVerified ?? false,
     }).returning();
 
-    // Create profile
-    const [profile] = await this.db.insert(profiles).values({
+    const [profile] = await tx.insert(profiles).values({
       userId: user.id,
       accountType: registrationData.accountType ?? "mom",
       businessName: registrationData.businessName?.trim() || null,
@@ -436,6 +437,7 @@ export class DatabaseStorage implements IStorage {
     }).returning();
 
     return { user, profile };
+    });
   }
 
   async login(loginData: Login): Promise<User | null> {

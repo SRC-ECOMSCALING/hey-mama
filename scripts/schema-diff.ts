@@ -11,13 +11,15 @@ const pool = new pg.Pool({
   ssl: { rejectUnauthorized: false },
 });
 
-const dbCols = new Map<string, Set<string>>();
+const dbCols = new Map<string, Map<string, { nullable: boolean }>>();
 const res = await pool.query(
-  `SELECT table_name, column_name FROM information_schema.columns WHERE table_schema='public'`,
+  `SELECT table_name, column_name, is_nullable FROM information_schema.columns WHERE table_schema='public'`,
 );
 for (const r of res.rows) {
-  if (!dbCols.has(r.table_name)) dbCols.set(r.table_name, new Set());
-  dbCols.get(r.table_name)!.add(r.column_name);
+  if (!dbCols.has(r.table_name)) dbCols.set(r.table_name, new Map());
+  dbCols
+    .get(r.table_name)!
+    .set(r.column_name, { nullable: r.is_nullable === "YES" });
 }
 
 for (const exported of Object.values(schema)) {
@@ -30,9 +32,19 @@ for (const exported of Object.values(schema)) {
     continue;
   }
   for (const col of Object.values(cols)) {
-    if (!inDb.has(col.name)) {
+    const dbCol = inDb.get(col.name);
+    if (!dbCol) {
       console.log(
         `COLONNA MANCANTE: ${tableName}.${col.name}  tipo=${col.getSQLType()}  notNull=${col.notNull}  hasDefault=${col.hasDefault}`,
+      );
+      continue;
+    }
+    // NOT NULL nel DB ma nullable nello schema: gli insert del codice possono
+    // scrivere NULL e violare il vincolo (visto con profiles.age dopo il
+    // restore di uno snapshot vecchio). L'inverso è innocuo.
+    if (!dbCol.nullable && !col.notNull) {
+      console.log(
+        `NULLABILITY: ${tableName}.${col.name} è NOT NULL nel DB ma facoltativa nello schema — serve: ALTER TABLE ${tableName} ALTER COLUMN ${col.name} DROP NOT NULL`,
       );
     }
   }
