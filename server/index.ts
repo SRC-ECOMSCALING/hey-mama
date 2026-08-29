@@ -1,6 +1,7 @@
 import "dotenv/config";
 
 import express, { type Request, Response, NextFunction } from "express";
+import nodePath from "path";
 import { registerRoutes } from "./routes";
 import { serveStatic, log } from "./static";
 
@@ -11,6 +12,12 @@ const app = express();
 app.set("trust proxy", 1);
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
+// Repo images referenced by demo/seed profiles (/attached_assets/...): the
+// folder is tracked in git, so it sits next to dist/ (prod) and server/ (dev).
+app.use(
+  "/attached_assets",
+  express.static(nodePath.resolve(import.meta.dirname, "..", "attached_assets")),
+);
 
 app.use((req, res, next) => {
   const start = Date.now();

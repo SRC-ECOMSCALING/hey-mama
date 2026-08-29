@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, Edit, LogOut, ShoppingBag, ExternalLink, Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -14,6 +15,9 @@ export default function Profile() {
   const [, setLocation] = useLocation();
   const { logout, isLoggingOut } = useAuth();
   const { t } = useLanguage();
+  // Old profiles can point at storage that no longer exists (pre-migration
+  // photos): fall back to the placeholder instead of a broken image.
+  const [photoError, setPhotoError] = useState(false);
 
   const { data: profile, isLoading } = useQuery<Profile>({
     queryKey: ["/api/profiles", CURRENT_USER_ID],
@@ -52,11 +56,12 @@ export default function Profile() {
       {/* Profile Content */}
       <div className="p-6 pb-nav">
         <div className="text-center mb-8">
-          {profile.photoUrls && profile.photoUrls.length > 0 ? (
+          {profile.photoUrls && profile.photoUrls.length > 0 && !photoError ? (
             <img
               src={profile.photoUrls[0]}
               alt={t("yourProfilePhoto")}
               className="w-32 h-32 rounded-full object-cover mx-auto mb-4 shadow-lg"
+              onError={() => setPhotoError(true)}
             />
           ) : (
             <div className="w-32 h-32 rounded-full bg-gradient-to-br from-pink-200 to-purple-200 mx-auto mb-4 shadow-lg flex items-center justify-center">

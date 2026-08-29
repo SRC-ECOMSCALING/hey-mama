@@ -155,9 +155,9 @@ export default function Settings() {
               <Bell className="h-5 w-5 text-gray-500 shrink-0" />
               <div className="flex-1 min-w-0">
                 <Label htmlFor="notifications" className="font-medium text-gray-900">
-                  Notifiche
+                  {t("notifications")}
                 </Label>
-                <p className="text-sm text-gray-500">Avvisi per nuove connessioni e messaggi</p>
+                <p className="text-sm text-gray-500">{t("notificationsSettingDescription")}</p>
               </div>
               <Switch
                 id="notifications"
@@ -171,9 +171,9 @@ export default function Settings() {
               <MapPin className="h-5 w-5 text-gray-500 shrink-0" />
               <div className="flex-1 min-w-0">
                 <Label htmlFor="geolocation" className="font-medium text-gray-900">
-                  Servizi di localizzazione
+                  {t("locationServices")}
                 </Label>
-                <p className="text-sm text-gray-500">Trova mamme e luoghi vicino a te</p>
+                <p className="text-sm text-gray-500">{t("locationServicesDescription")}</p>
               </div>
               <Switch
                 id="geolocation"
@@ -256,7 +256,7 @@ export default function Settings() {
           <CardContent className="flex flex-col gap-2">
             <Link href="/terms" className="text-sm text-pink-600 hover:text-pink-700 underline" data-testid="link-settings-terms">{t("termsOfUse")}</Link>
             <Link href="/privacy" className="text-sm text-pink-600 hover:text-pink-700 underline" data-testid="link-settings-privacy">{t("privacyPolicy")}</Link>
-            <Link href="/support" className="text-sm text-pink-600 hover:text-pink-700 underline" data-testid="link-settings-support">Supporto</Link>
+            <Link href="/support" className="text-sm text-pink-600 hover:text-pink-700 underline" data-testid="link-settings-support">{t("support")}</Link>
           </CardContent>
         </Card>
 

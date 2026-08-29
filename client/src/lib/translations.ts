@@ -123,6 +123,10 @@ export const translations = {
     notifications: "Notifications",
     noNotificationsYet: "No notifications yet",
     notificationsDescription: "You'll see notifications here when you get matches and messages!",
+    notificationsSettingDescription: "Alerts for new connections and messages",
+    locationServices: "Location services",
+    locationServicesDescription: "Find moms and places near you",
+    support: "Support",
     
     // Chat
     invalidChat: "Invalid Chat",
@@ -591,6 +595,10 @@ export const translations = {
     notifications: "Notifiche",
     noNotificationsYet: "Nessuna notifica",
     notificationsDescription: "Vedrai qui le notifiche quando ricevi match e messaggi!",
+    notificationsSettingDescription: "Avvisi per nuove connessioni e messaggi",
+    locationServices: "Servizi di localizzazione",
+    locationServicesDescription: "Trova mamme e luoghi vicino a te",
+    support: "Supporto",
     
     // Chat
     invalidChat: "Chat Non Valida",
