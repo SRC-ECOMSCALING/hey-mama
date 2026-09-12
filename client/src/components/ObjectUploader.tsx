@@ -83,7 +83,9 @@ export function ObjectUploader({
 
   return (
     <div>
-      <Button onClick={() => setShowModal(true)} className={buttonClassName}>
+      {/* type="button": inside a form the default is "submit" — clicking
+          "Carica Foto" would save the form and leave the page. */}
+      <Button type="button" onClick={() => setShowModal(true)} className={buttonClassName}>
         {children}
       </Button>
 
