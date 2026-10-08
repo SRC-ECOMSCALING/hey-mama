@@ -19,6 +19,7 @@ interface Conversation {
   otherUserId: string;
   lastMessage: Message;
   messageCount: number;
+  unreadCount: number;
 }
 
 interface MarketConversation {
@@ -26,6 +27,7 @@ interface MarketConversation {
   otherUserId: string;
   lastMessage: MarketplaceMessage;
   messageCount: number;
+  unreadCount: number;
   item: MarketplaceItem | null;
   otherProfile: Profile | null;
 }
@@ -43,6 +45,11 @@ export default function Messages() {
     queryKey: ["/api/marketplace/conversations"],
     refetchInterval: 5000,
   });
+
+  const marketUnreadTotal = marketConversations.reduce(
+    (sum, c) => sum + (c.unreadCount ?? 0),
+    0,
+  );
 
   if (isLoading && isLoadingMarket) {
     return (
@@ -64,10 +71,10 @@ export default function Messages() {
             </TabsTrigger>
             <TabsTrigger value="market" className="rounded-full" data-testid="tab-market-chats">
               <ShoppingBag className="w-4 h-4 mr-1.5" />
-              Market
-              {marketConversations.length > 0 && (
-                <span className="ml-1.5 text-[10px] font-bold bg-pink-100 text-pink-600 rounded-full px-1.5 py-0.5">
-                  {marketConversations.length}
+              {t("marketplace")}
+              {marketUnreadTotal > 0 && (
+                <span className="ml-1.5 text-[10px] font-bold bg-pink-100 text-pink-600 rounded-full px-1.5 py-0.5" data-testid="badge-market-unread">
+                  {marketUnreadTotal}
                 </span>
               )}
             </TabsTrigger>
@@ -128,7 +135,13 @@ export default function Messages() {
                       </span>
                     </div>
                   </div>
-                  <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: "var(--primary-pink)" }}></div>
+                  {conversation.unreadCount > 0 && (
+                    <div
+                      className="w-3 h-3 rounded-full flex-shrink-0"
+                      style={{ backgroundColor: "var(--primary-pink)" }}
+                      data-testid={`unread-dot-${conversation.matchId}`}
+                    ></div>
+                  )}
                 </div>
               ))
             )}
@@ -139,8 +152,8 @@ export default function Messages() {
             {marketConversations.length === 0 ? (
               <div className="text-center py-12">
                 <div className="text-6xl mb-4">🛍️</div>
-                <h2 className="text-2xl font-bold text-gray-800 mb-2">Nessuna chat del Market</h2>
-                <p className="text-gray-600">Contatta una venditrice da un annuncio per iniziare.</p>
+                <h2 className="text-2xl font-bold text-gray-800 mb-2">{t("noMarketChats")}</h2>
+                <p className="text-gray-600">{t("startMarketChatHint")}</p>
                 <Button
                   onClick={() => setLocation("/marketplace")}
                   className="mt-4"
@@ -150,7 +163,7 @@ export default function Messages() {
                   data-testid="button-go-market"
                 >
                   <ShoppingBag className="w-4 h-4 mr-2" />
-                  Vai al Market
+                  {t("goToMarket")}
                 </Button>
               </div>
             ) : (
@@ -187,21 +200,27 @@ export default function Messages() {
                       <h3 className="font-semibold text-gray-800 truncate">
                         {conversation.otherProfile
                           ? `${conversation.otherProfile.firstName} ${conversation.otherProfile.lastName}`
-                          : "Utente"}
+                          : t("userFallback")}
                       </h3>
                       <span className="text-xs text-gray-500 flex-shrink-0 ml-2">
                         {formatDistanceToNow(new Date(conversation.lastMessage.createdAt), { addSuffix: true, locale: language === "en" ? undefined : itLocale })}
                       </span>
                     </div>
                     <p className="text-xs text-pink-600 font-medium truncate mb-0.5">
-                      📦 {conversation.item?.title ?? "Annuncio"}
+                      📦 {conversation.item?.title ?? t("listingFallback")}
                       {conversation.item ? ` · €${(conversation.item.price / 100).toFixed(0)}` : ""}
                     </p>
                     <p className="text-sm text-gray-600 truncate">
                       {conversation.lastMessage.content}
                     </p>
                   </div>
-                  <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: "var(--primary-pink)" }}></div>
+                  {conversation.unreadCount > 0 && (
+                    <div
+                      className="w-3 h-3 rounded-full flex-shrink-0"
+                      style={{ backgroundColor: "var(--primary-pink)" }}
+                      data-testid={`unread-dot-market-${conversation.itemId}`}
+                    ></div>
+                  )}
                 </div>
               ))
             )}

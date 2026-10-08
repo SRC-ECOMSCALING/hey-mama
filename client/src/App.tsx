@@ -36,6 +36,7 @@ const pageLoaders = {
   privacy: () => import("@/pages/privacy"),
   terms: () => import("@/pages/terms"),
   support: () => import("@/pages/support"),
+  forgotPassword: () => import("@/pages/forgot-password"),
 };
 
 const Locations = lazy(pageLoaders.locations);
@@ -54,6 +55,7 @@ const Admin = lazy(pageLoaders.admin);
 const Privacy = lazy(pageLoaders.privacy);
 const Terms = lazy(pageLoaders.terms);
 const Support = lazy(pageLoaders.support);
+const ForgotPassword = lazy(pageLoaders.forgotPassword);
 
 // Routes that show the persistent bottom navigation
 const NAV_PATHS = new Set([
@@ -131,6 +133,7 @@ function Router() {
           <Route path="/terms" component={Terms} />
           <Route path="/support" component={Support} />
           <Route path="/register" component={Register} />
+          <Route path="/forgot-password" component={ForgotPassword} />
           <Route path="/login" component={Login} />
           <Route path="/" component={Login} />
           <Route component={Login} />

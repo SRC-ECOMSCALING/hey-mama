@@ -22,6 +22,7 @@ import {
   blocks,
   reports,
   events,
+  conversationReads,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -65,6 +66,10 @@ export interface IStorage {
   // Online status operations
   updateUserActivity(userId: string): Promise<void>;
   updateOnlineStatus(userId: string, isOnline: boolean): Promise<void>;
+
+  // Conversation read markers (unread badges)
+  getConversationReads(userId: string): Promise<Map<string, Date>>;
+  markConversationRead(userId: string, conversationKey: string): Promise<void>;
 
   // Marketplace operations
   getAllMarketplaceItems(): Promise<MarketplaceItem[]>;
@@ -124,6 +129,8 @@ export interface IStorage {
   }): Promise<User | undefined>;
   verifyPassword(password: string, hash: string): Promise<boolean>;
   hashPassword(password: string): Promise<string>;
+  setPasswordResetCode(userId: string, code: string, expiry: Date): Promise<void>;
+  resetPasswordWithCode(email: string, code: string, newPassword: string): Promise<"ok" | "invalid" | "expired">;
   register(registrationData: Registration): Promise<{ user: User; profile: Profile }>;
   login(loginData: Login): Promise<User | null>;
 
@@ -404,6 +411,36 @@ export class DatabaseStorage implements IStorage {
     return bcrypt.hash(password, 10);
   }
 
+  async setPasswordResetCode(userId: string, code: string, expiry: Date): Promise<void> {
+    await this.db.update(users)
+      .set({ passwordResetCode: code, passwordResetExpiry: expiry, updatedAt: new Date() })
+      .where(eq(users.id, userId));
+  }
+
+  // Verifies the emailed code and swaps the password in one step, clearing the
+  // code so it can't be replayed.
+  async resetPasswordWithCode(
+    email: string,
+    code: string,
+    newPassword: string,
+  ): Promise<"ok" | "invalid" | "expired"> {
+    const user = await this.getUserByEmail(email);
+    if (!user?.passwordResetCode || user.passwordResetCode !== code) return "invalid";
+    if (!user.passwordResetExpiry || new Date(user.passwordResetExpiry).getTime() < Date.now()) {
+      return "expired";
+    }
+    const passwordHash = await this.hashPassword(newPassword);
+    await this.db.update(users)
+      .set({
+        passwordHash,
+        passwordResetCode: null,
+        passwordResetExpiry: null,
+        updatedAt: new Date(),
+      })
+      .where(eq(users.id, user.id));
+    return "ok";
+  }
+
   async register(registrationData: Registration & { isEmailVerified?: boolean; passwordHash?: string }): Promise<{ user: User; profile: Profile }> {
     // Use the pre-hashed password when the email-verification flow staged one;
     // otherwise hash the plaintext password now.
@@ -627,6 +664,25 @@ export class DatabaseStorage implements IStorage {
     await this.db.update(profiles)
       .set({ isOnline })
       .where(eq(profiles.userId, userId));
+  }
+
+  // Conversation read markers
+  async getConversationReads(userId: string): Promise<Map<string, Date>> {
+    const rows = await this.db.select()
+      .from(conversationReads)
+      .where(eq(conversationReads.userId, userId));
+    return new Map(rows.map((r) => [r.conversationKey, r.lastReadAt]));
+  }
+
+  async markConversationRead(userId: string, conversationKey: string): Promise<void> {
+    // Unique on (user_id, conversation_key): opening a chat again just moves
+    // the marker forward.
+    await this.db.insert(conversationReads)
+      .values({ userId, conversationKey, lastReadAt: new Date() })
+      .onConflictDoUpdate({
+        target: [conversationReads.userId, conversationReads.conversationKey],
+        set: { lastReadAt: new Date() },
+      });
   }
 
   // Message operations
@@ -965,6 +1021,7 @@ export class DatabaseStorage implements IStorage {
     await this.db.delete(blocks).where(or(eq(blocks.blockerId, userId), eq(blocks.blockedId, userId)));
     await this.db.delete(events).where(eq(events.createdByUserId, userId));
     await this.db.delete(reports).where(eq(reports.reporterId, userId));
+    await this.db.delete(conversationReads).where(eq(conversationReads.userId, userId));
     await this.db.delete(profiles).where(eq(profiles.userId, userId));
     await this.db.delete(users).where(eq(users.id, userId));
   }

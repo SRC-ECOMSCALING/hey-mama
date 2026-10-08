@@ -45,6 +45,14 @@ export default function Chat() {
     refetchInterval: 2000, // Refresh every 2 seconds for real-time updates
   });
 
+  // Fetching the thread marks it read server-side; refresh the list on unmount
+  // so the unread dot is already gone when the user goes back.
+  useEffect(() => {
+    return () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
+    };
+  }, [queryClient]);
+
   // Get match info for the conversation header - using the matches endpoint to find this specific match
   interface MatchWithProfile {
     id: string;

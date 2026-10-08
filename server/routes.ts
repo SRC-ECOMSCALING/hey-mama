@@ -134,6 +134,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
     name: SESSION_COOKIE_NAME, // Custom session name
   }));
 
+  // Presence: a profile counts as online when it made an authenticated request
+  // in the last few minutes. The stored `isOnline` flag was never cleared by
+  // anyone, so everyone who had ever been online stayed green forever.
+  const ONLINE_WINDOW_MS = 5 * 60 * 1000;
+  const ACTIVITY_WRITE_EVERY_MS = 60 * 1000;
+  const lastActivityWrite = new Map<string, number>();
+
+  const touchActivity = (userId: string) => {
+    const now = Date.now();
+    if (now - (lastActivityWrite.get(userId) ?? 0) < ACTIVITY_WRITE_EVERY_MS) return;
+    lastActivityWrite.set(userId, now);
+    // Fire and forget: presence must never slow down or fail a request.
+    storage.updateUserActivity(userId).catch((err) =>
+      console.error("Activity update failed:", err?.message || err),
+    );
+  };
+
+  const isRecentlyActive = (lastActiveAt: Date | string | null | undefined) =>
+    !!lastActiveAt && Date.now() - new Date(lastActiveAt).getTime() < ONLINE_WINDOW_MS;
+
   // Authentication middleware
   const requireAuth = (req: any, res: any, next: any) => {
     console.log(`[AUTH] Session check for ${req.method} ${req.path}:`, {
@@ -145,6 +165,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     if (!req.session.userId) {
       return res.status(401).json({ message: "Authentication required" });
     }
+    touchActivity(req.session.userId);
     next();
   };
 
@@ -199,6 +220,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     if (!profile) return profile;
     return {
       ...profile,
+      // Derived from real activity, not the stale stored flag (see touchActivity)
+      isOnline: isRecentlyActive(profile.lastActiveAt),
       photoUrls: (profile.photoUrls || []).map((u) => normalizeImageUrl(req, u) as string),
     };
   };
@@ -299,6 +322,84 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Login error:", error);
       res.status(400).json({ message: "Login failed" });
+    }
+  });
+
+  // --- Password reset: email a 6-digit code, then swap the password ---
+  const RESET_CODE_TTL_MS = 15 * 60 * 1000;
+  const RESET_REQUEST_COOLDOWN_MS = 60 * 1000;
+  const lastResetRequest = new Map<string, number>();
+
+  app.post("/api/auth/forgot-password", async (req, res) => {
+    try {
+      const email = String(req.body?.email || "").trim().toLowerCase();
+      if (!email || !email.includes("@")) {
+        return res.status(400).json({ message: "Email non valida" });
+      }
+
+      // Same answer whether or not the account exists: the endpoint must not
+      // reveal which emails are registered.
+      const genericOk = { message: "Se l'email è registrata, riceverai un codice" };
+
+      const now = Date.now();
+      if (now - (lastResetRequest.get(email) ?? 0) < RESET_REQUEST_COOLDOWN_MS) {
+        return res.json(genericOk);
+      }
+      lastResetRequest.set(email, now);
+
+      const user = await storage.getUserByEmail(email);
+      if (!user) {
+        return res.json(genericOk);
+      }
+
+      const code = emailService.generateVerificationCode();
+      await storage.setPasswordResetCode(user.id, code, new Date(now + RESET_CODE_TTL_MS));
+
+      try {
+        await emailService.sendPasswordResetEmail(email, code);
+      } catch (emailError: any) {
+        // The code is stored either way; surface the delivery failure in the
+        // logs so a broken mail provider is visible instead of silent.
+        console.error("Password reset email failed:", emailError?.message || emailError);
+        if (process.env.NODE_ENV !== "production") {
+          console.log(`[DEV] Codice reset password per ${email}: ${code}`);
+        }
+        return res.status(502).json({ message: "Impossibile inviare l'email. Riprova più tardi." });
+      }
+
+      res.json(genericOk);
+    } catch (error) {
+      console.error("Forgot password error:", error);
+      res.status(500).json({ message: "Richiesta non riuscita" });
+    }
+  });
+
+  app.post("/api/auth/reset-password", async (req, res) => {
+    try {
+      const email = String(req.body?.email || "").trim().toLowerCase();
+      const code = String(req.body?.code || "").trim();
+      const newPassword = String(req.body?.newPassword || "");
+
+      if (!/^\d{6}$/.test(code)) {
+        return res.status(400).json({ message: "Il codice deve avere 6 cifre" });
+      }
+      if (newPassword.length < 8) {
+        return res.status(400).json({ message: "La password deve avere almeno 8 caratteri" });
+      }
+
+      const result = await storage.resetPasswordWithCode(email, code, newPassword);
+      if (result === "invalid") {
+        return res.status(400).json({ message: "Codice non valido" });
+      }
+      if (result === "expired") {
+        return res.status(400).json({ message: "Codice scaduto, richiedine uno nuovo" });
+      }
+
+      lastResetRequest.delete(email);
+      res.json({ message: "Password aggiornata" });
+    } catch (error) {
+      console.error("Reset password error:", error);
+      res.status(500).json({ message: "Reimpostazione non riuscita" });
     }
   });
 
@@ -1114,6 +1215,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "Not part of this match" });
       }
       const messages = await storage.getMessagesByMatch(matchId);
+      // Opening the thread is what marks it read (no separate client call)
+      await storage.markConversationRead(userId!, `match:${matchId}`).catch((err) =>
+        console.error("markConversationRead failed:", err?.message || err),
+      );
       res.json(messages);
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch messages" });
@@ -1180,6 +1285,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const blocked = await getBlockedSet(userId);
       const matches = await storage.getMatchesByUser(userId);
+      const reads = await storage.getConversationReads(userId);
 
       // Only return matches that have messages (active conversations)
       const conversationsWithMessages = [];
@@ -1193,7 +1299,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const otherUserId = otherParticipantId;
           const profile = normalizeProfileImages(req, await storage.getProfile(otherUserId) ?? null);
           const lastMessage = messages[messages.length - 1]; // Get the latest message
-          
+          const lastReadAt = reads.get(`match:${match.id}`);
+          const unreadCount = messages.filter(
+            (m) =>
+              m.senderId !== userId &&
+              (!lastReadAt || new Date(m.createdAt).getTime() > new Date(lastReadAt).getTime()),
+          ).length;
+
           conversationsWithMessages.push({
             matchId: match.id,
             match,
@@ -1201,6 +1313,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             otherUserId,
             lastMessage,
             messageCount: messages.length,
+            unreadCount,
           });
         }
       }
@@ -2453,20 +2566,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userId = req.session.userId;
       const blocked = await getBlockedSet(userId);
       const msgs = await storage.getMarketplaceMessagesByUser(userId);
+      const reads = await storage.getConversationReads(userId);
 
       // Group by item + counterpart; messages are ordered ASC so the last
       // one seen per key is the latest.
-      const grouped = new Map<string, { itemId: string; otherUserId: string; lastMessage: any; messageCount: number }>();
+      const grouped = new Map<string, { itemId: string; otherUserId: string; lastMessage: any; messageCount: number; unreadCount: number }>();
       for (const m of msgs) {
         const otherUserId = m.buyerId === userId ? m.sellerId : m.buyerId;
         if (blocked.has(otherUserId)) continue; // hide blocked users' conversations
         const key = `${m.itemId}:${otherUserId}`;
         const existing = grouped.get(key);
+        const lastReadAt = reads.get(`market:${key}`);
+        const isUnread =
+          m.senderId !== userId &&
+          (!lastReadAt || new Date(m.createdAt).getTime() > new Date(lastReadAt).getTime());
         grouped.set(key, {
           itemId: m.itemId,
           otherUserId,
           lastMessage: m,
           messageCount: (existing?.messageCount ?? 0) + 1,
+          unreadCount: (existing?.unreadCount ?? 0) + (isUnread ? 1 : 0),
         });
       }
 
@@ -2508,6 +2627,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
             (m.buyerId === otherUserId && m.sellerId === userId),
         )
         .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+
+      await storage.markConversationRead(userId, `market:${itemId}:${otherUserId}`).catch((err) =>
+        console.error("markConversationRead failed:", err?.message || err),
+      );
 
       const [subject, otherProfile] = await Promise.all([
         resolveChatSubject(itemId),

@@ -11,6 +11,9 @@ export const users = pgTable("users", {
   isEmailVerified: boolean("is_email_verified").default(false).notNull(),
   emailVerificationCode: varchar("email_verification_code"),
   emailVerificationExpiry: timestamp("email_verification_expiry"),
+  // Password reset: 6-digit code emailed to the account, short-lived
+  passwordResetCode: varchar("password_reset_code"),
+  passwordResetExpiry: timestamp("password_reset_expiry"),
   // Stripe subscription fields
   stripeCustomerId: varchar("stripe_customer_id"),
   stripeSubscriptionId: varchar("stripe_subscription_id"),
@@ -460,3 +463,15 @@ export const uploadedImages = pgTable("uploaded_images", {
 });
 
 export type UploadedImage = typeof uploadedImages.$inferSelect;
+
+// Per-conversation read marker: the chat tables have no read flag, so unread
+// badges compare a conversation's messages against when this user last opened
+// it. Key: "match:<matchId>" or "market:<itemId>:<otherUserId>".
+export const conversationReads = pgTable("conversation_reads", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull(),
+  conversationKey: varchar("conversation_key").notNull(),
+  lastReadAt: timestamp("last_read_at").defaultNow().notNull(),
+});
+
+export type ConversationRead = typeof conversationReads.$inferSelect;

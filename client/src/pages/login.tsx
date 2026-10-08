@@ -148,6 +148,19 @@ export default function Login() {
               >
                 {loginMutation.isPending ? t("signingIn") : t("signIn")}
               </Button>
+
+              <div className="text-center">
+                <Link href="/forgot-password">
+                  <Button
+                    type="button"
+                    variant="link"
+                    className="p-0 h-auto text-sm font-medium text-pink-600 hover:text-pink-700"
+                    data-testid="link-forgot-password"
+                  >
+                    {t("forgotPassword")}
+                  </Button>
+                </Link>
+              </div>
             </form>
           </Form>
 

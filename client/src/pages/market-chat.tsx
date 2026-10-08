@@ -46,6 +46,13 @@ export default function MarketChat() {
     staleTime: 0,
   });
 
+  // Opening the thread marks it read server-side; refresh the list on unmount.
+  useEffect(() => {
+    return () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/marketplace/conversations"] });
+    };
+  }, [queryClient]);
+
   const sendMutation = useMutation({
     mutationFn: async (content: string) => {
       const res = await apiRequest("POST", "/api/marketplace/messages", {

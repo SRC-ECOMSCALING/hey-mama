@@ -126,6 +126,54 @@ export class EmailService {
       textContent
     });
   }
+
+  async sendPasswordResetEmail(email: string, resetCode: string): Promise<void> {
+    const htmlContent = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Reimposta la password - HeyMama</title>
+        <style>
+          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; }
+          .header { background: linear-gradient(135deg, #ec4899, #a855f7); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
+          .content { background: #f8fafc; padding: 30px; border-radius: 0 0 10px 10px; }
+          .code-box { background: white; border: 2px dashed #ec4899; padding: 20px; text-align: center; margin: 20px 0; border-radius: 8px; }
+          .verification-code { font-size: 32px; font-weight: bold; color: #ec4899; letter-spacing: 8px; }
+          .footer { text-align: center; margin-top: 20px; color: #64748b; font-size: 14px; }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <h1>HeyMama</h1>
+          <p>Reimposta la tua password</p>
+        </div>
+        <div class="content">
+          <p>Ciao!</p>
+          <p>Hai chiesto di reimpostare la password del tuo account HeyMama. Inserisci questo codice nell'app:</p>
+          <div class="code-box">
+            <div class="verification-code">${resetCode}</div>
+          </div>
+          <p>Il codice scade tra 15 minuti.</p>
+          <p>Se non hai richiesto tu il reset, ignora questa email: la tua password resta invariata.</p>
+        </div>
+        <div class="footer">
+          <p>HeyMama - La community delle mamme</p>
+        </div>
+      </body>
+      </html>
+    `;
+
+    const textContent = `Reimposta la tua password HeyMama\n\nCodice: ${resetCode}\nIl codice scade tra 15 minuti.\n\nSe non hai richiesto tu il reset, ignora questa email.`;
+
+    await this.sendEmail({
+      to: email,
+      subject: "Reimposta la tua password HeyMama 🔑",
+      htmlContent,
+      textContent,
+    });
+  }
 }
 
 export const emailService = new EmailService();
