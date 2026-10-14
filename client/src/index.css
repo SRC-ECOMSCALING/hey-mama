@@ -255,27 +255,37 @@ header.sticky {
   }
 }
 
-/* Uppy photo-upload modal: the stock close button sits outside the dialog
-   (top: -33px) and is white-on-white, so on a phone it lands behind the status
-   bar and is unreachable. Pin it inside the dialog, below the safe area. */
+/* Uppy photo-upload modal: the stock dialog is pinned to all four screen
+   edges, which on a phone leaves most of it empty. Size it to its content and
+   centre it instead. */
+.uppy-Dashboard--modal .uppy-Dashboard-inner {
+  top: 50%;
+  bottom: auto;
+  left: 50%;
+  right: auto;
+  transform: translate(-50%, -50%);
+  width: min(420px, calc(100vw - 2rem));
+  height: min(360px, calc(100vh - 6rem));
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+/* The stock close button sits outside the dialog (top: -33px) and is
+   white-on-white, so it landed behind the status bar and was unreachable. */
 .uppy-Dashboard-close {
-  top: calc(env(safe-area-inset-top) + 8px) !important;
-  inset-inline-end: 8px !important;
-  width: 40px;
-  height: 40px;
+  /* Kept inside the dialog's top bar: any lower and it overlaps Uppy's own
+     "remove file" button on the thumbnail below. */
+  top: 4px !important;
+  inset-inline-end: 6px !important;
+  width: 36px;
+  height: 36px;
   display: flex !important;
   align-items: center;
   justify-content: center;
-  font-size: 26px !important;
+  font-size: 23px !important;
   line-height: 1;
   color: #1f2937 !important;
   background: rgba(255, 255, 255, 0.92);
   border-radius: 9999px;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
-}
-
-/* Keep the dialog itself clear of the status bar / home indicator */
-.uppy-Dashboard--modal .uppy-Dashboard-inner {
-  padding-top: env(safe-area-inset-top);
-  padding-bottom: env(safe-area-inset-bottom);
 }
