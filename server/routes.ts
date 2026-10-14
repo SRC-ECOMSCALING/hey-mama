@@ -13,8 +13,6 @@ import {
 } from "./imageStorage";
 import { insertSwipeSchema, insertMessageSchema, insertReviewSchema, insertLookingForPostSchema, insertServiceSchema, insertServiceLookingForPostSchema, insertLocationSchema, insertEventSchema, registrationSchema, loginSchema, updateProfileSchema, type Profile, type MarketplaceItem } from "@shared/schema";
 import { z } from "zod";
-import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
-import { ObjectPermission } from "./objectAcl";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
 import cookieSignature from "cookie-signature";
@@ -201,8 +199,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
   };
 
 
-  // Object storage service
-  const objectStorageService = new ObjectStorageService();
 
   // ===== Image URL normalization =====
   // Photo URLs have been stored in several shapes over time (absolute URLs of
@@ -529,54 +525,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Create Stripe customer portal session
 
 
-  // Object storage routes
+  // Some profiles and listings still store photo URLs in the older
+  // /objects/uploads/<uuid> shape; they resolve to the same stored images.
   app.get("/objects/:objectPath(*)", requireAuth, async (req: any, res) => {
-    const userId = req.session.userId;
-    console.log(`[OBJECT] Serving ${req.path} for user ${userId}`);
-    // Postgres-stored images first (/objects/uploads/<uuid> URLs saved by the
-    // client); the code below only handles legacy Replit object storage.
     const imageId = imageIdFromPath(req.path);
-    if (imageId) {
-      const image = await getImage(imageId).catch(() => null);
-      if (image) {
-        res.set({
-          "Content-Type": image.contentType,
-          "Content-Length": String(image.data.length),
-          "Cache-Control": "public, max-age=31536000, immutable",
-        });
-        return res.end(image.data);
-      }
+    if (!imageId) {
+      return res.sendStatus(404);
     }
     try {
-      const objectFile = await objectStorageService.getObjectEntityFile(req.path);
-      console.log(`[OBJECT] File found for ${req.path}`);
-      const canAccess = await objectStorageService.canAccessObjectEntity({
-        objectFile,
-        userId: userId,
-        requestedPermission: ObjectPermission.READ,
-      });
-      console.log(`[OBJECT] Access check result for ${req.path}: ${canAccess}`);
-      if (!canAccess) {
-        console.log(`[OBJECT] Access denied for ${req.path}`);
-        return res.sendStatus(401);
-      }
-      console.log(`[OBJECT] Downloading ${req.path}`);
-      objectStorageService.downloadObject(objectFile, res);
-    } catch (error) {
-      console.error("Error checking object access:", error);
-      if (error instanceof ObjectNotFoundError) {
-        console.log(`[OBJECT] Object not found: ${req.path}`);
+      const image = await getImage(imageId);
+      if (!image) {
         return res.sendStatus(404);
       }
-      console.log(`[OBJECT] Server error for ${req.path}`);
-      return res.sendStatus(500);
+      res.set({
+        "Content-Type": image.contentType,
+        "Content-Length": String(image.data.length),
+        "Cache-Control": "public, max-age=31536000, immutable",
+      });
+      res.end(image.data);
+    } catch (error) {
+      console.error("Error serving legacy object URL:", error);
+      res.sendStatus(500);
     }
   });
 
-  // Images are stored in Postgres and served by this server (the previous
-  // Replit object storage only worked on Replit). The upload endpoints hand
-  // out an absolute PUT URL on this server; the client uploads the file there
-  // and stores that same URL as the photo URL.
+  // Images live in Postgres and are served by this server. The upload
+  // endpoints hand out an absolute PUT URL here; the client uploads the file
+  // to it and stores that same URL as the photo URL.
   const makeUploadURL = (req: any) =>
     `${requestBaseUrl(req)}/api/uploads/${randomUUID()}`;
 
@@ -666,24 +641,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(400).json({ error: "photoURL is required" });
     }
 
-    const userId = req.session.userId;
-
-    try {
-      const objectPath = await objectStorageService.trySetObjectEntityAclPolicy(
-        req.body.photoURL,
-        {
-          owner: userId,
-          visibility: "public", // Profile photos are public
-        },
-      );
-
-      res.status(200).json({
-        objectPath: objectPath,
-      });
-    } catch (error) {
-      console.error("Error setting profile photo:", error);
-      res.status(500).json({ error: "Internal server error" });
-    }
+    // Images are served by this server and are public by design, so there is
+    // no ACL step: the uploaded URL is already the final one.
+    res.status(200).json({ objectPath: req.body.photoURL });
   });
 
   // Global admin switch: when showTestProfiles is "false", test profiles are
@@ -1833,56 +1793,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Temporary route to fix existing marketplace images ACL
-  app.post("/api/fix-marketplace-images", requireAdmin, async (req: any, res) => {
-    try {
-      const items = await storage.getAllMarketplaceItems();
-      let fixedCount = 0;
-      
-      for (const item of items) {
-        if (item.imageUrls && Array.isArray(item.imageUrls)) {
-          for (const imageUrl of item.imageUrls) {
-            try {
-              await objectStorageService.trySetObjectEntityAclPolicy(imageUrl, {
-                owner: item.sellerId,
-                visibility: "public"
-              });
-              console.log(`[FIX] Set image as public: ${imageUrl}`);
-              fixedCount++;
-            } catch (aclError) {
-              console.error(`[FIX] Failed to set ACL for image ${imageUrl}:`, aclError);
-            }
-          }
-        }
-      }
-      
-      res.json({ message: `Fixed ${fixedCount} images` });
-    } catch (error) {
-      console.error('Error fixing marketplace images:', error);
-      res.status(500).json({ message: "Failed to fix images" });
-    }
-  });
-
   app.post("/api/marketplace/items", requireAuth, async (req, res) => {
     try {
       const itemData = { ...req.body, sellerId: req.session.userId };
       const item = await storage.createMarketplaceItem(itemData);
-      
-      // Set ACL policy for marketplace images to make them publicly readable
-      if (itemData.imageUrls && Array.isArray(itemData.imageUrls) && req.session.userId) {
-        for (const imageUrl of itemData.imageUrls) {
-          try {
-            await objectStorageService.trySetObjectEntityAclPolicy(imageUrl, {
-              owner: req.session.userId,
-              visibility: "public" // Marketplace images should be public
-            });
-            console.log(`[MARKETPLACE] Set image as public: ${imageUrl}`);
-          } catch (aclError) {
-            console.error(`[MARKETPLACE] Failed to set ACL for image ${imageUrl}:`, aclError);
-          }
-        }
-      }
-      
       res.status(201).json(item);
     } catch (error) {
       console.error('Error creating marketplace item:', error);

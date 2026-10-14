@@ -1,6 +1,5 @@
-// Standard node-postgres driver: works with any hosted Postgres (Supabase,
-// Neon over TCP, Railway). Replaced the Neon-only WebSocket driver
-// (@neondatabase/serverless) as part of the migration off Replit-owned Neon.
+// Standard node-postgres driver: works with any hosted Postgres. Production
+// runs on Supabase, reached through its Session pooler URL.
 import pg from "pg";
 import { drizzle } from "drizzle-orm/node-postgres";
 import * as schema from "@shared/schema";

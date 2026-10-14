@@ -1,7 +1,5 @@
-// Postgres-backed image storage. The original implementation relied on the
-// Replit object-storage sidecar (127.0.0.1:1106), which only exists on Replit,
-// so every upload failed on Railway/local. Images now live in the
-// uploaded_images table and are served by this server.
+// Postgres-backed image storage: uploads land in the uploaded_images table
+// and are served by this server, so the app needs no external object storage.
 import { eq, sql } from "drizzle-orm";
 import type { Request } from "express";
 import { db } from "./db";

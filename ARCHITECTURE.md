@@ -29,12 +29,12 @@ The client-side is built with React 18 using TypeScript and follows a component-
 - **shadcn/ui Component Library**: Provides accessible, customizable UI components with consistent design
 
 ### Backend Architecture
-The server is built with Express.js and TypeScript, implementing a RESTful API architecture. The backend handles profile management, swipe logic, match detection, and message storage. It uses an in-memory storage pattern with a well-defined interface that can be easily swapped for database implementations.
+The server is built with Express.js and TypeScript, implementing a RESTful API architecture. The backend handles profile management, swipe logic, match detection, and message storage. Data access goes through the `IStorage` interface in `server/storage.ts`, implemented by `DatabaseStorage` on Drizzle + PostgreSQL.
 
 **Key Backend Decisions:**
 - **Express.js Framework**: Provides robust HTTP server capabilities with middleware support
 - **TypeScript**: Ensures type safety across the full stack
-- **Interface-based Storage**: Abstracts data persistence to allow flexible backend implementations
+- **Interface-based Storage**: `IStorage` abstracts persistence; `DatabaseStorage` is the single implementation
 - **RESTful API Design**: Uses standard HTTP methods and status codes for predictable API behavior
 
 ### Data Storage Solutions
@@ -45,6 +45,10 @@ The application is configured to use PostgreSQL as the primary database with Dri
 - **Drizzle ORM**: Provides type-safe database queries and schema management
 - **UUID Primary Keys**: Ensures unique identifiers across distributed systems
 - **Timestamp Tracking**: All entities include creation timestamps for audit trails
+- **Schema changes**: apply additive SQL (`ADD COLUMN IF NOT EXISTS` / `CREATE TABLE
+  IF NOT EXISTS`) against the live database; `drizzle-kit push` is unsafe here
+  because it proposes dropping the `session` table. Check for drift with
+  `npx tsx scripts/schema-diff.ts`.
 
 ### External Dependencies
 The application integrates several third-party services and libraries:
@@ -54,9 +58,11 @@ The application integrates several third-party services and libraries:
 - Tailwind CSS for utility-first styling
 - Lucide React for consistent iconography
 
-**Development and Build Tools:**
-- Neon Database for PostgreSQL hosting
-- Replit-specific development plugins for enhanced development experience
+**Hosting and Build Tools:**
+- Railway hosts the Express server (deploys on push to `main`)
+- Supabase hosts PostgreSQL (connect through the Session pooler URL)
+- Uploaded photos live in the `uploaded_images` table and are served by the
+  app itself at `/api/uploads/:id` — there is no external object storage
 - ESBuild for fast JavaScript bundling
 
 **State Management and Data Fetching:**

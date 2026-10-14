@@ -448,7 +448,6 @@ export type Report = typeof reports.$inferSelect;
 export type InsertReport = z.infer<typeof insertReportSchema>;
 
 // Uploaded images stored in Postgres (profile photos, marketplace pictures).
-// Replaces the Replit object storage, which is unavailable outside Replit.
 const bytea = customType<{ data: Buffer }>({
   dataType() {
     return "bytea";
