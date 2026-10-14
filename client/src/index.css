@@ -259,11 +259,11 @@ header.sticky {
    edges, which on a phone leaves most of it empty. Size it to its content and
    centre it instead. */
 .uppy-Dashboard--modal .uppy-Dashboard-inner {
-  top: 50%;
-  bottom: auto;
-  left: 50%;
-  right: auto;
-  transform: translate(-50%, -50%);
+  /* Centred with inset + margin rather than a transform: Uppy's open
+     animation animates transform, so a translate(-50%, -50%) here would be
+     cancelled for the first 300ms and the dialog would jump into place. */
+  inset: 0;
+  margin: auto;
   width: min(420px, calc(100vw - 2rem));
   height: min(360px, calc(100vh - 6rem));
   border-radius: 16px;
