@@ -1,7 +1,7 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { ArrowLeft, Plus, X, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -13,7 +13,9 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { insertServiceSchema, type InsertService } from "@shared/schema";
+import { insertServiceSchema, type InsertService, type Profile } from "@shared/schema";
+import { ITALIAN_PROVINCES } from "@shared/provinces";
+import CityPicker from "@/components/city-picker";
 import { z } from "zod";
 import { apiRequest } from "@/lib/queryClient";
 import { useLanguage } from "@/contexts/LanguageContext";
@@ -86,6 +88,14 @@ export default function AddService() {
       ageGroups: "",
     },
   });
+
+  // Prefill the city with the provider's own province: most moms offer where they live.
+  const { data: myProfile } = useQuery<Profile>({ queryKey: ["/api/profiles", "current-user"] });
+  useEffect(() => {
+    if (myProfile?.location && ITALIAN_PROVINCES.includes(myProfile.location) && !form.getValues("location")) {
+      form.setValue("location", myProfile.location);
+    }
+  }, [myProfile?.location, form]);
 
   const createServiceMutation = useMutation({
     mutationFn: async (data: AddServiceFormData) => {
@@ -271,14 +281,11 @@ export default function AddService() {
                     name="location"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>{t("locationRequired")}</FormLabel>
+                        <FormLabel>{t("cityRequired")}</FormLabel>
                         <FormControl>
-                          <Input
-                            placeholder={t("cityPlaceholderServices")}
-                            {...field}
-                            data-testid="input-location"
-                          />
+                          <CityPicker value={field.value ?? ""} onChange={field.onChange} testId="input-location" />
                         </FormControl>
+                        <p className="text-xs text-gray-500">{t("cityOfferHint")}</p>
                         <FormMessage />
                       </FormItem>
                     )}
@@ -430,7 +437,7 @@ export default function AddService() {
                         {t("publishing")}
                       </>
                     ) : (
-                      'Pubblica Servizio'
+                      t("publishService")
                     )}
                   </Button>
                 </div>

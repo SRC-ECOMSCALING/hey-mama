@@ -119,3 +119,8 @@ export function coordinatesForProvince(
   const coords = location ? PROVINCE_COORDINATES[location.trim()] : undefined;
   return coords ? { latitude: String(coords.lat), longitude: String(coords.lng) } : null;
 }
+
+// The picker list (registration province, marketplace city): one source of
+// truth, so a listing's city and a buyer's city filter always use the same
+// spelling.
+export const ITALIAN_PROVINCES: string[] = Object.keys(PROVINCE_COORDINATES);

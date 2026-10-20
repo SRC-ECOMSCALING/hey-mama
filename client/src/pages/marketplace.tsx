@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { getMarketPrefs, setMarketPrefs, type MarketPrefs } from "@/lib/marketPrefs";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
@@ -24,7 +24,8 @@ import { z } from "zod";
 import UserInfoModal from "@/components/user-info-modal";
 import ReportBlockControls from "@/components/report-block";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { translations } from "@/lib/translations";
+import { translations, type TranslationKey } from "@/lib/translations";
+import CityPicker from "@/components/city-picker";
 import PageSkeleton from "@/components/page-skeleton";
 import AppHeader from "@/components/app-header";
 import Fab from "@/components/fab";
@@ -51,19 +52,21 @@ const conditions = [
 ];
 
 // Edit form schema
-const editProductSchema = insertMarketplaceItemSchema.pick({
+const buildEditProductSchema = (t: (key: TranslationKey) => string) => insertMarketplaceItemSchema.pick({
   title: true,
   description: true,
   price: true,
   condition: true,
   negotiable: true,
+  location: true,
 }).extend({
-  title: z.string().min(1, "Il titolo è obbligatorio"),
-  description: z.string().min(10, "La descrizione deve avere almeno 10 caratteri"),
-  price: z.number().min(0.01, "Inserisci un prezzo valido"),
+  title: z.string().min(1, t("titleRequiredError")),
+  description: z.string().min(10, t("descriptionMinError")),
+  price: z.number().min(0.01, t("invalidPriceError")),
+  location: z.string().min(1, t("locationRequiredError")),
 });
 
-type EditProductFormData = z.infer<typeof editProductSchema>;
+type EditProductFormData = z.infer<ReturnType<typeof buildEditProductSchema>>;
 
 type MarketplaceItemWithSeller = MarketplaceItem & { sellerProfile?: Profile | null };
 
@@ -94,17 +97,24 @@ export default function Marketplace() {
   const [draftMode, setDraftMode] = useState<"buy" | "sell" | null>(() => getMarketPrefs()?.mode ?? null);
   const [mainTab, setMainTab] = useState<string>(() => (getMarketPrefs()?.interest === "services" ? "services" : "marketplace"));
   const [marketSubTab, setMarketSubTab] = useState<string>(() => (getMarketPrefs()?.mode === "sell" ? "my-products" : "items"));
+  const [servicesSubTab, setServicesSubTab] = useState<string>(() => (getMarketPrefs()?.mode === "sell" ? "my-services" : "available"));
 
   const applyPrefs = (next: MarketPrefs) => {
     setMarketPrefs(next);
     setPrefs(next);
     setMainTab(next.interest === "services" ? "services" : "marketplace");
     setMarketSubTab(next.mode === "sell" ? "my-products" : "items");
+    setServicesSubTab(next.mode === "sell" ? "my-services" : "available");
     setShowSetup(false);
   };
 
+  // Only drop the city: going through applyPrefs would also reset the tabs
+  // and bounce someone browsing services back to items.
   const clearCityFilter = () => {
-    if (prefs) applyPrefs({ ...prefs, city: "" });
+    if (!prefs) return;
+    const next = { ...prefs, city: "" };
+    setMarketPrefs(next);
+    setPrefs(next);
   };
   const { toast } = useToast();
   const { t } = useLanguage();
@@ -113,6 +123,7 @@ export default function Marketplace() {
   const queryClient = useQueryClient();
 
   // Edit form
+  const editProductSchema = useMemo(() => buildEditProductSchema(t), [t]);
   const editForm = useForm<EditProductFormData>({
     resolver: zodResolver(editProductSchema),
     defaultValues: {
@@ -121,6 +132,7 @@ export default function Marketplace() {
       price: 0,
       condition: "good",
       negotiable: false,
+      location: "",
     },
   });
 
@@ -171,6 +183,7 @@ export default function Marketplace() {
       price: item.price / 100, // Convert from cents
       condition: item.condition,
       negotiable: item.negotiable || false,
+      location: item.location || "",
     });
   };
 
@@ -294,6 +307,15 @@ export default function Marketplace() {
   
   // Filter user's services
   const userServices = services.filter(service => service.providerId === user?.id);
+
+  // Services offered by other moms, narrowed to the chosen city like items
+  const availableServices = services
+    .filter(service =>
+      service.providerId !== user?.id &&
+      service.isAvailable !== false &&
+      (!cityFilter || (service.location || "").toLowerCase().includes(cityFilter))
+    )
+    .sort((a, b) => new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime());
   
   // Filter user's service requests
   const userServiceRequests = serviceLookingForPosts.filter(post => post.userId === user?.id);
@@ -357,7 +379,7 @@ export default function Marketplace() {
         queryClient.invalidateQueries({ queryKey: ["/api/marketplace/items"] });
       } catch (error) {
         console.error('Error deleting item:', error);
-        alert('Failed to delete item. Please try again.');
+        toast({ title: t("error"), description: t("deleteItemFailed"), variant: "destructive" });
       }
     }
   };
@@ -400,16 +422,7 @@ export default function Marketplace() {
             {/* Posizione */}
             <div className="mb-6">
               <p className="text-sm font-semibold text-gray-900 mb-2">{t("whereAreYou")}</p>
-              <div className="relative">
-                <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                <Input
-                  placeholder={t("cityOptionalPlaceholder")}
-                  value={draftCity}
-                  onChange={(e) => setDraftCity(e.target.value)}
-                  className="pl-11 h-12 rounded-2xl bg-white border-gray-200"
-                  data-testid="input-setup-city"
-                />
-              </div>
+              <CityPicker value={draftCity} onChange={setDraftCity} allowAll testId="input-setup-city" />
               <p className="text-xs text-gray-400 mt-1.5">{t("cityHint")}</p>
             </div>
 
@@ -603,7 +616,7 @@ export default function Marketplace() {
                 <div className="text-gray-700 font-semibold mb-1">{t("noItemsFound")}</div>
                 <div className="text-gray-500 text-sm mb-4">
                   {cityFilter
-                    ? `Nessun articolo a "${prefs?.city}". Prova ad allargare la ricerca.`
+                    ? t("noItemsInCity").replace("{city}", prefs?.city ?? "")
                     : t("tryDifferentCategory")}
                 </div>
                 {cityFilter && (
@@ -678,7 +691,7 @@ export default function Marketplace() {
                       <div className="flex items-center justify-between mb-1 sm:mb-2">
                         <div className="flex items-center gap-1 min-w-0 flex-1">
                           <span className="text-xs sm:text-sm text-gray-600 font-medium truncate">
-                            {item.sellerProfile ? `${item.sellerProfile.firstName} ${item.sellerProfile.lastName}` : 'Unknown Seller'}
+                            {item.sellerProfile ? `${item.sellerProfile.firstName} ${item.sellerProfile.lastName}` : t("unknownSeller")}
                           </span>
                           {item.sellerProfile && (
                             <button
@@ -885,11 +898,94 @@ export default function Marketplace() {
           </TabsContent>
 
           <TabsContent value="services" className="mt-0">
-            <Tabs defaultValue="my-services" className="w-full">
-              <TabsList className="grid w-full grid-cols-2 mb-4 h-10 rounded-full bg-gray-100 p-1">
+            <Tabs value={servicesSubTab} onValueChange={setServicesSubTab} className="w-full">
+              <TabsList className="grid w-full grid-cols-3 mb-4 h-10 rounded-full bg-gray-100 p-1">
+                <TabsTrigger value="available" className="rounded-full" data-testid="tab-available-services">{t("availableServices")}</TabsTrigger>
                 <TabsTrigger value="my-services" className="rounded-full">{t("myServices")}</TabsTrigger>
                 <TabsTrigger value="my-requests" className="rounded-full">{t("myRequests")}</TabsTrigger>
               </TabsList>
+
+              <TabsContent value="available" className="mt-0">
+                {availableServices.length === 0 ? (
+                  <div className="text-center py-12" data-testid="empty-available-services">
+                    <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-blue-50 flex items-center justify-center">
+                      <Wrench className="w-7 h-7 text-blue-400" />
+                    </div>
+                    <div className="text-gray-700 font-semibold mb-1">{t("noServicesAvailable")}</div>
+                    <div className="text-gray-500 text-sm mb-4">
+                      {cityFilter
+                        ? t("noServicesInCity").replace("{city}", prefs?.city ?? "")
+                        : t("noServicesAvailableHint")}
+                    </div>
+                    {cityFilter && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="rounded-full"
+                        onClick={clearCityFilter}
+                        data-testid="button-clear-city-services"
+                      >
+                        <X className="w-3.5 h-3.5 mr-1.5" />
+                        {t("showAllCities")}
+                      </Button>
+                    )}
+                  </div>
+                ) : (
+                  <div className="space-y-4 mb-nav">
+                    {availableServices.map((service) => (
+                      <Card key={service.id} className="bg-white rounded-2xl border-0 shadow-sm overflow-hidden" data-testid={`card-service-${service.id}`}>
+                        <div className="flex">
+                          <div className="w-28 flex-shrink-0 flex items-center justify-center p-3 bg-blue-50">
+                            <div className="text-center">
+                              <div className="w-12 h-12 mx-auto mb-2 bg-blue-100 rounded-full flex items-center justify-center">
+                                <span className="text-2xl">🛠️</span>
+                              </div>
+                              <Badge className="bg-blue-100 text-blue-800 text-xs">
+                                {optionLabel(t, service.serviceType)}
+                              </Badge>
+                            </div>
+                          </div>
+                          <div className="flex-1 p-4 flex flex-col justify-between min-w-0">
+                            <div>
+                              <div className="flex items-start justify-between gap-2 mb-1">
+                                <h3 className="font-semibold text-gray-900 leading-tight">{service.title}</h3>
+                                {service.hourlyRate && (
+                                  <div className="flex items-center font-bold shrink-0" style={{ color: "#d91c5c" }}>
+                                    <Euro className="h-4 w-4 mr-0.5" />
+                                    {(service.hourlyRate / 100).toFixed(0)}{t("perHour")}
+                                  </div>
+                                )}
+                              </div>
+                              <div className="flex items-center text-sm text-gray-500 mb-2">
+                                <MapPin className="h-4 w-4 mr-1 shrink-0" />
+                                <span className="truncate">{service.location}</span>
+                              </div>
+                              <p className="text-gray-600 text-sm mb-2 line-clamp-2">{service.description}</p>
+                              {service.ageGroups && (
+                                <div className="text-xs text-gray-500 mb-2">{optionLabels(t, service.ageGroups)}</div>
+                              )}
+                            </div>
+                            <div className="flex items-center justify-between">
+                              <div className="text-xs text-gray-400">
+                                {service.createdAt ? getTimeSince(service.createdAt) : t("recently")}
+                              </div>
+                              <Button
+                                size="sm"
+                                className="rounded-full text-white"
+                                style={{ background: "linear-gradient(to right, var(--primary-pink), var(--accent-coral))" }}
+                                onClick={() => setLocation(`/market-chat/service:${service.id}/${service.providerId}`)}
+                                data-testid={`button-contact-service-${service.id}`}
+                              >
+                                {t("contact")}
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      </Card>
+                    ))}
+                  </div>
+                )}
+              </TabsContent>
 
               <TabsContent value="my-services" className="mt-0">
                 {userServices.length === 0 ? (
@@ -1373,6 +1469,20 @@ export default function Marketplace() {
 
                     <FormField
                       control={editForm.control}
+                      name="location"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>{t("cityLabel")}</FormLabel>
+                          <FormControl>
+                            <CityPicker value={field.value ?? ""} onChange={field.onChange} testId="select-edit-city" />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={editForm.control}
                       name="negotiable"
                       render={({ field }) => (
                         <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm">
@@ -1426,7 +1536,7 @@ export default function Marketplace() {
                               {t("updating")}
                             </>
                           ) : (
-                            'Save Changes'
+                            t("saveChanges")
                           )}
                         </Button>
                       </div>

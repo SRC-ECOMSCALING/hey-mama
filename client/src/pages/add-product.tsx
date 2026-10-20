@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { ArrowLeft, Upload, X, Plus, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -13,7 +13,9 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
-import { insertMarketplaceItemSchema, type InsertMarketplaceItem } from "@shared/schema";
+import { insertMarketplaceItemSchema, type InsertMarketplaceItem, type Profile } from "@shared/schema";
+import { ITALIAN_PROVINCES } from "@shared/provinces";
+import CityPicker from "@/components/city-picker";
 import { z } from "zod";
 import { apiRequest } from "@/lib/queryClient";
 import { useLanguage } from "@/contexts/LanguageContext";
@@ -160,6 +162,14 @@ export default function AddProduct() {
       vintedUrl: "",
     },
   });
+
+  // Prefill the city with the seller's own province: most moms offer where they live.
+  const { data: myProfile } = useQuery<Profile>({ queryKey: ["/api/profiles", "current-user"] });
+  useEffect(() => {
+    if (myProfile?.location && ITALIAN_PROVINCES.includes(myProfile.location) && !form.getValues("location")) {
+      form.setValue("location", myProfile.location);
+    }
+  }, [myProfile?.location, form]);
 
   // Function to get upload URL from backend (apiRequest adds the bearer token
   // required by native builds, where session cookies are unreliable)
@@ -653,14 +663,11 @@ export default function AddProduct() {
                   name="location"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>{t("locationRequired")}</FormLabel>
+                      <FormLabel>{t("cityRequired")}</FormLabel>
                       <FormControl>
-                        <Input 
-                          placeholder={t("cityPlaceholder")}
-                          {...field}
-                          data-testid="input-location"
-                        />
+                        <CityPicker value={field.value ?? ""} onChange={field.onChange} testId="input-location" />
                       </FormControl>
+                      <p className="text-xs text-gray-500">{t("cityOfferHint")}</p>
                       <FormMessage />
                     </FormItem>
                   )}
