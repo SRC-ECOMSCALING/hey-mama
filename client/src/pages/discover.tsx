@@ -347,8 +347,8 @@ export default function Discover() {
       setReviewRating(0);
       setReviewComment("");
       toast({
-        title: "Recensione inviata!",
-        description: "Grazie per aver condiviso la tua esperienza.",
+        title: t("reviewSent"),
+        description: t("reviewSentDescription"),
       });
       queryClient.invalidateQueries({
         queryKey: ["/api/locations", selectedLocation?.id, "reviews"],
@@ -356,8 +356,8 @@ export default function Discover() {
     },
     onError: () => {
       toast({
-        title: "Errore",
-        description: "Non è stato possibile inviare la recensione.",
+        title: t("error"),
+        description: t("reviewSendFailedShort"),
         variant: "destructive",
       });
     },
@@ -369,8 +369,8 @@ export default function Discover() {
   const handleSubmitReview = () => {
     if (!selectedLocation?.id || reviewRating === 0 || !reviewComment.trim()) {
       toast({
-        title: "Campi mancanti",
-        description: "Per favore completa tutti i campi.",
+        title: t("missingFields"),
+        description: t("fillAllFields"),
         variant: "destructive",
       });
       return;
@@ -533,7 +533,7 @@ export default function Discover() {
                       />
                       {selectedProfile.isOnline && (
                         <Badge className="absolute top-2 right-2 bg-green-500 text-white border-0">
-                          Online
+                          {t("online")}
                         </Badge>
                       )}
                     </div>
@@ -694,7 +694,7 @@ export default function Discover() {
 
                         <div className="space-y-2 mt-4">
                           <h4 className="font-semibold text-sm">
-                            Recensioni HeyMama
+                            {t("heyMamaReviews")}
                           </h4>
                           {locationReviews.length > 0 ? (
                             <div className="space-y-2 max-h-32 overflow-y-auto">
@@ -722,7 +722,7 @@ export default function Discover() {
                             </div>
                           ) : (
                             <p className="text-xs text-gray-500">
-                              Nessuna recensione ancora
+                              {t("noReviewsYet")}
                             </p>
                           )}
 
@@ -739,7 +739,7 @@ export default function Discover() {
                               }}
                               data-testid="button-open-maps"
                             >
-                              Apri in Maps
+                              {t("openInMaps")}
                             </Button>
                             <Button
                               size="sm"
@@ -751,7 +751,7 @@ export default function Discover() {
                               onClick={() => setShowReviewModal(true)}
                               data-testid="button-add-review"
                             >
-                              Inserisci recensione
+                              {t("writeReview")}
                             </Button>
                           </div>
                         </div>
@@ -768,12 +768,12 @@ export default function Discover() {
       <Dialog open={showReviewModal} onOpenChange={setShowReviewModal}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Lascia una recensione</DialogTitle>
+            <DialogTitle>{t("leaveReview")}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div>
               <label className="text-sm font-medium mb-2 block">
-                Valutazione
+                {t("ratingLabel")}
               </label>
               <div className="flex gap-2">
                 {[1, 2, 3, 4, 5].map((star) => (
@@ -797,12 +797,12 @@ export default function Discover() {
             </div>
             <div>
               <label className="text-sm font-medium mb-2 block">
-                La tua recensione
+                {t("yourReview")}
               </label>
               <Textarea
                 value={reviewComment}
                 onChange={(e) => setReviewComment(e.target.value)}
-                placeholder="Raccontaci la tua esperienza in questo parco..."
+                placeholder={t("parkReviewPlaceholder")}
                 rows={4}
                 data-testid="input-review-comment"
               />
@@ -818,7 +818,7 @@ export default function Discover() {
                 }}
                 data-testid="button-cancel-review"
               >
-                Annulla
+                {t("cancel")}
               </Button>
               <Button
                 className="flex-1"
@@ -830,7 +830,7 @@ export default function Discover() {
                 disabled={reviewMutation.isPending}
                 data-testid="button-submit-review"
               >
-                {reviewMutation.isPending ? "Invio..." : "Invia recensione"}
+                {reviewMutation.isPending ? t("submitting") : t("submitReview")}
               </Button>
             </div>
           </div>

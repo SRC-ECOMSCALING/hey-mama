@@ -10,10 +10,34 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Eye, EyeOff, ArrowLeft } from "lucide-react";
 import heyMamaLogo from "@assets/logo_gradient_text-min_1757514869714.png";
 import { useLanguage } from "@/contexts/LanguageContext";
+import type { TranslationKey } from "@/lib/translations";
 
 // Two steps on one page: ask for the email, then enter the emailed 6-digit
 // code together with the new password.
 type Step = "email" | "code";
+
+// apiRequest throws "<status>: <json body>"; the body carries a `code` so the
+// message can be shown in the user's language instead of the server's.
+const ERROR_KEYS: Record<string, TranslationKey> = {
+  invalid_email: "resetInvalidEmail",
+  email_failed: "resetEmailFailed",
+  invalid_code_format: "invalidResetCode",
+  password_too_short: "passwordTooShort",
+  invalid_code: "resetInvalidCode",
+  expired_code: "resetExpiredCode",
+};
+
+function errorKey(error: unknown): TranslationKey {
+  const message = error instanceof Error ? error.message : "";
+  try {
+    const body = JSON.parse(message.replace(/^\d+:\s*/, ""));
+    const key = body && typeof body.code === "string" ? ERROR_KEYS[body.code] : undefined;
+    if (key) return key;
+  } catch {
+    /* non-JSON body */
+  }
+  return "somethingWentWrong";
+}
 
 export default function ForgotPassword() {
   const [, setLocation] = useLocation();
@@ -39,7 +63,7 @@ export default function ForgotPassword() {
     onError: (error: any) => {
       toast({
         title: t("error"),
-        description: error?.message?.replace(/^\d+:\s*/, "") || t("somethingWentWrong"),
+        description: t(errorKey(error)),
         variant: "destructive",
       });
     },
@@ -61,7 +85,7 @@ export default function ForgotPassword() {
     onError: (error: any) => {
       toast({
         title: t("error"),
-        description: error?.message?.replace(/^\d+:\s*/, "") || t("somethingWentWrong"),
+        description: t(errorKey(error)),
         variant: "destructive",
       });
     },

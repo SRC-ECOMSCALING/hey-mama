@@ -5,6 +5,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { useSwipe } from "@/hooks/use-swipe";
 import UserInfoModal from "@/components/user-info-modal";
 import type { Profile } from "@shared/schema";
+import { useLanguage } from "@/contexts/LanguageContext";
 import heyMamaLogo from "@assets/logo_gradient_text-min_1757514869714.png";
 
 interface ProfileCardProps {
@@ -18,6 +19,7 @@ interface ProfileCardProps {
 }
 
 export default function ProfileCard({ profile, onLike, onPass, onSuperLike, onNextProfile, onPreviousProfile, isLoading }: ProfileCardProps) {
+  const { t } = useLanguage();
   const [cardPosition, setCardPosition] = useState({ x: 0, y: 0, rotation: 0 });
   const [showFullBio, setShowFullBio] = useState(false);
   const [showUserInfo, setShowUserInfo] = useState(false);
@@ -210,7 +212,7 @@ export default function ProfileCard({ profile, onLike, onPass, onSuperLike, onNe
               <p 
                 className="text-white/90 text-sm leading-relaxed line-clamp-3 overflow-hidden cursor-pointer hover:text-white transition-colors"
                 onClick={() => setShowFullBio(true)}
-                title="Click to read full description"
+                title={t("tapToReadFull")}
               >
                 {profile.bio}
               </p>

@@ -213,7 +213,7 @@ const CONTENT: Record<"it" | "en", Content> = {
 };
 
 export default function Privacy() {
-  const { language } = useLanguage();
+  const { language, t } = useLanguage();
   const c = CONTENT[language === "en" ? "en" : "it"];
 
   return (
@@ -224,7 +224,7 @@ export default function Privacy() {
           <button
             onClick={() => window.history.back()}
             className="p-2 hover:bg-gray-100 rounded-full transition-colors"
-            aria-label="Back"
+            aria-label={t("back")}
             data-testid="button-back"
           >
             <ArrowLeft className="h-6 w-6" />

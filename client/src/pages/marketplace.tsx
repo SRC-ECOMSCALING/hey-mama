@@ -17,6 +17,7 @@ import { Heart, Search, Filter, Euro, MapPin, ExternalLink, Plus, Clock, Chevron
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { optionLabel, optionLabels } from "@/lib/optionLabels";
 import type { MarketplaceItem, LookingForPost, Service, ServiceLookingForPost, Profile } from "@shared/schema";
 import { insertMarketplaceItemSchema } from "@shared/schema";
 import { z } from "zod";
@@ -41,12 +42,12 @@ const categoryKeys = [
 ] as const;
 
 const conditions = [
-  { value: "new-with-tags", label: "Nuovo con etichette", color: "bg-green-100 text-green-800" },
-  { value: "new-without-tags", label: "Nuovo senza etichette", color: "bg-green-100 text-green-800" },
-  { value: "excellent", label: "Ottimo", color: "bg-blue-100 text-blue-800" },
-  { value: "good", label: "Buono", color: "bg-blue-100 text-blue-800" },
-  { value: "fair", label: "Discreto", color: "bg-yellow-100 text-yellow-800" },
-  { value: "damaged", label: "Danneggiato", color: "bg-red-100 text-red-800" }
+  { value: "new-with-tags", color: "bg-green-100 text-green-800" },
+  { value: "new-without-tags", color: "bg-green-100 text-green-800" },
+  { value: "excellent", color: "bg-blue-100 text-blue-800" },
+  { value: "good", color: "bg-blue-100 text-blue-800" },
+  { value: "fair", color: "bg-yellow-100 text-yellow-800" },
+  { value: "damaged", color: "bg-red-100 text-red-800" }
 ];
 
 // Edit form schema
@@ -390,31 +391,31 @@ export default function Marketplace() {
               <div className="w-16 h-16 mx-auto mb-4 rounded-2xl flex items-center justify-center shadow-lg" style={{ background: "linear-gradient(to right, var(--primary-pink), var(--accent-coral))" }}>
                 <ShoppingBag className="w-8 h-8 text-white" />
               </div>
-              <h2 className="text-2xl font-bold text-gray-900 mb-1">Benvenuta nel Market!</h2>
+              <h2 className="text-2xl font-bold text-gray-900 mb-1">{t("marketWelcome")}</h2>
               <p className="text-sm text-gray-500">
-                Dicci cosa cerchi e ti mostriamo subito la pagina giusta. Potrai cambiare queste preferenze quando vuoi.
+                {t("marketWelcomeSubtitle")}
               </p>
             </div>
 
             {/* Posizione */}
             <div className="mb-6">
-              <p className="text-sm font-semibold text-gray-900 mb-2">📍 Dove ti trovi?</p>
+              <p className="text-sm font-semibold text-gray-900 mb-2">{t("whereAreYou")}</p>
               <div className="relative">
                 <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                 <Input
-                  placeholder="Città (opzionale, es. Novara)"
+                  placeholder={t("cityOptionalPlaceholder")}
                   value={draftCity}
                   onChange={(e) => setDraftCity(e.target.value)}
                   className="pl-11 h-12 rounded-2xl bg-white border-gray-200"
                   data-testid="input-setup-city"
                 />
               </div>
-              <p className="text-xs text-gray-400 mt-1.5">Vedrai prima gli annunci della tua zona. Lascia vuoto per tutte le città.</p>
+              <p className="text-xs text-gray-400 mt-1.5">{t("cityHint")}</p>
             </div>
 
             {/* Interesse */}
             <div className="mb-6">
-              <p className="text-sm font-semibold text-gray-900 mb-2">Cosa ti interessa?</p>
+              <p className="text-sm font-semibold text-gray-900 mb-2">{t("whatInterestsYou")}</p>
               <div className="grid grid-cols-2 gap-3">
                 <button
                   onClick={() => setDraftInterest("items")}
@@ -424,8 +425,8 @@ export default function Marketplace() {
                   data-testid="setup-interest-items"
                 >
                   <Tag className={`w-6 h-6 mb-2 ${draftInterest === "items" ? "text-pink-500" : "text-gray-400"}`} />
-                  <p className="font-semibold text-sm text-gray-900">Oggetti</p>
-                  <p className="text-xs text-gray-500">Passeggini, vestiti, giochi…</p>
+                  <p className="font-semibold text-sm text-gray-900">{t("itemsOption")}</p>
+                  <p className="text-xs text-gray-500">{t("itemsOptionHint")}</p>
                 </button>
                 <button
                   onClick={() => setDraftInterest("services")}
@@ -435,15 +436,15 @@ export default function Marketplace() {
                   data-testid="setup-interest-services"
                 >
                   <Wrench className={`w-6 h-6 mb-2 ${draftInterest === "services" ? "text-pink-500" : "text-gray-400"}`} />
-                  <p className="font-semibold text-sm text-gray-900">Servizi</p>
-                  <p className="text-xs text-gray-500">Babysitting, ripetizioni…</p>
+                  <p className="font-semibold text-sm text-gray-900">{t("servicesOption")}</p>
+                  <p className="text-xs text-gray-500">{t("servicesOptionHint")}</p>
                 </button>
               </div>
             </div>
 
             {/* Compra o vendi */}
             <div className="mb-8">
-              <p className="text-sm font-semibold text-gray-900 mb-2">Vuoi comprare o vendere?</p>
+              <p className="text-sm font-semibold text-gray-900 mb-2">{t("buyOrSell")}</p>
               <div className="grid grid-cols-2 gap-3">
                 <button
                   onClick={() => setDraftMode("buy")}
@@ -453,8 +454,8 @@ export default function Marketplace() {
                   data-testid="setup-mode-buy"
                 >
                   <ShoppingBag className={`w-6 h-6 mb-2 ${draftMode === "buy" ? "text-pink-500" : "text-gray-400"}`} />
-                  <p className="font-semibold text-sm text-gray-900">Comprare</p>
-                  <p className="text-xs text-gray-500">Sfoglia gli annunci</p>
+                  <p className="font-semibold text-sm text-gray-900">{t("buyOption")}</p>
+                  <p className="text-xs text-gray-500">{t("buyOptionHint")}</p>
                 </button>
                 <button
                   onClick={() => setDraftMode("sell")}
@@ -464,8 +465,8 @@ export default function Marketplace() {
                   data-testid="setup-mode-sell"
                 >
                   <HandCoins className={`w-6 h-6 mb-2 ${draftMode === "sell" ? "text-pink-500" : "text-gray-400"}`} />
-                  <p className="font-semibold text-sm text-gray-900">Vendere</p>
-                  <p className="text-xs text-gray-500">Gestisci i tuoi annunci</p>
+                  <p className="font-semibold text-sm text-gray-900">{t("sellOption")}</p>
+                  <p className="text-xs text-gray-500">{t("sellOptionHint")}</p>
                 </button>
               </div>
             </div>
@@ -480,7 +481,7 @@ export default function Marketplace() {
               }
               data-testid="button-setup-start"
             >
-              Inizia 🎉
+              {t("getStarted")}
             </Button>
             {prefs && (
               <Button
@@ -489,7 +490,7 @@ export default function Marketplace() {
                 onClick={() => setShowSetup(false)}
                 data-testid="button-setup-cancel"
               >
-                Annulla
+                {t("cancel")}
               </Button>
             )}
           </div>
@@ -506,7 +507,7 @@ export default function Marketplace() {
               <button
                 onClick={clearCityFilter}
                 className="flex items-center gap-1 text-xs font-medium bg-pink-50 text-pink-600 rounded-full pl-2.5 pr-1.5 py-1.5 hover:bg-pink-100 transition-colors"
-                title="Rimuovi filtro città"
+                title={t("removeCityFilter")}
                 data-testid="chip-city-filter"
               >
                 <MapPin className="h-3 w-3" />
@@ -522,7 +523,7 @@ export default function Marketplace() {
                 setShowSetup(true);
               }}
               className="p-2 rounded-full bg-gray-100 hover:bg-gray-200 transition-colors"
-              title="Preferenze marketplace"
+              title={t("marketPreferences")}
               data-testid="button-market-prefs"
             >
               <SlidersHorizontal className="h-4 w-4 text-gray-600" />
@@ -614,7 +615,7 @@ export default function Marketplace() {
                     data-testid="button-clear-city-empty"
                   >
                     <X className="w-3.5 h-3.5 mr-1.5" />
-                    Mostra tutte le città
+                    {t("showAllCities")}
                   </Button>
                 )}
               </div>
@@ -645,7 +646,7 @@ export default function Marketplace() {
                           <div className="w-8 h-8 mx-auto mb-1 opacity-50">
                             📷
                           </div>
-                          No Image
+                          {t("noImage")}
                         </div>
                       </div>
                     )}
@@ -666,7 +667,7 @@ export default function Marketplace() {
                     </button>
                     <div className="absolute bottom-2 left-2">
                       <Badge className={getConditionStyle(item.condition)}>
-                        {conditions.find(c => c.value === item.condition)?.label}
+                        {optionLabel(t, item.condition)}
                       </Badge>
                     </div>
                   </div>
@@ -720,7 +721,7 @@ export default function Marketplace() {
 
                     <div className="flex items-center justify-between gap-2">
                       <div className="h-10 px-2 sm:px-3 bg-gray-200 rounded-lg flex items-center justify-center text-xs font-bold text-gray-700 border border-gray-300 border-gray-600 shrink-0">
-                        {item.size || 'N/A'}
+                        {optionLabel(t, item.size) || 'N/A'}
                       </div>
                       <div className="flex items-center gap-2 sm:gap-3 flex-1 justify-end">
                         {item.vintedUrl && (
@@ -730,7 +731,7 @@ export default function Marketplace() {
                               window.open(item.vintedUrl!, '_blank');
                             }}
                             className="w-10 h-10 bg-teal-500 hover:bg-teal-600 rounded-lg flex items-center justify-center transition-colors shrink-0"
-                            title="Vedi su Vinted"
+                            title={t("viewOnVinted")}
                           >
                             <span className="text-white font-bold text-base">V</span>
                           </button>
@@ -792,7 +793,7 @@ export default function Marketplace() {
                               <div className="w-8 h-8 mx-auto mb-1 opacity-50">
                                 📷
                               </div>
-                              No Image
+                              {t("noImage")}
                             </div>
                           </div>
                         )}
@@ -808,7 +809,7 @@ export default function Marketplace() {
                         </button>
                         <div className="absolute bottom-2 left-2">
                           <Badge className={getConditionStyle(item.condition)}>
-                            {conditions.find(c => c.value === item.condition)?.label}
+                            {optionLabel(t, item.condition)}
                           </Badge>
                         </div>
                       </div>
@@ -841,7 +842,7 @@ export default function Marketplace() {
 
                         <div className="flex items-center justify-between">
                           <div className="h-10 px-3 bg-gray-200 rounded-lg flex items-center justify-center text-xs font-bold text-gray-700 border border-gray-300">
-                            {item.size || 'N/A'}
+                            {optionLabel(t, item.size) || 'N/A'}
                           </div>
                           <div className="flex items-center gap-3">
                             {item.vintedUrl && (
@@ -851,7 +852,7 @@ export default function Marketplace() {
                                   window.open(item.vintedUrl!, '_blank');
                                 }}
                                 className="w-10 h-10 bg-teal-500 hover:bg-teal-600 rounded-lg flex items-center justify-center transition-colors"
-                                title="Vedi su Vinted"
+                                title={t("viewOnVinted")}
                               >
                                 <span className="text-white font-bold text-base">V</span>
                               </button>
@@ -908,7 +909,7 @@ export default function Marketplace() {
                                 <span className="text-2xl">🛠️</span>
                               </div>
                               <Badge className="bg-blue-100 text-blue-800 text-xs">
-                                {service.serviceType}
+                                {optionLabel(t, service.serviceType)}
                               </Badge>
                             </div>
                           </div>
@@ -999,11 +1000,11 @@ export default function Marketplace() {
                           
                           <div className="flex items-center gap-2 mb-2">
                             <Badge className="bg-purple-100 bg-purple-900 text-purple-800 text-purple-200 border-purple-300 border-purple-700">
-                              {post.serviceType}
+                              {optionLabel(t, post.serviceType)}
                             </Badge>
                             {post.ageGroups && (
                               <Badge className="bg-gray-100 bg-gray-700 text-gray-800 text-gray-200">
-                                {post.ageGroups}
+                                {optionLabels(t, post.ageGroups)}
                               </Badge>
                             )}
                           </div>
@@ -1139,51 +1140,51 @@ export default function Marketplace() {
                       <span data-testid="text-product-price">{(selectedItem.price / 100).toFixed(0)}</span>
                     </div>
                     <Badge className={getConditionStyle(selectedItem.condition)} data-testid="badge-product-condition">
-                      {conditions.find(c => c.value === selectedItem.condition)?.label}
+                      {optionLabel(t, selectedItem.condition)}
                     </Badge>
                   </div>
                   
                   <div className="grid grid-cols-2 gap-4 text-sm">
                     {selectedItem.brand && (
                       <div>
-                        <span className="font-medium text-gray-900">Brand:</span>
+                        <span className="font-medium text-gray-900">{t("brandLabel")}:</span>
                         <span className="ml-2 text-gray-600" data-testid="text-product-brand">{selectedItem.brand}</span>
                       </div>
                     )}
                     {selectedItem.size && (
                       <div>
-                        <span className="font-medium text-gray-900">Size:</span>
-                        <span className="ml-2 text-gray-600" data-testid="text-product-size">{selectedItem.size}</span>
+                        <span className="font-medium text-gray-900">{t("sizeLabel")}:</span>
+                        <span className="ml-2 text-gray-600" data-testid="text-product-size">{optionLabel(t, selectedItem.size)}</span>
                       </div>
                     )}
                     {selectedItem.color && (
                       <div>
-                        <span className="font-medium text-gray-900">Color:</span>
-                        <span className="ml-2 text-gray-600" data-testid="text-product-color">{selectedItem.color}</span>
+                        <span className="font-medium text-gray-900">{t("colorLabel")}:</span>
+                        <span className="ml-2 text-gray-600" data-testid="text-product-color">{optionLabel(t, selectedItem.color)}</span>
                       </div>
                     )}
                     {selectedItem.material && (
                       <div>
-                        <span className="font-medium text-gray-900">Material:</span>
-                        <span className="ml-2 text-gray-600" data-testid="text-product-material">{selectedItem.material}</span>
+                        <span className="font-medium text-gray-900">{t("materialLabel")}:</span>
+                        <span className="ml-2 text-gray-600" data-testid="text-product-material">{optionLabel(t, selectedItem.material)}</span>
                       </div>
                     )}
                     {selectedItem.ageRange && (
                       <div>
-                        <span className="font-medium text-gray-900">Age Range:</span>
+                        <span className="font-medium text-gray-900">{t("ageRangeLabel")}:</span>
                         <span className="ml-2 text-gray-600" data-testid="text-product-age">{selectedItem.ageRange}</span>
                       </div>
                     )}
                     {selectedItem.season && (
                       <div>
-                        <span className="font-medium text-gray-900">Season:</span>
-                        <span className="ml-2 text-gray-600" data-testid="text-product-season">{selectedItem.season}</span>
+                        <span className="font-medium text-gray-900">{t("seasonLabel")}:</span>
+                        <span className="ml-2 text-gray-600" data-testid="text-product-season">{optionLabel(t, selectedItem.season)}</span>
                       </div>
                     )}
                   </div>
                   
                   <div>
-                    <span className="font-medium text-gray-900">Description:</span>
+                    <span className="font-medium text-gray-900">{t("description")}:</span>
                     <p className="mt-1 text-gray-600 text-sm leading-relaxed" data-testid="text-product-description">
                       {selectedItem.description}
                     </p>
@@ -1191,7 +1192,7 @@ export default function Marketplace() {
                   
                   {selectedItem.measurements && (
                     <div>
-                      <span className="font-medium text-gray-900">Measurements:</span>
+                      <span className="font-medium text-gray-900">{t("measurementsLabel")}:</span>
                       <p className="mt-1 text-gray-600 text-sm" data-testid="text-product-measurements">
                         {selectedItem.measurements}
                       </p>
@@ -1221,7 +1222,7 @@ export default function Marketplace() {
                             : "text-gray-600"
                         }`}
                       />
-                      {isItemSaved(selectedItem.id) ? "Salvato" : "Salva"}
+                      {isItemSaved(selectedItem.id) ? t("saved") : t("save")}
                     </Button>
                     
                     {selectedItem.vintedUrl && (
@@ -1279,7 +1280,7 @@ export default function Marketplace() {
             <div>
               <DialogHeader>
                 <DialogTitle className="text-xl font-bold text-gray-900">
-                  Edit Product
+                  {t("editProduct")}
                 </DialogTitle>
               </DialogHeader>
               
@@ -1291,11 +1292,11 @@ export default function Marketplace() {
                       name="title"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Titolo</FormLabel>
+                          <FormLabel>{t("titleLabel")}</FormLabel>
                           <FormControl>
                             <Input 
                               {...field}
-                              placeholder="Titolo del prodotto"
+                              placeholder={t("productTitlePlaceholder")}
                               data-testid="input-edit-title"
                             />
                           </FormControl>
@@ -1309,11 +1310,11 @@ export default function Marketplace() {
                       name="description"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Descrizione</FormLabel>
+                          <FormLabel>{t("description")}</FormLabel>
                           <FormControl>
                             <Textarea 
                               {...field}
-                              placeholder="Descrizione del prodotto"
+                              placeholder={t("productDescriptionShortPlaceholder")}
                               className="min-h-[100px]"
                               data-testid="textarea-edit-description"
                             />
@@ -1328,7 +1329,7 @@ export default function Marketplace() {
                       name="price"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Prezzo (€)</FormLabel>
+                          <FormLabel>{t("priceEuro")}</FormLabel>
                           <FormControl>
                             <Input 
                               {...field}
@@ -1350,17 +1351,17 @@ export default function Marketplace() {
                       name="condition"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Condizione</FormLabel>
+                          <FormLabel>{t("condition")}</FormLabel>
                           <Select onValueChange={field.onChange} defaultValue={field.value}>
                             <FormControl>
                               <SelectTrigger data-testid="select-edit-condition">
-                                <SelectValue placeholder="Seleziona condizione" />
+                                <SelectValue placeholder={t("selectCondition")} />
                               </SelectTrigger>
                             </FormControl>
                             <SelectContent>
                               {conditions.map((condition) => (
                                 <SelectItem key={condition.value} value={condition.value}>
-                                  {condition.label}
+                                  {optionLabel(t, condition.value)}
                                 </SelectItem>
                               ))}
                             </SelectContent>
@@ -1377,10 +1378,10 @@ export default function Marketplace() {
                         <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm">
                           <div className="space-y-0.5">
                             <FormLabel className="text-base">
-                              Negotiable Price
+                              {t("negotiablePrice")}
                             </FormLabel>
                             <div className="text-sm text-muted-foreground">
-                              Allow buyers to negotiate the price
+                              {t("allowNegotiation")}
                             </div>
                           </div>
                           <FormControl>
@@ -1408,7 +1409,7 @@ export default function Marketplace() {
                           className="flex-1"
                           data-testid="button-cancel-edit"
                         >
-                          Cancel
+                          {t("cancel")}
                         </Button>
                         <Button
                           type="submit"
@@ -1422,7 +1423,7 @@ export default function Marketplace() {
                           {updateProductMutation.isPending ? (
                             <>
                               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                              Updating...
+                              {t("updating")}
                             </>
                           ) : (
                             'Save Changes'
@@ -1441,7 +1442,7 @@ export default function Marketplace() {
                         data-testid="button-delete-edit"
                       >
                         <Trash2 className="mr-2 h-4 w-4" />
-                        Delete Product
+                        {t("deleteProduct")}
                       </Button>
                     </div>
                   </form>
@@ -1457,7 +1458,7 @@ export default function Marketplace() {
         <DialogContent className="max-w-sm" data-testid="dialog-add-choice">
           <DialogHeader>
             <DialogTitle className="text-xl font-bold text-gray-900 text-center">
-              What would you like to add?
+              {t("whatToAdd")}
             </DialogTitle>
           </DialogHeader>
           
@@ -1474,7 +1475,7 @@ export default function Marketplace() {
               }}
             >
               <Plus className="h-5 w-5 mr-2" />
-              Add Product
+              {t("addProduct")}
             </Button>
             
             <Button 
@@ -1489,7 +1490,7 @@ export default function Marketplace() {
               }}
             >
               <Plus className="h-5 w-5 mr-2" />
-              Add Service
+              {t("addService")}
             </Button>
           </div>
         </DialogContent>

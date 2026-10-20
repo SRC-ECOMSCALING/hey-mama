@@ -330,12 +330,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const email = String(req.body?.email || "").trim().toLowerCase();
       if (!email || !email.includes("@")) {
-        return res.status(400).json({ message: "Email non valida" });
+        return res.status(400).json({ code: "invalid_email", message: "Email non valida" });
       }
 
       // Same answer whether or not the account exists: the endpoint must not
       // reveal which emails are registered.
-      const genericOk = { message: "Se l'email è registrata, riceverai un codice" };
+      const genericOk = { code: "code_sent", message: "Se l'email è registrata, riceverai un codice" };
 
       const now = Date.now();
       if (now - (lastResetRequest.get(email) ?? 0) < RESET_REQUEST_COOLDOWN_MS) {
@@ -360,13 +360,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (process.env.NODE_ENV !== "production") {
           console.log(`[DEV] Codice reset password per ${email}: ${code}`);
         }
-        return res.status(502).json({ message: "Impossibile inviare l'email. Riprova più tardi." });
+        return res.status(502).json({ code: "email_failed", message: "Impossibile inviare l'email. Riprova più tardi." });
       }
 
       res.json(genericOk);
     } catch (error) {
       console.error("Forgot password error:", error);
-      res.status(500).json({ message: "Richiesta non riuscita" });
+      res.status(500).json({ code: "request_failed", message: "Richiesta non riuscita" });
     }
   });
 
@@ -377,25 +377,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const newPassword = String(req.body?.newPassword || "");
 
       if (!/^\d{6}$/.test(code)) {
-        return res.status(400).json({ message: "Il codice deve avere 6 cifre" });
+        return res.status(400).json({ code: "invalid_code_format", message: "Il codice deve avere 6 cifre" });
       }
       if (newPassword.length < 8) {
-        return res.status(400).json({ message: "La password deve avere almeno 8 caratteri" });
+        return res.status(400).json({ code: "password_too_short", message: "La password deve avere almeno 8 caratteri" });
       }
 
       const result = await storage.resetPasswordWithCode(email, code, newPassword);
       if (result === "invalid") {
-        return res.status(400).json({ message: "Codice non valido" });
+        return res.status(400).json({ code: "invalid_code", message: "Codice non valido" });
       }
       if (result === "expired") {
-        return res.status(400).json({ message: "Codice scaduto, richiedine uno nuovo" });
+        return res.status(400).json({ code: "expired_code", message: "Codice scaduto, richiedine uno nuovo" });
       }
 
       lastResetRequest.delete(email);
-      res.json({ message: "Password aggiornata" });
+      res.json({ code: "password_updated", message: "Password aggiornata" });
     } catch (error) {
       console.error("Reset password error:", error);
-      res.status(500).json({ message: "Reimpostazione non riuscita" });
+      res.status(500).json({ code: "reset_failed", message: "Reimpostazione non riuscita" });
     }
   });
 

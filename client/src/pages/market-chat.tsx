@@ -27,7 +27,7 @@ interface CurrentUser {
 export default function MarketChat() {
   const [, params] = useRoute("/market-chat/:itemId/:otherUserId");
   const [, setLocation] = useLocation();
-  const { language } = useLanguage();
+  const { language, t } = useLanguage();
   const [newMessage, setNewMessage] = useState("");
   const queryClient = useQueryClient();
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -144,7 +144,7 @@ export default function MarketChat() {
         {messages.length === 0 ? (
           <div className="text-center py-12 px-6">
             <div className="text-5xl mb-3">💬</div>
-            <p className="text-gray-700 font-medium mb-1">Inizia la conversazione</p>
+            <p className="text-gray-700 font-medium mb-1">{t("startConversation")}</p>
             <p className="text-gray-500 text-sm">
               Scrivi a {other?.firstName ?? "questa persona"} per "{item?.title ?? service?.title ?? "questo annuncio"}"
             </p>
@@ -184,7 +184,7 @@ export default function MarketChat() {
       <div className="bg-white border-t border-gray-100 p-3 safe-bottom">
         <div className="flex items-center gap-2">
           <Input
-            placeholder="Scrivi un messaggio…"
+            placeholder={t("typeMessage")}
             value={newMessage}
             onChange={(e) => setNewMessage(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleSend()}

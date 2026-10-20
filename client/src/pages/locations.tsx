@@ -235,7 +235,7 @@ function AddLocationDialog() {
               name="googleMapsUrl"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Link Google Maps (opzionale)</FormLabel>
+                  <FormLabel>{t("googleMapsLinkOptional")}</FormLabel>
                   <FormControl>
                     <Input 
                       placeholder="https://maps.app.goo.gl/..."

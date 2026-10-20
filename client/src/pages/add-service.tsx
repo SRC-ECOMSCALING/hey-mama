@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -16,36 +16,41 @@ import { useToast } from "@/hooks/use-toast";
 import { insertServiceSchema, type InsertService } from "@shared/schema";
 import { z } from "zod";
 import { apiRequest } from "@/lib/queryClient";
+import { useLanguage } from "@/contexts/LanguageContext";
+import { optionLabel } from "@/lib/optionLabels";
+import type { TranslationKey } from "@/lib/translations";
+
+type Translate = (key: TranslationKey) => string;
 
 // Extended schema for the add service form
-const addServiceSchema = insertServiceSchema.extend({
+const buildAddServiceSchema = (t: Translate) => insertServiceSchema.extend({
   // Ensure required fields
-  title: z.string().min(1, "Il titolo del servizio è obbligatorio"),
-  description: z.string().min(10, "La descrizione deve avere almeno 10 caratteri"),
-  serviceType: z.string().min(1, "Seleziona un tipo di servizio"),
-  location: z.string().min(1, "La posizione è obbligatoria"),
-  availability: z.string().min(1, "Indica la tua disponibilità"),
-  ageGroups: z.string().min(1, "Indica le fasce d'età con cui lavori"),
-  hourlyRate: z.number({ invalid_type_error: "Inserisci una tariffa valida" }).min(0, "Inserisci una tariffa valida").optional(),
+  title: z.string().min(1, t("serviceTitleRequiredError")),
+  description: z.string().min(10, t("descriptionMinError")),
+  serviceType: z.string().min(1, t("selectServiceTypeError")),
+  location: z.string().min(1, t("locationRequiredError")),
+  availability: z.string().min(1, t("availabilityRequiredError")),
+  ageGroups: z.string().min(1, t("ageGroupsRequiredError")),
+  hourlyRate: z.number({ invalid_type_error: t("invalidRateError") }).min(0, t("invalidRateError")).optional(),
 }).omit({
   providerId: true, // Will be set by backend
   isAvailable: true, // Default value
 });
 
-type AddServiceFormData = z.infer<typeof addServiceSchema>;
+type AddServiceFormData = z.infer<ReturnType<typeof buildAddServiceSchema>>;
 
 const serviceTypes = [
-  { value: "Babysitting", label: "Babysitting" },
-  { value: "Tutoring", label: "Ripetizioni" },
-  { value: "Cleaning", label: "Pulizie domestiche" },
-  { value: "Pet Care", label: "Cura animali" },
-  { value: "Meal Prep", label: "Preparazione pasti" },
-  { value: "Transportation", label: "Trasporto" },
-  { value: "Elderly Care", label: "Assistenza anziani" },
-  { value: "Personal Training", label: "Personal training" },
-  { value: "Music Lessons", label: "Lezioni di musica" },
-  { value: "Language Tutoring", label: "Lezioni di lingua" },
-  { value: "Other", label: "Altro" }
+  { value: "Babysitting" },
+  { value: "Tutoring" },
+  { value: "Cleaning" },
+  { value: "Pet Care" },
+  { value: "Meal Prep" },
+  { value: "Transportation" },
+  { value: "Elderly Care" },
+  { value: "Personal Training" },
+  { value: "Music Lessons" },
+  { value: "Language Tutoring" },
+  { value: "Other" }
 ];
 
 const ageGroupOptions = [
@@ -63,6 +68,8 @@ export default function AddService() {
   // Free-text price editing (comma or dot decimals), parsed on change
   const [rateText, setRateText] = useState("");
   const { toast } = useToast();
+  const { t } = useLanguage();
+  const addServiceSchema = useMemo(() => buildAddServiceSchema(t), [t]);
   const queryClient = useQueryClient();
 
   const form = useForm<AddServiceFormData>({
@@ -90,22 +97,22 @@ export default function AddService() {
       
       const response = await apiRequest("POST", "/api/services", serviceData);
       if (!response.ok) {
-        throw new Error("Impossibile creare il servizio");
+        throw new Error(t("serviceCreateFailed"));
       }
       return response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/services"] });
       toast({
-        title: "Servizio pubblicato!",
-        description: "Il tuo servizio è stato pubblicato con successo.",
+        title: t("servicePublished"),
+        description: t("servicePublishedDescription"),
       });
       setLocation("/marketplace");
     },
     onError: (error) => {
       toast({
-        title: "Errore",
-        description: error instanceof Error ? error.message : "Impossibile creare il servizio",
+        title: t("error"),
+        description: t("serviceCreateFailed"),
         variant: "destructive",
       });
     },
@@ -149,8 +156,8 @@ export default function AddService() {
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Aggiungi Servizio</h1>
-            <p className="text-gray-600">Condividi le tue competenze con le altre mamme</p>
+            <h1 className="text-2xl font-bold text-gray-900">{t("addService")}</h1>
+            <p className="text-gray-600">{t("shareSkillsSubtitle")}</p>
           </div>
         </div>
 
@@ -160,17 +167,17 @@ export default function AddService() {
               <CardContent className="p-6 space-y-6">
                 {/* Basic Information */}
                 <div className="space-y-4">
-                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Informazioni di base</h3>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4">{t("basicInfo")}</h3>
                   
                   <FormField
                     control={form.control}
                     name="title"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Titolo del servizio *</FormLabel>
+                        <FormLabel>{t("serviceTitleRequired")}</FormLabel>
                         <FormControl>
                           <Input
-                            placeholder="es. Babysitter esperta disponibile nei weekend"
+                            placeholder={t("serviceTitlePlaceholder")}
                             {...field}
                             data-testid="input-title"
                           />
@@ -185,10 +192,10 @@ export default function AddService() {
                     name="description"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Descrizione *</FormLabel>
+                        <FormLabel>{t("descriptionRequired")}</FormLabel>
                         <FormControl>
                           <Textarea
-                            placeholder="Descrivi il tuo servizio, la tua esperienza e cosa ti rende speciale..."
+                            placeholder={t("serviceDescriptionPlaceholder")}
                             className="min-h-[120px]"
                             {...field}
                             data-testid="textarea-description"
@@ -205,17 +212,17 @@ export default function AddService() {
                       name="serviceType"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Tipo di servizio *</FormLabel>
+                          <FormLabel>{t("serviceTypeRequired")}</FormLabel>
                           <Select onValueChange={field.onChange} value={field.value}>
                             <FormControl>
                               <SelectTrigger data-testid="select-service-type">
-                                <SelectValue placeholder="Seleziona tipo di servizio" />
+                                <SelectValue placeholder={t("selectServiceType")} />
                               </SelectTrigger>
                             </FormControl>
                             <SelectContent>
                               {serviceTypes.map((type) => (
                                 <SelectItem key={type.value} value={type.value}>
-                                  {type.label}
+                                  {optionLabel(t, type.value)}
                                 </SelectItem>
                               ))}
                             </SelectContent>
@@ -230,7 +237,7 @@ export default function AddService() {
                       name="hourlyRate"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Tariffa oraria (€)</FormLabel>
+                          <FormLabel>{t("hourlyRate")}</FormLabel>
                           <FormControl>
                             <div className="relative">
                               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">€</span>
@@ -264,10 +271,10 @@ export default function AddService() {
                     name="location"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Posizione *</FormLabel>
+                        <FormLabel>{t("locationRequired")}</FormLabel>
                         <FormControl>
                           <Input
-                            placeholder="es. Milano, Roma, Bologna..."
+                            placeholder={t("cityPlaceholderServices")}
                             {...field}
                             data-testid="input-location"
                           />
@@ -280,17 +287,17 @@ export default function AddService() {
 
                 {/* Availability & Experience */}
                 <div className="space-y-4">
-                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Disponibilità ed esperienza</h3>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4">{t("availabilityAndExperience")}</h3>
                   
                   <FormField
                     control={form.control}
                     name="availability"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Disponibilità *</FormLabel>
+                        <FormLabel>{t("availabilityRequired")}</FormLabel>
                         <FormControl>
                           <Textarea
-                            placeholder="es. Sere feriali 18-22, weekend mattina, orari flessibili..."
+                            placeholder={t("availabilityPlaceholder")}
                             className="min-h-[80px]"
                             {...field}
                             data-testid="textarea-availability"
@@ -307,10 +314,10 @@ export default function AddService() {
                       name="experience"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Anni di esperienza</FormLabel>
+                          <FormLabel>{t("yearsOfExperience")}</FormLabel>
                           <FormControl>
                             <Input
-                              placeholder="es. 5 anni"
+                              placeholder={t("experiencePlaceholder")}
                               {...field}
                               value={field.value || ""}
                               data-testid="input-experience"
@@ -326,10 +333,10 @@ export default function AddService() {
                       name="certifications"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Certificazioni</FormLabel>
+                          <FormLabel>{t("certifications")}</FormLabel>
                           <FormControl>
                             <Input
-                              placeholder="es. Primo soccorso, laurea in scienze dell'educazione"
+                              placeholder={t("certificationsPlaceholder")}
                               {...field}
                               value={field.value || ""}
                               data-testid="input-certifications"
@@ -344,10 +351,10 @@ export default function AddService() {
 
                 {/* Age Groups */}
                 <div className="space-y-4">
-                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Fasce d'età con cui lavori *</h3>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4">{t("ageGroupsRequired")}</h3>
                   
                   <div className="space-y-3">
-                    <Label>Seleziona le fasce d'età (almeno una):</Label>
+                    <Label>{t("selectAgeGroups")}</Label>
                     <div className="flex flex-wrap gap-2">
                       {ageGroupOptions.map((ageGroup) => (
                         <Button
@@ -360,7 +367,7 @@ export default function AddService() {
                           data-testid={`button-age-${ageGroup.replace(/\s+/g, '-').toLowerCase()}`}
                         >
                           {selectedAgeGroups.includes(ageGroup) && <X className="h-3 w-3 mr-1" />}
-                          {ageGroup}
+                          {optionLabel(t, ageGroup)}
                         </Button>
                       ))}
                     </div>
@@ -369,7 +376,7 @@ export default function AddService() {
                       <div className="flex flex-wrap gap-1 mt-2">
                         {selectedAgeGroups.map((ageGroup) => (
                           <Badge key={ageGroup} variant="secondary" className="text-xs">
-                            {ageGroup}
+                            {optionLabel(t, ageGroup)}
                           </Badge>
                         ))}
                       </div>
@@ -395,7 +402,7 @@ export default function AddService() {
                   
                   {form.formState.errors.ageGroups && selectedAgeGroups.length === 0 && (
                     <p className="text-sm font-medium text-destructive mt-2">
-                      Seleziona almeno una fascia d'età con cui lavori.
+                      {t("selectAtLeastOneAgeGroup")}
                     </p>
                   )}
                 </div>
@@ -409,7 +416,7 @@ export default function AddService() {
                     className="flex-1"
                     data-testid="button-cancel"
                   >
-                    Annulla
+                    {t("cancel")}
                   </Button>
                   <Button
                     type="submit"
@@ -420,7 +427,7 @@ export default function AddService() {
                     {createServiceMutation.isPending ? (
                       <>
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Pubblicazione...
+                        {t("publishing")}
                       </>
                     ) : (
                       'Pubblica Servizio'

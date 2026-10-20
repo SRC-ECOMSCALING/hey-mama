@@ -40,10 +40,10 @@ export default function Profile() {
           onClick={() => setLocation("/profile/edit")}
           data-testid="button-complete-profile"
         >
-          Completa il tuo profilo
+          {t("completeYourProfile")}
         </Button>
         <Button variant="ghost" onClick={() => setLocation("/")} data-testid="button-go-home">
-          Torna alla home
+          {t("backToHome")}
         </Button>
       </div>
     );

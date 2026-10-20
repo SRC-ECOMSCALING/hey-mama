@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -16,45 +16,50 @@ import { useToast } from "@/hooks/use-toast";
 import { insertMarketplaceItemSchema, type InsertMarketplaceItem } from "@shared/schema";
 import { z } from "zod";
 import { apiRequest } from "@/lib/queryClient";
+import { useLanguage } from "@/contexts/LanguageContext";
+import { optionLabel } from "@/lib/optionLabels";
+import type { TranslationKey } from "@/lib/translations";
+
+type Translate = (key: TranslationKey) => string;
 
 // Extended schema for the add product form
-const addProductSchema = insertMarketplaceItemSchema.extend({
+const buildAddProductSchema = (t: Translate) => insertMarketplaceItemSchema.extend({
   // Ensure required fields
-  title: z.string().min(1, "Il titolo è obbligatorio"),
-  description: z.string().min(10, "La descrizione deve essere almeno 10 caratteri"),
-  price: z.number({ invalid_type_error: "Inserisci un prezzo valido" }).min(0.01, "Inserisci un prezzo valido"),
-  category: z.string().min(1, "Seleziona una categoria"),
-  brand: z.string().min(1, "Seleziona una marca"),
-  size: z.string().min(1, "Seleziona una taglia"),
-  condition: z.string().min(1, "Seleziona una condizione"),
-  location: z.string().min(1, "La posizione è obbligatoria"),
+  title: z.string().min(1, t("titleRequiredError")),
+  description: z.string().min(10, t("descriptionMinError")),
+  price: z.number({ invalid_type_error: t("invalidPriceError") }).min(0.01, t("invalidPriceError")),
+  category: z.string().min(1, t("selectCategory")),
+  brand: z.string().min(1, t("selectBrandError")),
+  size: z.string().min(1, t("selectSizeError")),
+  condition: z.string().min(1, t("selectConditionError")),
+  location: z.string().min(1, t("locationRequiredError")),
 }).omit({
   sellerId: true, // Will be set by backend
   isAvailable: true, // Default value
   ageRange: true, // Not used for clothing
 });
 
-type AddProductFormData = z.infer<typeof addProductSchema>;
+type AddProductFormData = z.infer<ReturnType<typeof buildAddProductSchema>>;
 
 const categories = [
-  { value: "Abbigliamento > Neonati 0-12 mesi", label: "Abbigliamento Neonati 0-12 mesi" },
-  { value: "Abbigliamento > Bambini 1-5 anni", label: "Abbigliamento Bambini 1-5 anni" },
-  { value: "Calzature > Primi passi", label: "Scarpine primi passi" },
-  { value: "Calzature > Bambino", label: "Scarpe bambino" },
-  { value: "Passeggini e Viaggi > Passeggini", label: "Passeggini" },
-  { value: "Passeggini e Viaggi > Seggiolini auto", label: "Seggiolini auto" },
-  { value: "Passeggini e Viaggi > Zaini porta bebè", label: "Zaini porta bebè" },
-  { value: "Alimentazione > Biberon", label: "Biberon e accessori" },
-  { value: "Alimentazione > Seggioloni", label: "Seggioloni" },
-  { value: "Alimentazione > Sterilizzatori", label: "Sterilizzatori" },
-  { value: "Giochi e Libri > Peluche", label: "Peluche" },
-  { value: "Giochi e Libri > Giochi educativi", label: "Giochi educativi" },
-  { value: "Giochi e Libri > Libri per bambini", label: "Libri per bambini" },
-  { value: "Cameretta > Lettini", label: "Lettini" },
-  { value: "Cameretta > Fasciatoi", label: "Fasciatoi" },
-  { value: "Cameretta > Decorazioni", label: "Decorazioni cameretta" },
-  { value: "Cura e Igiene > Pannolini", label: "Pannolini" },
-  { value: "Cura e Igiene > Bagnetto", label: "Prodotti bagnetto" },
+  { value: "Abbigliamento > Neonati 0-12 mesi" },
+  { value: "Abbigliamento > Bambini 1-5 anni" },
+  { value: "Calzature > Primi passi" },
+  { value: "Calzature > Bambino" },
+  { value: "Passeggini e Viaggi > Passeggini" },
+  { value: "Passeggini e Viaggi > Seggiolini auto" },
+  { value: "Passeggini e Viaggi > Zaini porta bebè" },
+  { value: "Alimentazione > Biberon" },
+  { value: "Alimentazione > Seggioloni" },
+  { value: "Alimentazione > Sterilizzatori" },
+  { value: "Giochi e Libri > Peluche" },
+  { value: "Giochi e Libri > Giochi educativi" },
+  { value: "Giochi e Libri > Libri per bambini" },
+  { value: "Cameretta > Lettini" },
+  { value: "Cameretta > Fasciatoi" },
+  { value: "Cameretta > Decorazioni" },
+  { value: "Cura e Igiene > Pannolini" },
+  { value: "Cura e Igiene > Bagnetto" },
 ];
 
 const brands = [
@@ -82,12 +87,12 @@ const sizes = [
 ];
 
 const conditions = [
-  { value: "new-with-tags", label: "Nuovo con etichette" },
-  { value: "new-without-tags", label: "Nuovo senza etichette" },
-  { value: "excellent", label: "Ottimo" },
-  { value: "good", label: "Buono" },
-  { value: "fair", label: "Discreto" },
-  { value: "damaged", label: "Danneggiato" }
+  { value: "new-with-tags" },
+  { value: "new-without-tags" },
+  { value: "excellent" },
+  { value: "good" },
+  { value: "fair" },
+  { value: "damaged" }
 ];
 
 const colors = [
@@ -103,9 +108,9 @@ const materials = [
 ];
 
 const seasons = [
-  { value: "Estivo", label: "Estivo" },
-  { value: "Invernale", label: "Invernale" },
-  { value: "Tutto l'anno", label: "Tutto l'anno" }
+  { value: "Estivo" },
+  { value: "Invernale" },
+  { value: "Tutto l'anno" }
 ];
 
 type UploadedImage = {
@@ -131,6 +136,8 @@ export default function AddProduct() {
   // change: no pre-filled 0 to fight against while typing.
   const [priceText, setPriceText] = useState("");
   const { toast } = useToast();
+  const { t } = useLanguage();
+  const addProductSchema = useMemo(() => buildAddProductSchema(t), [t]);
   const queryClient = useQueryClient();
 
   const form = useForm<AddProductFormData>({
@@ -212,13 +219,13 @@ export default function AddProduct() {
         img.previewUrl === previewUrl ? {
           ...img,
           isUploading: false,
-          uploadError: error instanceof Error ? error.message : 'Upload failed'
+          uploadError: error instanceof Error ? error.message : t("uploadError")
         } : img
       ));
 
       toast({
-        title: "Errore di caricamento",
-        description: "Impossibile caricare l'immagine. Riprova.",
+        title: t("uploadErrorTitle"),
+        description: t("uploadErrorDescription"),
         variant: "destructive",
       });
     }
@@ -245,16 +252,16 @@ export default function AddProduct() {
     },
     onSuccess: () => {
       toast({
-        title: "Prodotto aggiunto!",
-        description: "Il tuo prodotto per bambini è stato pubblicato con successo.",
+        title: t("productAdded"),
+        description: t("productAddedDescription"),
       });
       queryClient.invalidateQueries({ queryKey: ["/api/marketplace/items"] });
       setLocation("/marketplace");
     },
     onError: (error) => {
       toast({
-        title: "Errore",
-        description: "Non è stato possibile pubblicare il prodotto. Riprova.",
+        title: t("error"),
+        description: t("productAddFailed"),
         variant: "destructive",
       });
       console.error("Error adding product:", error);
@@ -309,8 +316,8 @@ export default function AddProduct() {
   const onSubmit = async (data: AddProductFormData) => {
     if (uploadedImages.length === 0) {
       toast({
-        title: "Immagini richieste",
-        description: "Aggiungi almeno una foto del prodotto.",
+        title: t("imagesRequired"),
+        description: t("imagesRequiredDescription"),
         variant: "destructive",
       });
       return;
@@ -323,8 +330,8 @@ export default function AddProduct() {
 
     if (uploadsInProgress) {
       toast({
-        title: "Caricamento in corso",
-        description: "Attendi che tutte le immagini vengano caricate.",
+        title: t("uploadInProgress"),
+        description: t("uploadInProgressDescription"),
         variant: "destructive",
       });
       return;
@@ -332,8 +339,8 @@ export default function AddProduct() {
 
     if (failedUploads || successfulUploads.length === 0) {
       toast({
-        title: "Errore nelle immagini",
-        description: "Alcune immagini non sono state caricate. Riprova o rimuovile.",
+        title: t("imagesError"),
+        description: t("imagesErrorDescription"),
         variant: "destructive",
       });
       return;
@@ -362,7 +369,7 @@ export default function AddProduct() {
           >
             <ArrowLeft className="h-5 w-5 text-gray-600" />
           </Button>
-          <h1 className="text-xl font-semibold text-gray-900 flex-1">Aggiungi Prodotto</h1>
+          <h1 className="text-xl font-semibold text-gray-900 flex-1">{t("addProduct")}</h1>
         </div>
       </header>
 
@@ -375,10 +382,10 @@ export default function AddProduct() {
             <Card>
               <CardContent className="p-4">
                 <Label className="text-base font-semibold text-gray-900 mb-3 block">
-                  Foto del prodotto per bambini *
+                  {t("productPhotosLabel")}
                 </Label>
                 <p className="text-sm text-gray-600 mb-4">
-                  Aggiungi almeno 1 foto (meglio 3-5). Usa foto chiare e ben illuminate del prodotto per bambini.
+                  {t("productPhotosHint")}
                 </p>
 
                 <div className="grid grid-cols-2 gap-3 mb-4">
@@ -395,7 +402,7 @@ export default function AddProduct() {
                         <div className="absolute inset-0 bg-black bg-opacity-50 rounded-lg flex items-center justify-center">
                           <div className="text-white text-center">
                             <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2" />
-                            <span className="text-xs">Caricamento...</span>
+                            <span className="text-xs">{t("uploading")}</span>
                           </div>
                         </div>
                       )}
@@ -414,13 +421,13 @@ export default function AddProduct() {
                         <div className="absolute inset-0 bg-red-500 bg-opacity-90 rounded-lg flex items-center justify-center">
                           <div className="text-white text-center p-2">
                             <X className="h-6 w-6 mx-auto mb-2" />
-                            <span className="text-xs">Errore caricamento</span>
+                            <span className="text-xs">{t("uploadError")}</span>
                             <button
                               type="button"
                               onClick={() => retryUpload(index)}
                               className="block mx-auto mt-2 text-xs underline hover:no-underline"
                             >
-                              Riprova
+                              {t("retry")}
                             </button>
                           </div>
                         </div>
@@ -441,7 +448,7 @@ export default function AddProduct() {
                   {uploadedImages.length < 5 && (
                     <label className="w-full h-32 border-2 border-dashed border-gray-300 rounded-lg flex flex-col items-center justify-center cursor-pointer hover:bg-gray-50">
                       <Upload className="h-8 w-8 text-gray-400 mb-2" />
-                      <span className="text-sm text-gray-500">Aggiungi foto</span>
+                      <span className="text-sm text-gray-500">{t("addPhoto")}</span>
                       <input
                         type="file"
                         accept="image/*"
@@ -458,17 +465,17 @@ export default function AddProduct() {
             {/* Basic Information */}
             <Card>
               <CardContent className="p-4 space-y-4">
-                <h3 className="text-base font-semibold text-gray-900">Informazioni di base</h3>
+                <h3 className="text-base font-semibold text-gray-900">{t("basicInfo")}</h3>
 
                 <FormField
                   control={form.control}
                   name="title"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Titolo dell'annuncio *</FormLabel>
+                      <FormLabel>{t("listingTitleRequired")}</FormLabel>
                       <FormControl>
                         <Input 
-                          placeholder="es. Tutina Chicco in cotone taglia 3 mesi"
+                          placeholder={t("listingTitlePlaceholder")}
                           {...field}
                           data-testid="input-title"
                         />
@@ -483,17 +490,17 @@ export default function AddProduct() {
                   name="category"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Categoria *</FormLabel>
+                      <FormLabel>{t("categoryRequired")}</FormLabel>
                       <Select onValueChange={field.onChange} value={field.value}>
                         <FormControl>
                           <SelectTrigger data-testid="select-category">
-                            <SelectValue placeholder="Seleziona categoria" />
+                            <SelectValue placeholder={t("selectCategory")} />
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
                           {categories.map((category) => (
                             <SelectItem key={category.value} value={category.value}>
-                              {category.label}
+                              {optionLabel(t, category.value)}
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -508,11 +515,11 @@ export default function AddProduct() {
                   name="brand"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Marca *</FormLabel>
+                      <FormLabel>{t("brandRequired")}</FormLabel>
                       <Select onValueChange={field.onChange} value={field.value}>
                         <FormControl>
                           <SelectTrigger data-testid="select-brand">
-                            <SelectValue placeholder="Seleziona marca" />
+                            <SelectValue placeholder={t("selectBrand")} />
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
@@ -533,17 +540,17 @@ export default function AddProduct() {
                   name="size"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Taglia *</FormLabel>
+                      <FormLabel>{t("sizeRequired")}</FormLabel>
                       <Select onValueChange={field.onChange} value={field.value}>
                         <FormControl>
                           <SelectTrigger data-testid="select-size">
-                            <SelectValue placeholder="Seleziona taglia" />
+                            <SelectValue placeholder={t("selectSize")} />
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
                           {sizes.map((size) => (
                             <SelectItem key={size} value={size}>
-                              {size}
+                              {optionLabel(t, size)}
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -558,17 +565,17 @@ export default function AddProduct() {
                   name="condition"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Condizione *</FormLabel>
+                      <FormLabel>{t("conditionRequired")}</FormLabel>
                       <Select onValueChange={field.onChange} value={field.value}>
                         <FormControl>
                           <SelectTrigger data-testid="select-condition">
-                            <SelectValue placeholder="Seleziona condizione" />
+                            <SelectValue placeholder={t("selectCondition")} />
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
                           {conditions.map((condition) => (
                             <SelectItem key={condition.value} value={condition.value}>
-                              {condition.label}
+                              {optionLabel(t, condition.value)}
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -583,14 +590,14 @@ export default function AddProduct() {
             {/* Price and Location */}
             <Card>
               <CardContent className="p-4 space-y-4">
-                <h3 className="text-base font-semibold text-gray-900">Prezzo e posizione</h3>
+                <h3 className="text-base font-semibold text-gray-900">{t("priceAndLocation")}</h3>
 
                 <FormField
                   control={form.control}
                   name="price"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Prezzo (€) *</FormLabel>
+                      <FormLabel>{t("priceRequired")}</FormLabel>
                       <FormControl>
                         <div className="relative">
                           <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">€</span>
@@ -625,9 +632,9 @@ export default function AddProduct() {
                   render={({ field }) => (
                     <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
                       <div className="space-y-0.5">
-                        <FormLabel className="text-base">Prezzo trattabile</FormLabel>
+                        <FormLabel className="text-base">{t("negotiablePrice")}</FormLabel>
                         <p className="text-sm text-gray-500">
-                          Permetti agli acquirenti di negoziare il prezzo
+                          {t("allowNegotiation")}
                         </p>
                       </div>
                       <FormControl>
@@ -646,10 +653,10 @@ export default function AddProduct() {
                   name="location"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Posizione *</FormLabel>
+                      <FormLabel>{t("locationRequired")}</FormLabel>
                       <FormControl>
                         <Input 
-                          placeholder="es. Milano, Roma, Napoli"
+                          placeholder={t("cityPlaceholder")}
                           {...field}
                           data-testid="input-location"
                         />
@@ -669,13 +676,13 @@ export default function AddProduct() {
                   name="description"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Descrizione *</FormLabel>
+                      <FormLabel>{t("descriptionRequired")}</FormLabel>
                       <p className="text-sm text-gray-500 mb-2">
-                        Descrivi materiali, vestibilità, eventuali difetti o modifiche
+                        {t("productDescriptionHint")}
                       </p>
                       <FormControl>
                         <Textarea 
-                          placeholder="Descrivi materiali, età consigliata, eventuali difetti o segni di usura..."
+                          placeholder={t("productDescriptionPlaceholder")}
                           rows={4}
                           {...field}
                           data-testid="textarea-description"
@@ -691,24 +698,24 @@ export default function AddProduct() {
             {/* Optional Details */}
             <Card>
               <CardContent className="p-4 space-y-4">
-                <h3 className="text-base font-semibold text-gray-900">Dettagli aggiuntivi (opzionale)</h3>
+                <h3 className="text-base font-semibold text-gray-900">{t("additionalDetailsOptional")}</h3>
 
                 <FormField
                   control={form.control}
                   name="color"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Colore</FormLabel>
+                      <FormLabel>{t("colorLabel")}</FormLabel>
                       <Select onValueChange={field.onChange} value={field.value || ""}>
                         <FormControl>
                           <SelectTrigger>
-                            <SelectValue placeholder="Seleziona colore" />
+                            <SelectValue placeholder={t("selectColor")} />
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
                           {colors.map((color) => (
                             <SelectItem key={color} value={color}>
-                              {color}
+                              {optionLabel(t, color)}
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -722,17 +729,17 @@ export default function AddProduct() {
                   name="material"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Materiale</FormLabel>
+                      <FormLabel>{t("materialLabel")}</FormLabel>
                       <Select onValueChange={field.onChange} value={field.value || ""}>
                         <FormControl>
                           <SelectTrigger>
-                            <SelectValue placeholder="Seleziona materiale" />
+                            <SelectValue placeholder={t("selectMaterial")} />
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
                           {materials.map((material) => (
                             <SelectItem key={material} value={material}>
-                              {material}
+                              {optionLabel(t, material)}
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -746,17 +753,17 @@ export default function AddProduct() {
                   name="season"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Stagione</FormLabel>
+                      <FormLabel>{t("seasonLabel")}</FormLabel>
                       <Select onValueChange={field.onChange} value={field.value || ""}>
                         <FormControl>
                           <SelectTrigger>
-                            <SelectValue placeholder="Seleziona stagione" />
+                            <SelectValue placeholder={t("selectSeason")} />
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
                           {seasons.map((season) => (
                             <SelectItem key={season.value} value={season.value}>
-                              {season.label}
+                              {optionLabel(t, season.value)}
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -770,16 +777,16 @@ export default function AddProduct() {
                   name="measurements"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Misure speciali</FormLabel>
+                      <FormLabel>{t("specialMeasurements")}</FormLabel>
                       <FormControl>
                         <Input 
-                          placeholder="es. Lunghezza 80cm, larghezza spalle 40cm"
+                          placeholder={t("measurementsPlaceholder")}
                           {...field}
                           value={field.value || ""}
                         />
                       </FormControl>
                       <p className="text-xs text-gray-500">
-                        Solo se non sono misure standard
+                        {t("specialMeasurementsHint")}
                       </p>
                     </FormItem>
                   )}
@@ -790,7 +797,7 @@ export default function AddProduct() {
                   name="vintedUrl"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Link Vinted</FormLabel>
+                      <FormLabel>{t("vintedLink")}</FormLabel>
                       <FormControl>
                         <Input 
                           placeholder="https://www.vinted.it/..."
@@ -799,7 +806,7 @@ export default function AddProduct() {
                         />
                       </FormControl>
                       <p className="text-xs text-gray-500">
-                        Se lo stesso articolo è anche su Vinted
+                        {t("vintedLinkHint")}
                       </p>
                     </FormItem>
                   )}
@@ -821,7 +828,7 @@ export default function AddProduct() {
                 {addProductMutation.isPending ? (
                   <div className="flex items-center">
                     <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                    Pubblicazione...
+                    {t("publishing")}
                   </div>
                 ) : (
                   "Pubblica Prodotto"
