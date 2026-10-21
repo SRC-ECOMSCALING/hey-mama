@@ -68,7 +68,7 @@ export class EmailService {
       <head>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Email Verification - HeyMama</title>
+        <title>Verifica la tua email - HeyMama</title>
         <style>
           body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; }
           .header { background: linear-gradient(135deg, #ec4899, #a855f7); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
@@ -80,48 +80,48 @@ export class EmailService {
       </head>
       <body>
         <div class="header">
-          <h1>🌸 Welcome to HeyMama! 🌸</h1>
-          <p>Please verify your email address</p>
+          <h1>🌸 Benvenuta su HeyMama! 🌸</h1>
+          <p>Conferma il tuo indirizzo email</p>
         </div>
         <div class="content">
-          <h2>Hello!</h2>
-          <p>Thank you for joining HeyMama, the community for mothers to connect and discover amazing places together!</p>
-          <p>To complete your registration, please enter this verification code in the app:</p>
+          <h2>Ciao!</h2>
+          <p>Grazie per esserti iscritta a HeyMama, la community dove le mamme si conoscono e scoprono insieme posti a misura di bambino!</p>
+          <p>Per completare la registrazione, inserisci questo codice nell'app:</p>
           
           <div class="code-box">
             <div class="verification-code">${verificationCode}</div>
           </div>
           
-          <p>This code will expire in 10 minutes for security reasons.</p>
-          <p>If you didn't create an account with HeyMama, please ignore this email.</p>
+          <p>Per sicurezza il codice scade tra 10 minuti.</p>
+          <p>Se non hai creato tu un account HeyMama, ignora questa email.</p>
         </div>
         <div class="footer">
-          <p>With love,<br>The HeyMama Team 💕</p>
+          <p>Con affetto,<br>Il team HeyMama 💕</p>
         </div>
       </body>
       </html>
     `;
 
     const textContent = `
-      Welcome to HeyMama!
+      Benvenuta su HeyMama!
       
-      Thank you for joining our community for mothers!
+      Grazie per esserti iscritta alla nostra community di mamme!
       
-      To complete your registration, please enter this verification code in the app:
+      Per completare la registrazione, inserisci questo codice nell'app:
       
       ${verificationCode}
       
-      This code will expire in 10 minutes.
+      Il codice scade tra 10 minuti.
       
-      If you didn't create an account with HeyMama, please ignore this email.
+      Se non hai creato tu un account HeyMama, ignora questa email.
       
-      With love,
-      The HeyMama Team
+      Con affetto,
+      Il team HeyMama
     `;
 
     await this.sendEmail({
       to: email,
-      subject: "Welcome to HeyMama! Please verify your email 🌸",
+      subject: "Benvenuta su HeyMama! Conferma la tua email 🌸",
       htmlContent,
       textContent
     });
