@@ -50,6 +50,10 @@ export default function Events() {
     visibility: "public" as "public" | "private",
   });
 
+  const { data: eventSettings } = useQuery<{ autoApprove: boolean }>({
+    queryKey: ["/api/events/settings"],
+  });
+
   const { data: events = [], isLoading } = useQuery<EventItem[]>({
     queryKey: ["/api/events"],
   });
@@ -284,7 +288,7 @@ export default function Events() {
                     </label>
                   </RadioGroup>
                 </div>
-                <p className="text-xs text-gray-500">{t("eventCreatedDesc")}</p>
+                <p className="text-xs text-gray-500">{eventSettings?.autoApprove ? t("eventGoesLiveHint") : t("eventCreatedDesc")}</p>
                 <Button
                   className="w-full text-white"
                   style={{ background: "linear-gradient(to right, var(--primary-pink), var(--accent-coral))" }}

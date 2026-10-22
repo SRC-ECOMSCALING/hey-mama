@@ -648,6 +648,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Global admin switch: when showTestProfiles is "false", test profiles are
   // hidden from discovery and the map for everyone.
+  // Events go live as soon as they're created unless an admin turns this off
+  // from the dashboard (on by default while the app is in testing).
+  const shouldAutoApproveEvents = async (): Promise<boolean> => {
+    try {
+      return (await storage.getSetting("autoApproveEvents")) !== "false";
+    } catch {
+      return false; // on a settings error, fall back to moderation
+    }
+  };
+
   const shouldShowTestProfiles = async (): Promise<boolean> => {
     try {
       return (await storage.getSetting("showTestProfiles")) !== "false";
@@ -2228,6 +2238,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Create an event. Admin events go live immediately; everyone else's wait
   // for admin approval.
+  // Lets the create-event form tell the user whether her event goes live now
+  app.get("/api/events/settings", requireAuth, async (_req, res) => {
+    res.json({ autoApprove: await shouldAutoApproveEvents() });
+  });
+
   app.post("/api/events", requireAuth, async (req: any, res) => {
     try {
       const user = await storage.getUserById(req.session.userId);
@@ -2235,14 +2250,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ...req.body,
         createdByUserId: req.session.userId,
       });
+      const autoApprove = isUserAdmin(user) || (await shouldAutoApproveEvents());
       const event = await storage.createEvent({
         ...eventData,
-        status: isUserAdmin(user) ? "approved" : "pending",
+        status: autoApprove ? "approved" : "pending",
       });
 
       // Let admins know there's an event waiting for moderation.
       // Fire-and-forget: the email must not delay the response.
-      if (!isUserAdmin(user)) {
+      if (!autoApprove) {
         (async () => {
           const creator = await describeUser(req.session.userId);
           await notifyAdminsOfReport("Nuovo evento in attesa di approvazione", [
@@ -2902,7 +2918,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/admin/settings", requireAdmin, async (_req, res) => {
     try {
       const showTestProfiles = (await storage.getSetting("showTestProfiles")) !== "false";
-      res.json({ showTestProfiles });
+      const autoApproveEvents = await shouldAutoApproveEvents();
+      res.json({ showTestProfiles, autoApproveEvents });
     } catch (error) {
       console.error("Admin settings error:", error);
       res.status(500).json({ message: "Failed to fetch settings" });
@@ -2911,12 +2928,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.patch("/api/admin/settings", requireAdmin, async (req, res) => {
     try {
-      const { showTestProfiles } = req.body;
-      if (typeof showTestProfiles !== "boolean") {
-        return res.status(400).json({ message: "showTestProfiles boolean is required" });
+      // Partial update: each toggle sends only its own key
+      const { showTestProfiles, autoApproveEvents } = req.body ?? {};
+      if (typeof showTestProfiles !== "boolean" && typeof autoApproveEvents !== "boolean") {
+        return res.status(400).json({ message: "showTestProfiles or autoApproveEvents boolean is required" });
       }
-      await storage.setSetting("showTestProfiles", String(showTestProfiles));
-      res.json({ showTestProfiles });
+      if (typeof showTestProfiles === "boolean") {
+        await storage.setSetting("showTestProfiles", String(showTestProfiles));
+      }
+      if (typeof autoApproveEvents === "boolean") {
+        await storage.setSetting("autoApproveEvents", String(autoApproveEvents));
+      }
+      res.json({
+        showTestProfiles: (await storage.getSetting("showTestProfiles")) !== "false",
+        autoApproveEvents: await shouldAutoApproveEvents(),
+      });
     } catch (error) {
       console.error("Admin settings update error:", error);
       res.status(500).json({ message: "Failed to update settings" });

@@ -95,7 +95,7 @@ export default function Admin() {
 
   const { data: stats } = useQuery<AdminStats>({ queryKey: ["/api/admin/stats"], enabled: isAdmin });
   const { data: adminUsers = [] } = useQuery<AdminUser[]>({ queryKey: ["/api/admin/users"], enabled: isAdmin });
-  const { data: settings } = useQuery<{ showTestProfiles: boolean }>({ queryKey: ["/api/admin/settings"], enabled: isAdmin });
+  const { data: settings } = useQuery<{ showTestProfiles: boolean; autoApproveEvents: boolean }>({ queryKey: ["/api/admin/settings"], enabled: isAdmin });
   const { data: adminLocations = [] } = useQuery<Location[]>({ queryKey: ["/api/admin/locations"], enabled: isAdmin });
   const { data: adminItems = [] } = useQuery<AdminItem[]>({ queryKey: ["/api/admin/marketplace"], enabled: isAdmin });
   const { data: adminServices = [] } = useQuery<AdminService[]>({ queryKey: ["/api/admin/services"], enabled: isAdmin });
@@ -138,12 +138,15 @@ export default function Admin() {
     onError: (e: any) => toast({ title: "Errore", description: e.message.replace(/^\d+:\s*/, ""), variant: "destructive" }),
   });
   const updateSettings = useMutation({
-    mutationFn: async (showTestProfiles: boolean) => (await apiRequest("PATCH", "/api/admin/settings", { showTestProfiles })).json(),
-    onSuccess: (data: any) => {
+    mutationFn: async (patch: { showTestProfiles?: boolean; autoApproveEvents?: boolean }) =>
+      (await apiRequest("PATCH", "/api/admin/settings", patch)).json(),
+    onSuccess: (data: any, patch) => {
       invalidateAll();
       toast({
         title: "Impostazioni salvate",
-        description: data.showTestProfiles ? "Profili test VISIBILI nell'app" : "Profili test NASCOSTI nell'app",
+        description: "autoApproveEvents" in patch
+          ? (data.autoApproveEvents ? "Eventi pubblicati SUBITO, senza approvazione" : "Eventi IN ATTESA della tua approvazione")
+          : (data.showTestProfiles ? "Profili test VISIBILI nell'app" : "Profili test NASCOSTI nell'app"),
       });
     },
     onError: () => toast({ title: "Errore", description: "Impossibile salvare", variant: "destructive" }),
@@ -270,9 +273,35 @@ export default function Admin() {
         </div>
         <Switch
           checked={settings?.showTestProfiles ?? true}
-          onCheckedChange={(c) => updateSettings.mutate(c)}
+          onCheckedChange={(c) => updateSettings.mutate({ showTestProfiles: c })}
           disabled={updateSettings.isPending || settings === undefined}
           data-testid="switch-show-test-profiles"
+        />
+      </CardContent>
+    </Card>
+  );
+
+  const EventApprovalCard = (
+    <Card className={settings?.autoApproveEvents ? "border-green-300 bg-green-50/60" : "border-gray-200"}>
+      <CardContent className="pt-6 flex items-start justify-between gap-4">
+        <div className="flex items-start gap-3">
+          <CalendarDays className={`w-6 h-6 mt-0.5 ${settings?.autoApproveEvents ? "text-green-600" : "text-gray-400"}`} />
+          <div>
+            <p className="font-semibold text-gray-900">Approvazione automatica eventi</p>
+            <p className="text-sm text-gray-500 max-w-md">
+              Attiva durante i test: gli eventi creati dalle utenti vanno online subito.
+              Disattiva quando l'app è live per approvarli tu, uno per uno, dalla sezione Eventi.
+            </p>
+            <p className={`text-sm font-medium mt-1 ${settings?.autoApproveEvents ? "text-green-600" : "text-gray-500"}`}>
+              Stato attuale: {settings?.autoApproveEvents ? "PUBBLICATI SUBITO" : "IN ATTESA DI APPROVAZIONE"}
+            </p>
+          </div>
+        </div>
+        <Switch
+          checked={settings?.autoApproveEvents ?? true}
+          onCheckedChange={(c) => updateSettings.mutate({ autoApproveEvents: c })}
+          disabled={updateSettings.isPending || settings === undefined}
+          data-testid="switch-auto-approve-events"
         />
       </CardContent>
     </Card>
@@ -364,6 +393,7 @@ export default function Admin() {
                 <StatCard icon={Wrench} label="Professionisti" value={stats?.professionals} />
               </div>
               {TestVisibilityCard}
+              {EventApprovalCard}
             </div>
           )}
 
@@ -618,6 +648,8 @@ export default function Admin() {
 
           {/* EVENTS */}
           {section === "events" && (
+            <div className="space-y-6 max-w-6xl">
+            {EventApprovalCard}
             <Card className="max-w-6xl">
               <CardHeader>
                 <CardTitle>Eventi ({adminEvents.length})</CardTitle>
@@ -693,6 +725,7 @@ export default function Admin() {
                 </Table>
               </CardContent>
             </Card>
+            </div>
           )}
 
           {/* MARKETPLACE */}
@@ -827,6 +860,7 @@ export default function Admin() {
           {section === "settings" && (
             <div className="space-y-6 max-w-3xl">
               {TestVisibilityCard}
+              {EventApprovalCard}
               <Card>
                 <CardHeader><CardTitle>Informazioni</CardTitle></CardHeader>
                 <CardContent className="text-sm text-gray-500 space-y-1">
