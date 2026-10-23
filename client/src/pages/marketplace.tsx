@@ -777,7 +777,7 @@ export default function Marketplace() {
             {userItems.length === 0 ? (
               <div className="text-center py-12">
                 <div className="text-gray-400 text-lg mb-2">{t("noProductsYet")}</div>
-                <div className="text-gray-500 text-sm">{t("noProductsYet")}</div>
+                <div className="text-gray-500 text-sm">{t("clickAddProduct")}</div>
               </div>
             ) : (
               <div className="space-y-4 mb-nav">
