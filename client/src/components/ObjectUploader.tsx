@@ -4,6 +4,7 @@ import Uppy from "@uppy/core";
 import { DashboardModal } from "@uppy/react";
 // Note: Uppy styles are loaded via CDN or should be imported in index.css
 import AwsS3 from "@uppy/aws-s3";
+import Compressor from "@uppy/compressor";
 import type { UploadResult } from "@uppy/core";
 import { Button } from "@/components/ui/button";
 
@@ -66,6 +67,9 @@ export function ObjectUploader({
       },
       autoProceed: false,
     })
+      // Shrink photos before upload: the backend runs on Vercel, whose
+      // functions reject request bodies over 4.5MB.
+      .use(Compressor, { quality: 0.8, maxWidth: 2048, maxHeight: 2048 })
       .use(AwsS3, {
         shouldUseMultipart: false,
         getUploadParameters: onGetUploadParameters,

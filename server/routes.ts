@@ -117,7 +117,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     store: new PgSession({
       pool: pgPool,
       tableName: 'session',
-      createTableIfMissing: true,
+      // The bundled Vercel function can't read connect-pg-simple's table.sql;
+      // the table already exists in production.
+      createTableIfMissing: !process.env.VERCEL,
     }),
     secret: SESSION_SECRET,
     resave: false,

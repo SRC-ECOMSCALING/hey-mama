@@ -1,0 +1,9 @@
+/node_modules
+/dist
+/ios
+/android
+/HeyMama
+/src
+/.env
+/.env.local
+/package-lock 2.json

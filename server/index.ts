@@ -1,65 +1,20 @@
 import "dotenv/config";
 
-import express, { type Request, Response, NextFunction } from "express";
+import express from "express";
 import nodePath from "path";
-import { registerRoutes } from "./routes";
+import { createApp } from "./app";
 import { serveStatic, log } from "./static";
 
-const app = express();
-// Railway (and any hosted proxy) terminates TLS in front of the app: without
-// trust proxy, req.secure is false and express-session never sets the secure
-// production cookie.
-app.set("trust proxy", 1);
-app.use(express.json());
-app.use(express.urlencoded({ extended: false }));
-// Repo images referenced by demo/seed profiles (/attached_assets/...): the
-// folder is tracked in git, so it sits next to dist/ (prod) and server/ (dev).
-app.use(
-  "/attached_assets",
-  express.static(nodePath.resolve(import.meta.dirname, "..", "attached_assets")),
-);
-
-app.use((req, res, next) => {
-  const start = Date.now();
-  const path = req.path;
-  let capturedJsonResponse: Record<string, any> | undefined = undefined;
-
-  const originalResJson = res.json;
-  res.json = function (bodyJson, ...args) {
-    capturedJsonResponse = bodyJson;
-    return originalResJson.apply(res, [bodyJson, ...args]);
-  };
-
-  res.on("finish", () => {
-    const duration = Date.now() - start;
-    if (path.startsWith("/api")) {
-      let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
-      if (capturedJsonResponse) {
-        logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
-      }
-
-      if (logLine.length > 80) {
-        logLine = logLine.slice(0, 79) + "…";
-      }
-
-      log(logLine);
-    }
-  });
-
-  next();
-});
-
 (async () => {
-  const server = await registerRoutes(app);
-
-  app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
-    const status = err.status || err.statusCode || 500;
-    const message = err.message || "Internal Server Error";
-
-    console.error("Request error:", err);
-    if (!res.headersSent) {
-      res.status(status).json({ message });
-    }
+  const { app, server } = await createApp({
+    // Repo images referenced by demo/seed profiles (/attached_assets/...): the
+    // folder is tracked in git, so it sits next to dist/ (prod) and server/ (dev).
+    // On Vercel they ship as static files instead.
+    beforeRoutes: (app) =>
+      app.use(
+        "/attached_assets",
+        express.static(nodePath.resolve(import.meta.dirname, "..", "attached_assets")),
+      ),
   });
 
   // importantly only setup vite in development and after
@@ -78,7 +33,7 @@ app.use((req, res, next) => {
   // this serves both the API and the client.
   // It is the only port that is not firewalled.
   const port = parseInt(process.env.PORT || '5000', 10);
-  // Bind to 0.0.0.0 so the server is reachable when hosted (Railway, etc.);
+  // Bind to 0.0.0.0 so the server is reachable when hosted;
   // falls back to localhost only if explicitly set via HOST.
   const host = process.env.HOST || "0.0.0.0";
   server.listen({

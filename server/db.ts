@@ -22,7 +22,9 @@ export const pool = new pg.Pool({
   connectionString: process.env.DATABASE_URL,
   ssl,
   // Connection pool configuration
-  max: 10,                    // Maximum number of clients in the pool
+  // On Vercel every function instance holds its own pool: keep it small so
+  // concurrent instances don't exhaust the Supabase pooler's connections.
+  max: Number(process.env.PG_POOL_MAX) || (process.env.VERCEL ? 3 : 10),
   idleTimeoutMillis: 30000,   // How long a client is allowed to remain idle
   connectionTimeoutMillis: 10000, // How long to wait for a connection
   maxUses: 7500,             // Maximum number of times a connection can be used
