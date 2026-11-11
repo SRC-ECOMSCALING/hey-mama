@@ -115,7 +115,7 @@ export default function ForgotPassword() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-pink-50 to-purple-50 p-4">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-pink-50 to-purple-50 px-4 safe-page">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
           <img src={heyMamaLogo} alt="HeyMama" className="h-12 mx-auto mb-4 object-contain" />

@@ -384,7 +384,7 @@ export default function Admin() {
       {/* Main */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Top bar */}
-        <header className="shrink-0 bg-white border-b border-gray-200 px-4 md:px-8 py-4 flex items-center justify-between gap-3">
+        <header className="shrink-0 bg-white border-b border-gray-200 px-4 md:px-8 pb-4 pt-[calc(1rem_+_env(safe-area-inset-top))] flex items-center justify-between gap-3">
           <h1 className="text-xl font-bold capitalize">{NAV.find((n) => n.key === section)?.label}</h1>
           {/* Mobile nav */}
           <div className="md:hidden">

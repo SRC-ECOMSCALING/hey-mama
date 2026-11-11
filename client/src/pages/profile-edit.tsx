@@ -195,7 +195,7 @@ export default function ProfileEdit() {
   // defaults and saving creates the profile (legacy accounts without one).
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-pink-50 to-purple-50 py-8 px-4">
+    <div className="min-h-screen bg-gradient-to-br from-pink-50 to-purple-50 px-4 safe-page">
       <div className="max-w-2xl mx-auto">
         <Card>
           <CardHeader className="text-center">

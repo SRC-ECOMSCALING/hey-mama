@@ -13,7 +13,7 @@ export function Sk({ className = "" }: SkProps) {
 // Fake sticky header with title + action circle
 function HeaderSkeleton() {
   return (
-    <div className="bg-white/85 backdrop-blur-xl shadow-sm sticky top-0 z-40 p-4 flex items-center gap-3">
+    <div className="bg-white/85 backdrop-blur-xl shadow-sm sticky top-0 z-40 p-4 pt-[calc(1rem_+_env(safe-area-inset-top))] flex items-center gap-3">
       <Sk className="h-9 w-9 rounded-full" />
       <div className="flex-1 space-y-2">
         <Sk className="h-4 w-32 rounded-md" />

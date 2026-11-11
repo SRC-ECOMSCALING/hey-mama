@@ -108,6 +108,14 @@ header.sticky {
   padding-bottom: env(safe-area-inset-bottom);
 }
 
+/* Full-screen pages without the shared sticky header (registration wizard,
+   profile edit, auth screens): keep the content clear of the status bar /
+   Dynamic Island at the top and the home indicator at the bottom. */
+.safe-page {
+  padding-top: calc(1.5rem + env(safe-area-inset-top));
+  padding-bottom: calc(1.5rem + env(safe-area-inset-bottom));
+}
+
 /* Bottom spacing for pages that show the floating bottom navigation:
    1rem gap + ~4rem bar height + 2rem breathing room, plus the device inset. */
 .pb-nav {

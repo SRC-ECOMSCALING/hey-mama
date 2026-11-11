@@ -298,7 +298,7 @@ export default function Register() {
   // ---------- Email verification screen ----------
   if (showVerification) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-pink-50 to-purple-50 py-8 px-4">
+      <div className="min-h-screen bg-gradient-to-br from-pink-50 to-purple-50 px-4 safe-page">
         <div className="max-w-md mx-auto">
           <Card className="rounded-3xl">
             <CardContent className="pt-8 space-y-6">
@@ -354,7 +354,7 @@ export default function Register() {
 
   // ---------- Wizard ----------
   return (
-    <div className="min-h-screen bg-gradient-to-br from-pink-50 to-purple-50 py-6 px-4">
+    <div className="min-h-screen bg-gradient-to-br from-pink-50 to-purple-50 px-4 safe-page">
       <div className="max-w-md mx-auto">
         <div className="flex items-center justify-between mb-4">
           {stepIndex > 0 ? (
