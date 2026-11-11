@@ -526,7 +526,9 @@ export default function Discover() {
             disableDefaultUI={true}
             streetViewControl={false}
             mapTypeControl={false}
-            zoomControl={true}
+            zoomControl={false}
+            cameraControl={false}
+            keyboardShortcuts={false}
             fullscreenControl={false}
             mapId="cb6dc0b32328db269be352c6"
             options={{ clickableIcons: false }}
