@@ -6,8 +6,16 @@ import { useLanguage } from "@/contexts/LanguageContext";
 interface User {
   id: string;
   email: string;
+  language?: "it" | "en";
+  accountType?: "mom" | "professional";
+  province?: string | null;
   termsAccepted?: boolean;
   isAdmin?: boolean;
+  suspended?: boolean;
+  suspendedReason?: string | null;
+  showActivity?: boolean;
+  pushConfigured?: boolean;
+  createdAt?: string;
 }
 
 export function useAuth() {
@@ -48,6 +56,7 @@ export function useAuth() {
     isLoading,
     isAuthenticated: !!user && !error,
     isAdmin: typedUser?.isAdmin === true,
+    isSuspended: typedUser?.suspended === true,
     // undefined while unknown; true/false once /api/auth/me has resolved
     termsAccepted: typedUser ? typedUser.termsAccepted === true : undefined,
     logout: () => logoutMutation.mutate(),

@@ -5,11 +5,14 @@ import { MapPin, Users, Heart, ExternalLink, ShoppingBag } from "lucide-react";
 import type { Profile } from "@shared/schema";
 import { useLanguage } from "@/contexts/LanguageContext";
 import ReportBlockControls from "@/components/report-block";
+import PhotoCarousel from "@/components/photo-carousel";
+import ActivityBadge from "@/components/activity-badge";
+import type { PublicProfile } from "@shared/schema";
 
 interface UserInfoModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  profile: Profile | null;
+  profile: (Profile & Partial<PublicProfile>) | null;
 }
 
 export default function UserInfoModal({ open, onOpenChange, profile }: UserInfoModalProps) {
@@ -34,10 +37,18 @@ export default function UserInfoModal({ open, onOpenChange, profile }: UserInfoM
         </DialogHeader>
 
         <div className="space-y-4 mt-4">
-          {/* Location */}
-          <div className="flex items-center gap-2 text-sm">
-            <MapPin className="h-4 w-4 text-gray-500" />
-            <span className="text-gray-600">{profile.location}</span>
+          {/* Every photo, not just the first */}
+          {(profile.photoUrls?.length ?? 0) > 1 && (
+            <PhotoCarousel photos={profile.photoUrls} alt={profile.firstName} className="h-56" rounded="rounded-xl" />
+          )}
+
+          {/* Location + activity */}
+          <div className="flex items-center justify-between gap-2 text-sm">
+            <div className="flex items-center gap-2 min-w-0">
+              <MapPin className="h-4 w-4 text-gray-500 shrink-0" />
+              <span className="text-gray-600 truncate">{profile.location}</span>
+            </div>
+            <ActivityBadge isOnline={profile.isOnline} activityBand={profile.activityBand} />
           </div>
 
           {/* Kids Info */}

@@ -2,6 +2,8 @@ import { raw, type Express } from "express";
 import { createServer, type Server } from "http";
 import { randomUUID } from "crypto";
 import { storage } from "./storage";
+import { notifyUser } from "./notify";
+import { isPushConfigured } from "./push";
 import {
   MAX_IMAGE_BYTES,
   ensureUploadedImagesTable,
@@ -11,7 +13,7 @@ import {
   requestBaseUrl,
   saveImage,
 } from "./imageStorage";
-import { insertSwipeSchema, insertMessageSchema, insertReviewSchema, insertLookingForPostSchema, insertServiceSchema, insertServiceLookingForPostSchema, insertLocationSchema, insertEventSchema, registrationSchema, loginSchema, updateProfileSchema, type Profile, type MarketplaceItem } from "@shared/schema";
+import { insertMessageSchema, insertReviewSchema, insertLookingForPostSchema, insertServiceSchema, insertServiceLookingForPostSchema, insertLocationSchema, insertEventSchema, registrationSchema, loginSchema, updateProfileSchema, type Profile, type PublicProfile, type ActivityBand, type MarketplaceItem, type Event } from "@shared/schema";
 import { z } from "zod";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
@@ -154,18 +156,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
   const isRecentlyActive = (lastActiveAt: Date | string | null | undefined) =>
     !!lastActiveAt && Date.now() - new Date(lastActiveAt).getTime() < ONLINE_WINDOW_MS;
 
+  // ===== Suspended accounts =====
+  // Admins can suspend an account: the user can still log in to read why (and
+  // delete the account), every other call is refused with code "suspended".
+  // Cached per instance so requireAuth doesn't hit the DB on every request.
+  const SUSPENSION_CACHE_MS = 60 * 1000;
+  const suspensionCache = new Map<string, { suspended: boolean; checkedAt: number }>();
+  const isSuspended = async (userId: string): Promise<boolean> => {
+    const cached = suspensionCache.get(userId);
+    if (cached && Date.now() - cached.checkedAt < SUSPENSION_CACHE_MS) return cached.suspended;
+    const user = await storage.getUserById(userId).catch(() => undefined);
+    const suspended = user?.isSuspended === true;
+    suspensionCache.set(userId, { suspended, checkedAt: Date.now() });
+    return suspended;
+  };
+  const SUSPENSION_EXEMPT_PATHS = new Set(["/api/auth/me", "/api/auth/logout", "/api/auth/account"]);
+
   // Authentication middleware
-  const requireAuth = (req: any, res: any, next: any) => {
-    console.log(`[AUTH] Session check for ${req.method} ${req.path}:`, {
-      sessionId: req.sessionID,
-      userId: req.session.userId,
-      hasSession: !!req.session
-    });
-    
+  const requireAuth = async (req: any, res: any, next: any) => {
     if (!req.session.userId) {
       return res.status(401).json({ message: "Authentication required" });
     }
+    try {
+      if (!SUSPENSION_EXEMPT_PATHS.has(req.path) && (await isSuspended(req.session.userId))) {
+        return res.status(403).json({ code: "suspended", message: "Account suspended" });
+      }
+    } catch (err: any) {
+      console.error("Suspension check failed:", err?.message || err);
+    }
     touchActivity(req.session.userId);
+    refreshHiddenActivity();
     next();
   };
 
@@ -214,14 +234,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
     return id ? `${requestBaseUrl(req)}/api/uploads/${id}` : url;
   };
 
+  // Activity band shown instead of exact timestamps: "today" / "this week" /
+  // nothing. Honest (never padded) and coarse (privacy). Users can hide it.
+  const activityBandOf = (lastActiveAt: Date | string | null | undefined): ActivityBand => {
+    if (!lastActiveAt) return null;
+    const age = Date.now() - new Date(lastActiveAt).getTime();
+    if (age < 24 * 60 * 60 * 1000) return "today";
+    if (age < 7 * 24 * 60 * 60 * 1000) return "week";
+    return null;
+  };
+
+  // Users who turned off "show my activity": refreshed every minute per instance
+  let hiddenActivityUsers = new Set<string>();
+  let hiddenActivityLoadedAt = 0;
+  const refreshHiddenActivity = () => {
+    if (Date.now() - hiddenActivityLoadedAt < 60 * 1000) return;
+    hiddenActivityLoadedAt = Date.now();
+    storage.getUserIdsWithActivityHidden()
+      .then((ids) => { hiddenActivityUsers = new Set(ids); })
+      .catch((err) => console.error("hidden-activity refresh failed:", err?.message || err));
+  };
+
+  // Public shape of another user's profile: image URLs normalized, presence
+  // derived from real activity (never the stale stored flag), exact
+  // timestamps replaced by a coarse band, no fake distance.
   const normalizeProfileImages = <T extends Profile | null | undefined>(req: any, profile: T): T => {
     if (!profile) return profile;
-    return {
+    const hidden = hiddenActivityUsers.has(profile.userId);
+    const normalized: PublicProfile = {
       ...profile,
-      // Derived from real activity, not the stale stored flag (see touchActivity)
-      isOnline: isRecentlyActive(profile.lastActiveAt),
+      isOnline: hidden ? false : isRecentlyActive(profile.lastActiveAt),
+      activityBand: hidden ? null : activityBandOf(profile.lastActiveAt),
+      lastActiveAt: null as unknown as Date,
+      distanceAway: "",
       photoUrls: (profile.photoUrls || []).map((u) => normalizeImageUrl(req, u) as string),
     };
+    return normalized as T;
   };
 
   const normalizeItemImages = <T extends MarketplaceItem | null | undefined>(req: any, item: T): T => {
@@ -282,6 +330,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         isEmailVerified: false
       });
       await storage.setTermsAccepted(user.id); // accepted via the registration form
+      announceNewMom(user.id, profile).catch(() => {});
       req.session.userId = user.id;
 
       return res.status(201).json({
@@ -442,6 +491,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         isEmailVerified: true
       });
       await storage.setTermsAccepted(user.id); // accepted via the registration form
+      announceNewMom(user.id, profile).catch(() => {});
 
       // Clear pending registration
       delete req.session.pendingRegistration;
@@ -483,8 +533,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         email: user.email,
         language: user.language || "it",
         accountType: profile?.accountType || "mom",
+        province: profile?.location || null,
         termsAccepted: !!user.termsAcceptedAt,
         isAdmin: isUserAdmin(user),
+        suspended: user.isSuspended === true,
+        suspendedReason: user.isSuspended ? user.suspendedReason ?? null : null,
+        showActivity: user.showActivity !== false,
+        pushConfigured: isPushConfigured(),
+        createdAt: user.createdAt,
       });
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch user" });
@@ -519,13 +575,99 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
 
-  // Create Stripe checkout session
+  // ===== User preferences =====
+  app.patch("/api/users/me/preferences", requireAuth, async (req: any, res) => {
+    try {
+      const { showActivity } = req.body || {};
+      if (typeof showActivity !== "boolean") {
+        return res.status(400).json({ message: "showActivity boolean is required" });
+      }
+      await storage.setShowActivity(req.session.userId, showActivity);
+      hiddenActivityLoadedAt = 0; // refresh the cache on the next request
+      res.json({ showActivity });
+    } catch (error) {
+      console.error("Preferences update error:", error);
+      res.status(500).json({ message: "Failed to update preferences" });
+    }
+  });
 
-  // Verify and activate subscription after successful Stripe checkout (no auth required)
+  // ===== Native push tokens =====
+  app.post("/api/push-tokens", requireAuth, async (req: any, res) => {
+    try {
+      const token = typeof req.body?.token === "string" ? req.body.token.trim() : "";
+      const platform = typeof req.body?.platform === "string" ? req.body.platform.trim() : "";
+      if (!token || token.length > 4096 || !["ios", "android", "web"].includes(platform)) {
+        return res.status(400).json({ message: "token and platform (ios|android|web) are required" });
+      }
+      await storage.upsertPushToken(req.session.userId, token, platform);
+      res.json({ ok: true, pushConfigured: isPushConfigured() });
+    } catch (error) {
+      console.error("Push token save error:", error);
+      res.status(500).json({ message: "Failed to save push token" });
+    }
+  });
 
+  app.delete("/api/push-tokens", requireAuth, async (req: any, res) => {
+    try {
+      const token = typeof req.body?.token === "string" ? req.body.token.trim() : "";
+      if (token) {
+        await storage.deletePushToken(token);
+      } else {
+        await storage.deletePushTokensForUser(req.session.userId);
+      }
+      res.json({ ok: true });
+    } catch (error) {
+      console.error("Push token delete error:", error);
+      res.status(500).json({ message: "Failed to delete push token" });
+    }
+  });
 
-  // Create Stripe customer portal session
+  // ===== Community density =====
+  // Aggregated counts only (no personal data), so the registration flow can
+  // show "N moms already here" before the account exists. Being honest about
+  // thin zones beats pretending the map is full.
+  const ZONE_OPEN_THRESHOLD = 20;
+  app.get("/api/community/stats", async (req, res) => {
+    try {
+      const province = typeof req.query.province === "string" ? req.query.province.trim() : "";
+      if (!province) {
+        return res.status(400).json({ message: "province is required" });
+      }
+      const stats = await storage.getProvinceStats(province);
+      res.json({
+        province,
+        ...stats,
+        openThreshold: ZONE_OPEN_THRESHOLD,
+        isOpenZone: stats.activeMoms14d >= ZONE_OPEN_THRESHOLD,
+      });
+    } catch (error) {
+      console.error("Community stats error:", error);
+      res.status(500).json({ message: "Failed to fetch community stats" });
+    }
+  });
 
+  // In-app heads-up to the moms of a province when a new mom joins while the
+  // zone is still small (no push: it's nice to know, not urgent).
+  const announceNewMom = async (userId: string, profile: Profile | undefined) => {
+    try {
+      if (!profile || profile.accountType === "professional" || !profile.location) return;
+      const stats = await storage.getProvinceStats(profile.location);
+      if (stats.totalMoms > 30) return;
+      const neighbours = (await storage.getMomUserIdsByProvince(profile.location)).filter((id) => id !== userId);
+      await Promise.all(neighbours.map((recipientId) =>
+        notifyUser({
+          recipientId,
+          senderId: userId,
+          type: "new_mom_nearby",
+          relatedId: null,
+          senderName: profile.firstName,
+          extra: profile.location,
+        }),
+      ));
+    } catch (err: any) {
+      console.error("announceNewMom failed:", err?.message || err);
+    }
+  };
 
   // Some profiles and listings still store photo URLs in the older
   // /objects/uploads/<uuid> shape; they resolve to the same stored images.
@@ -715,7 +857,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   };
 
-  const REPORT_TARGET_TYPES = ["profile", "marketplace_item", "service", "message", "review", "user_block"];
+  const REPORT_TARGET_TYPES = ["profile", "marketplace_item", "service", "message", "review", "user_block", "event"];
 
   // Flag objectionable content
   app.post("/api/reports", requireAuth, async (req: any, res) => {
@@ -818,21 +960,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get all profiles for discovery (requires active subscription)
-  app.get("/api/profiles/discover/:userId", requireAuth, async (req, res) => {
-    try {
-      const { userId } = req.params;
-      let profiles = await storage.getDiscoverableProfiles(userId);
-      if (!(await shouldShowTestProfiles())) {
-        profiles = profiles.filter((p) => !p.isTestProfile);
-      }
-      const blocked = await getBlockedSet(req.session.userId);
-      profiles = profiles.filter((p) => !blocked.has(p.userId));
-      res.json(profiles.map((p) => normalizeProfileImages(req, p)));
-    } catch (error) {
-      res.status(500).json({ message: "Failed to fetch profiles" });
-    }
-  });
+
 
   // Get mom profiles for map display (professionals are listed in "Intorno a te")
   app.get("/api/profiles/map", requireAuth, async (req, res) => {
@@ -935,7 +1063,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           kidsNumber: 0,
           kidsAges: [],
           hobbies: [],
-          distanceAway: "0 km",
+          distanceAway: "",
           ...updateData,
         } as any);
         return res.json(created);
@@ -951,77 +1079,101 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Create a swipe. A "like" sends a CONNECTION REQUEST (match.isMatch=false):
-  // messaging opens only after the other mom accepts. If she had already sent
-  // a request to us, liking her accepts it.
-  app.post("/api/swipes", requireAuth, async (req, res) => {
-    try {
-      // Always use the authenticated user as the actor (ignore client "current-user").
-      const parsed = insertSwipeSchema.parse(req.body);
-      const swipeData = { ...parsed, userId: (req as any).session.userId };
+  // ===== Connection requests =====
+  // "Connect" sends a REQUEST (matches.isMatch=false, optional note);
+  // messaging opens only after the other mom accepts. If she had already
+  // asked us, connecting back accepts her request.
+  const DECLINE_COOLDOWN_MS = 30 * 24 * 60 * 60 * 1000;
+  const NEW_ACCOUNT_WINDOW_MS = 48 * 60 * 60 * 1000;
+  const NEW_ACCOUNT_MAX_REQUESTS_24H = 10;
+  const NEW_ACCOUNT_MAX_MESSAGES_24H = 30;
+  const DAY_MS = 24 * 60 * 60 * 1000;
 
-      if (swipeData.targetUserId === swipeData.userId) {
-        return res.status(400).json({ message: "Cannot swipe on yourself" });
+  const isNewAccount = (user: { createdAt: Date | string } | undefined) =>
+    !!user && Date.now() - new Date(user.createdAt).getTime() < NEW_ACCOUNT_WINDOW_MS;
+
+  // Accepting: flip the flag, turn the attached note into the first chat
+  // message (so the conversation never starts empty) and notify the requester.
+  const acceptRequest = async (
+    match: { id: string; userId: string; matchedUserId: string; message: string | null },
+    accepterId: string,
+  ) => {
+    const accepted = (await storage.acceptMatch(match.id)) ?? { ...match, isMatch: true };
+    if (match.message?.trim()) {
+      const existing = await storage.getMessagesByMatch(match.id);
+      if (existing.length === 0) {
+        await storage
+          .createMessage({ matchId: match.id, senderId: match.userId, content: match.message.trim() })
+          .catch((err) => console.error("First message from request failed:", err?.message || err));
       }
+    }
+    await notifyUser({ recipientId: match.userId, senderId: accepterId, type: "match", relatedId: match.id });
+    return accepted;
+  };
 
-      const swipe = await storage.createSwipe(swipeData);
+  const connectSchema = z.object({
+    targetUserId: z.string().min(1),
+    message: z.string().trim().max(300).optional(),
+  });
 
-      let match = null;
-      if (swipeData.isLike) {
-        const existing = await storage.getMatch(swipeData.userId, swipeData.targetUserId);
-        if (existing && !existing.isMatch && existing.userId === swipeData.targetUserId) {
-          // She asked first — liking back accepts her request.
-          match = await storage.acceptMatch(existing.id) ?? existing;
-          try {
-            await storage.createNotification({
-              type: 'match',
-              senderId: swipeData.userId,
-              recipientId: swipeData.targetUserId,
-              message: 'La tua richiesta di connessione è stata accettata!',
-              relatedId: match.id,
-              isRead: false
-            });
-          } catch (notificationError) {
-            console.error("Error creating accept notification:", notificationError);
-          }
-        } else if (existing) {
-          match = existing;
-        } else {
-          match = await storage.createMatch({
-            userId: swipeData.userId,
-            matchedUserId: swipeData.targetUserId,
-            isMatch: false, // pending request until accepted
-          });
-          try {
-            await storage.createNotification({
-              type: 'connection_request',
-              senderId: swipeData.userId,
-              recipientId: swipeData.targetUserId,
-              message: 'Hai ricevuto una richiesta di connessione!',
-              relatedId: match.id,
-              isRead: false
-            });
-          } catch (notificationError) {
-            console.error("Error creating connection notification:", notificationError);
-          }
+  // Kept at /api/swipes for client compatibility: it is a connection request.
+  app.post("/api/swipes", requireAuth, async (req: any, res) => {
+    try {
+      const { targetUserId, message } = connectSchema.parse(req.body);
+      const userId: string = req.session.userId;
+
+      if (targetUserId === userId) {
+        return res.status(400).json({ message: "Cannot connect with yourself" });
+      }
+      if (await storage.isBlockedBetween(userId, targetUserId)) {
+        return res.status(403).json({ code: "blocked", message: "User is blocked" });
+      }
+      const target = await storage.getProfile(targetUserId);
+      if (!target) {
+        return res.status(404).json({ message: "Profile not found" });
+      }
+      // She declined us recently: no re-asking for a month
+      if (await storage.hasRecentDecline(targetUserId, userId, new Date(Date.now() - DECLINE_COOLDOWN_MS))) {
+        return res.status(429).json({ code: "declined_recently", message: "Request not available right now" });
+      }
+      // Brand-new accounts can't blast requests
+      const me = await storage.getUserById(userId);
+      if (isNewAccount(me)) {
+        const sent = await storage.countRequestsSentSince(userId, new Date(Date.now() - DAY_MS));
+        if (sent >= NEW_ACCOUNT_MAX_REQUESTS_24H) {
+          return res.status(429).json({ code: "rate_limited", message: "Too many requests today" });
         }
       }
 
+      let match;
+      const existing = await storage.getMatch(userId, targetUserId);
+      if (existing && !existing.isMatch && existing.userId === targetUserId) {
+        match = await acceptRequest(existing, userId);
+      } else if (existing) {
+        match = existing;
+      } else {
+        match = await storage.createMatch({
+          userId,
+          matchedUserId: targetUserId,
+          isMatch: false,
+          message: message?.trim() || null,
+        });
+        await notifyUser({ recipientId: targetUserId, senderId: userId, type: "connection_request", relatedId: match.id });
+      }
+
       res.json({
-        swipe,
         match,
         connected: !!match?.isMatch,
         requested: !!match && !match.isMatch,
       });
     } catch (error) {
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ message: "Invalid swipe data", errors: error.errors });
+        return res.status(400).json({ message: "Invalid request data", errors: error.errors });
       }
-      res.status(500).json({ message: "Failed to create swipe" });
+      console.error("Connection request error:", error);
+      res.status(500).json({ message: "Failed to send request" });
     }
   });
-
-  // ===== Connection requests =====
 
   // Incoming + outgoing pending requests for the current user
   app.get("/api/connections/requests", requireAuth, async (req: any, res) => {
@@ -1052,13 +1204,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Connection status per user id: 'connected' | 'pending_sent' | 'pending_received'.
-  // Used by the map (white/pink/photo markers) and the discover deck.
+  // Connection status per user id: 'connected' | 'pending_sent' |
+  // 'pending_received' | 'cooldown' (she declined us recently). Drives the
+  // map markers and the card button.
   app.get("/api/connections/status", requireAuth, async (req: any, res) => {
     try {
       const userId = req.session.userId;
-      const all = await storage.getMatchesByUser(userId);
+      const [all, decliners] = await Promise.all([
+        storage.getMatchesByUser(userId),
+        storage.getRecentDeclinersOf(userId, new Date(Date.now() - DECLINE_COOLDOWN_MS)),
+      ]);
       const statuses: Record<string, string> = {};
+      for (const id of decliners) statuses[id] = "cooldown";
       for (const m of all) {
         const otherId = m.userId === userId ? m.matchedUserId : m.userId;
         if (m.isMatch) {
@@ -1084,19 +1241,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (match.matchedUserId !== req.session.userId) {
         return res.status(403).json({ message: "Only the recipient can accept this request" });
       }
-      const accepted = await storage.acceptMatch(match.id);
-      try {
-        await storage.createNotification({
-          type: 'match',
-          senderId: req.session.userId,
-          recipientId: match.userId,
-          message: 'La tua richiesta di connessione è stata accettata!',
-          relatedId: match.id,
-          isRead: false,
-        });
-      } catch (notificationError) {
-        console.error("Error creating accept notification:", notificationError);
+      if (match.isMatch) {
+        return res.json(match);
       }
+      const accepted = await acceptRequest(match, req.session.userId);
       res.json(accepted);
     } catch (error) {
       console.error("Accept connection error:", error);
@@ -1104,7 +1252,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Decline an incoming request (or cancel one you sent)
+  // Decline an incoming request (remembered for a month so she can't be asked
+  // again right away) or cancel one you sent.
   app.post("/api/connections/:matchId/decline", requireAuth, async (req: any, res) => {
     try {
       const match = await storage.getMatchById(req.params.matchId);
@@ -1117,6 +1266,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       if (match.isMatch) {
         return res.status(400).json({ message: "Connection already accepted" });
+      }
+      if (match.matchedUserId === userId) {
+        await storage.recordDecline(userId, match.userId).catch((err) =>
+          console.error("recordDecline failed:", err?.message || err),
+        );
       }
       await storage.deleteMatch(match.id);
       res.json({ message: "Request removed" });
@@ -1302,31 +1456,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Send a message
-  app.post("/api/messages", async (req, res) => {
+  // Read state of a thread from the other side: when did SHE last open it.
+  // Lets the sender see "read" under her last message — free, by design.
+  app.get("/api/conversations/:matchId/read-state", requireAuth, async (req: any, res) => {
     try {
-      // Check authentication
-      if (!req.session.userId) {
-        return res.status(401).json({ message: "User not authenticated" });
+      const match = await storage.getMatchById(req.params.matchId);
+      if (!match) {
+        return res.status(404).json({ message: "Match not found" });
       }
+      const userId = req.session.userId;
+      if (match.userId !== userId && match.matchedUserId !== userId) {
+        return res.status(403).json({ message: "Not part of this match" });
+      }
+      const otherId = match.userId === userId ? match.matchedUserId : match.userId;
+      const reads = await storage.getConversationReads(otherId);
+      res.json({ otherLastReadAt: reads.get(`match:${match.id}`) ?? null });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch read state" });
+    }
+  });
 
+  // Send a message
+  app.post("/api/messages", requireAuth, async (req: any, res) => {
+    try {
       const messageData = insertMessageSchema.parse(req.body);
-      
+
       // Override senderId with session userId for security
       messageData.senderId = req.session.userId;
-      
+
       // Verify sender is a participant in the match
       const match = await storage.getMatchById(messageData.matchId);
       if (!match) {
         return res.status(404).json({ message: "Match not found" });
       }
-      
-      // Check if the current user is a participant in this match and it's confirmed
+
       if (match.userId !== messageData.senderId && match.matchedUserId !== messageData.senderId) {
         return res.status(403).json({ message: "Unauthorized to send message in this match" });
       }
-      
-      // Ensure this is a confirmed mutual match
+
+      // Ensure this is an accepted connection
       if (!match.isMatch) {
         return res.status(403).json({ message: "Cannot send message to unconfirmed match" });
       }
@@ -1337,24 +1505,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "User is blocked" });
       }
 
-      const message = await storage.createMessage(messageData);
-      
-      // Create notification for new message
-      try {
-        const recipientId = match.userId === messageData.senderId ? match.matchedUserId : match.userId;
-        await storage.createNotification({
-          type: 'message',
-          senderId: messageData.senderId,
-          recipientId: recipientId,
-          message: 'Hai ricevuto un nuovo messaggio!',
-          relatedId: message.id,
-          isRead: false
-        });
-      } catch (notificationError) {
-        console.error("Error creating message notification:", notificationError);
-        // Don't fail the message creation if notification fails
+      // Brand-new accounts can't flood
+      const me = await storage.getUserById(messageData.senderId);
+      if (isNewAccount(me)) {
+        const sent = await storage.countMessagesSentSince(messageData.senderId, new Date(Date.now() - DAY_MS));
+        if (sent >= NEW_ACCOUNT_MAX_MESSAGES_24H) {
+          return res.status(429).json({ code: "rate_limited", message: "Too many messages today" });
+        }
       }
-      
+
+      const message = await storage.createMessage(messageData);
+      await notifyUser({
+        recipientId: otherParticipantId,
+        senderId: messageData.senderId,
+        type: "message",
+        relatedId: match.id,
+      });
+
       res.json(message);
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -1365,22 +1532,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Notification API endpoints
-  
-  // Get notifications for current user
-  app.get("/api/notifications", requireAuth, async (req, res) => {
+  // ===== In-app notification center =====
+  // Rows are written by notifyUser (server/notify.ts). The list carries a
+  // small sender summary so the client can render "Giulia wants to connect"
+  // in the reader's language without extra requests.
+  app.get("/api/notifications", requireAuth, async (req: any, res) => {
     try {
       const blocked = await getBlockedSet(req.session.userId);
-      const notifications = (await storage.getNotificationsByUser(req.session.userId!))
-        .filter((n) => !blocked.has(n.senderId));
-      res.json(notifications);
+      const rows = (await storage.getNotificationsByUser(req.session.userId))
+        .filter((n) => !blocked.has(n.senderId))
+        .slice(0, 100);
+      const senderIds = Array.from(new Set(rows.map((n) => n.senderId)));
+      const senders = new Map<string, Profile | undefined>();
+      await Promise.all(
+        senderIds.map(async (id) => senders.set(id, await storage.getProfile(id).catch(() => undefined))),
+      );
+      res.json(rows.map((n) => {
+        const s = senders.get(n.senderId);
+        return {
+          ...n,
+          sender: s
+            ? {
+                userId: s.userId,
+                name: (s.businessName || s.firstName || "").trim(),
+                photoUrl: normalizeImageUrl(req, s.photoUrls?.[0] ?? null),
+              }
+            : null,
+        };
+      }));
     } catch (error) {
       console.error("Error fetching notifications:", error);
       res.status(500).json({ message: "Failed to fetch notifications" });
     }
   });
-  
-  // Get unread notification count for current user
+
   app.get("/api/notifications/unread-count", requireAuth, async (req, res) => {
     try {
       const unreadCount = await storage.getUnreadNotificationCount(req.session.userId!);
@@ -1390,18 +1575,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ message: "Failed to fetch unread notification count" });
     }
   });
-  
-  // Mark notification as read
+
+  // Opening the notification center clears the badge
+  app.put("/api/notifications/read-all", requireAuth, async (req: any, res) => {
+    try {
+      await storage.markAllNotificationsRead(req.session.userId);
+      res.json({ ok: true });
+    } catch (error) {
+      console.error("Error marking notifications read:", error);
+      res.status(500).json({ message: "Failed to mark notifications as read" });
+    }
+  });
+
   app.put("/api/notifications/:id/read", requireAuth, async (req, res) => {
     try {
-      // First, verify the notification belongs to the current user
       const notifications = await storage.getNotificationsByUser(req.session.userId!);
-      const userNotification = notifications.find(n => n.id === req.params.id);
-      
+      const userNotification = notifications.find((n) => n.id === req.params.id);
       if (!userNotification) {
         return res.status(404).json({ message: "Notification not found or unauthorized" });
       }
-      
       const notification = await storage.markNotificationAsRead(req.params.id);
       if (!notification) {
         return res.status(404).json({ message: "Notification not found" });
@@ -1695,30 +1887,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Update subscription plan (admin only: there is no self-serve payment flow,
-  // so nobody but an admin may flip subscription status)
-  app.put("/api/users/:userId/subscription", requireAdmin, async (req, res) => {
-    try {
-      const { userId } = req.params;
-      const { plan } = req.body;
-      
-      if (!plan || !['free', 'pro'].includes(plan)) {
-        return res.status(400).json({ message: "Invalid subscription plan" });
-      }
-      
-      const updatedUser = await storage.updateUserSubscription(userId, { subscriptionStatus: plan === 'pro' ? 'active' : 'inactive' });
-      if (!updatedUser) {
-        return res.status(404).json({ message: "User not found" });
-      }
-      
-      res.json({ 
-        message: `Subscription updated to ${plan}`,
-        user: updatedUser 
-      });
-    } catch (error) {
-      res.status(500).json({ message: "Failed to update subscription" });
-    }
-  });
 
 
   // Update user activity (keep them online). The client sends "current-user";
@@ -2193,6 +2361,55 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // ===== Community events =====
 
+  // RSVP summary for a set of events as seen by `userId`: counts, her own
+  // answer and a handful of attendee faces ("who else is coming").
+  const rsvpSummaries = async (req: any, eventIds: string[], userId: string) => {
+    const rows = await storage.getRsvpsForEvents(eventIds);
+    const byEvent = new Map<string, typeof rows>();
+    for (const r of rows) {
+      if (!byEvent.has(r.eventId)) byEvent.set(r.eventId, []);
+      byEvent.get(r.eventId)!.push(r);
+    }
+    const profileCache = new Map<string, Profile | undefined>();
+    const profileOf = async (id: string) => {
+      if (!profileCache.has(id)) profileCache.set(id, await storage.getProfile(id).catch(() => undefined));
+      return profileCache.get(id);
+    };
+    const result = new Map<string, { going: number; maybe: number; mine: string | null; attendees: any[] }>();
+    for (const eventId of eventIds) {
+      const list = byEvent.get(eventId) ?? [];
+      const going = list.filter((r) => r.status === "going");
+      const maybe = list.filter((r) => r.status === "maybe");
+      const mine = list.find((r) => r.userId === userId)?.status ?? null;
+      const attendees: any[] = [];
+      for (const r of [...going, ...maybe].slice(0, 6)) {
+        const p = await profileOf(r.userId);
+        if (!p) continue;
+        attendees.push({
+          userId: p.userId,
+          firstName: p.firstName,
+          photoUrl: normalizeImageUrl(req, p.photoUrls?.[0] ?? null),
+          status: r.status,
+        });
+      }
+      result.set(eventId, { going: going.length, maybe: maybe.length, mine, attendees });
+    }
+    return result;
+  };
+
+  // Own events always; otherwise approved and, for private ones, connected
+  // to the organizer. Blocked organizers are invisible.
+  const canSeeEvent = async (event: Event, userId: string): Promise<boolean> => {
+    if (event.createdByUserId === userId) return true;
+    if (event.status !== "approved") return false;
+    if (await storage.isBlockedBetween(userId, event.createdByUserId)) return false;
+    if (event.visibility === "private") {
+      const match = await storage.getMatch(userId, event.createdByUserId);
+      return !!match?.isMatch;
+    }
+    return true;
+  };
+
   // Events visible to the current user: own events (any status, so the
   // creator always sees pending/rejected states), approved public events, and
   // approved private events from accepted connections.
@@ -2218,6 +2435,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return true;
       });
 
+      const rsvps = await rsvpSummaries(req, visible.map((e) => e.id), userId);
       const withCreator = await Promise.all(
         visible.map(async (e) => {
           const creator = await storage.getProfile(e.createdByUserId);
@@ -2228,6 +2446,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
               ? (creator.businessName || `${creator.firstName} ${creator.lastName}`.trim())
               : "",
             creatorPhotoUrl: normalizeImageUrl(req, creator?.photoUrls?.[0] ?? null),
+            creatorIsProfessional: creator?.accountType === "professional",
+            rsvp: rsvps.get(e.id) ?? { going: 0, maybe: 0, mine: null, attendees: [] },
           };
         }),
       );
@@ -2238,23 +2458,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Create an event. Admin events go live immediately; everyone else's wait
-  // for admin approval.
   // Lets the create-event form tell the user whether her event goes live now
   app.get("/api/events/settings", requireAuth, async (_req, res) => {
     res.json({ autoApprove: await shouldAutoApproveEvents() });
   });
 
+  // Create an event. Admin events go live immediately; everyone else's follow
+  // the autoApproveEvents switch. A pin (coordinates or a HeyMama place)
+  // puts the event on the home map.
   app.post("/api/events", requireAuth, async (req: any, res) => {
     try {
       const user = await storage.getUserById(req.session.userId);
+      const profile = await storage.getProfile(req.session.userId).catch(() => undefined);
       const eventData = insertEventSchema.parse({
         ...req.body,
         createdByUserId: req.session.userId,
       });
+      // A place from our database carries its own coordinates
+      if (eventData.locationId && (!eventData.latitude || !eventData.longitude)) {
+        const place = await storage.getLocation(eventData.locationId);
+        const [lat, lng] = (place?.coordinates ?? "").split(",").map((c) => c.trim());
+        if (lat && lng) {
+          eventData.latitude = lat;
+          eventData.longitude = lng;
+        }
+      }
       const autoApprove = isUserAdmin(user) || (await shouldAutoApproveEvents());
       const event = await storage.createEvent({
         ...eventData,
+        province: profile?.location || null,
         status: autoApprove ? "approved" : "pending",
       });
 
@@ -2279,6 +2511,50 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       console.error("Create event error:", error);
       res.status(500).json({ message: "Failed to create event" });
+    }
+  });
+
+  // RSVP: "going" or "maybe". The organizer gets an in-app note for each
+  // "going" so she knows the meetup is real.
+  app.post("/api/events/:id/rsvp", requireAuth, async (req: any, res) => {
+    try {
+      const status = req.body?.status;
+      if (status !== "going" && status !== "maybe") {
+        return res.status(400).json({ message: "status must be 'going' or 'maybe'" });
+      }
+      const event = await storage.getEvent(req.params.id);
+      if (!event || !(await canSeeEvent(event, req.session.userId))) {
+        return res.status(404).json({ message: "Event not found" });
+      }
+      if (new Date(event.eventDate).getTime() < Date.now() - 24 * 60 * 60 * 1000) {
+        return res.status(400).json({ message: "Event already happened" });
+      }
+      await storage.setEventRsvp(event.id, req.session.userId, status);
+      if (status === "going" && event.createdByUserId !== req.session.userId) {
+        notifyUser({
+          recipientId: event.createdByUserId,
+          senderId: req.session.userId,
+          type: "event_rsvp",
+          relatedId: event.id,
+          extra: event.title,
+        }).catch(() => {});
+      }
+      const summary = (await rsvpSummaries(req, [event.id], req.session.userId)).get(event.id);
+      res.json(summary);
+    } catch (error) {
+      console.error("RSVP error:", error);
+      res.status(500).json({ message: "Failed to save RSVP" });
+    }
+  });
+
+  app.delete("/api/events/:id/rsvp", requireAuth, async (req: any, res) => {
+    try {
+      await storage.removeEventRsvp(req.params.id, req.session.userId);
+      const summary = (await rsvpSummaries(req, [req.params.id], req.session.userId)).get(req.params.id);
+      res.json(summary);
+    } catch (error) {
+      console.error("RSVP remove error:", error);
+      res.status(500).json({ message: "Failed to remove RSVP" });
     }
   });
 
@@ -2308,6 +2584,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         storage.getAllEvents(),
         storage.getAllProfiles(),
       ]);
+      const rsvps = await storage.getRsvpsForEvents(allEvents.map((e) => e.id));
       res.json(allEvents.map((e) => {
         const creator = allProfiles.find((p) => p.userId === e.createdByUserId);
         return {
@@ -2315,6 +2592,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           creatorName: creator
             ? (creator.businessName || `${creator.firstName} ${creator.lastName}`.trim())
             : "—",
+          goingCount: rsvps.filter((r) => r.eventId === e.id && r.status === "going").length,
         };
       }));
     } catch (error) {
@@ -2323,7 +2601,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Admin: approve/reject an event (creator is notified in-app)
+  // Admin: approve/reject an event (creator is notified in-app, approvals by push too)
   app.patch("/api/admin/events/:id", requireAdmin, async (req: any, res) => {
     try {
       const { status } = req.body;
@@ -2335,20 +2613,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Event not found" });
       }
       if (status !== "pending") {
-        try {
-          await storage.createNotification({
-            type: "event",
-            senderId: req.session.userId,
-            recipientId: event.createdByUserId,
-            message: status === "approved"
-              ? `Il tuo evento "${event.title}" è stato approvato!`
-              : `Il tuo evento "${event.title}" è stato rifiutato.`,
-            relatedId: event.id,
-            isRead: false,
-          });
-        } catch (notificationError) {
-          console.error("Event status notification error:", notificationError);
-        }
+        notifyUser({
+          recipientId: event.createdByUserId,
+          senderId: req.session.userId,
+          type: status === "approved" ? "event_approved" : "event_rejected",
+          relatedId: event.id,
+          extra: event.title,
+        }).catch(() => {});
       }
       res.json(event);
     } catch (error) {
@@ -2676,12 +2947,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
           isAdmin: isUserAdmin(u),
           // env-bootstrapped admins can't be demoted from the dashboard
           isEnvAdmin: isAdminEmail(u.email),
+          isSuspended: u.isSuspended === true,
+          suspendedReason: u.suspendedReason ?? null,
+          createdAt: u.createdAt,
           profile: profile
             ? {
                 id: profile.id,
                 firstName: profile.firstName,
                 lastName: profile.lastName,
                 location: profile.location,
+                accountType: profile.accountType,
                 isTestProfile: profile.isTestProfile,
                 createdAt: profile.createdAt,
               }
@@ -2692,6 +2967,48 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Admin users error:", error);
       res.status(500).json({ message: "Failed to fetch users" });
+    }
+  });
+
+  // Suspend / reinstate an account. The reason is shown to the user with the
+  // support address, so every suspension is explainable and appealable.
+  app.patch("/api/admin/users/:userId/suspend", requireAdmin, async (req: any, res) => {
+    try {
+      const { isSuspended, reason } = req.body || {};
+      if (typeof isSuspended !== "boolean") {
+        return res.status(400).json({ message: "isSuspended boolean is required" });
+      }
+      if (req.params.userId === req.session.userId) {
+        return res.status(400).json({ message: "Non puoi sospendere il tuo account" });
+      }
+      const target = await storage.getUserById(req.params.userId);
+      if (!target) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      if (isSuspended && isAdminEmail(target.email)) {
+        return res.status(400).json({ message: "Gli admin definiti via ADMIN_EMAILS non si sospendono da qui" });
+      }
+      const updated = await storage.setUserSuspended(
+        req.params.userId,
+        isSuspended,
+        typeof reason === "string" ? reason : null,
+      );
+      suspensionCache.delete(req.params.userId);
+      res.json({ id: updated?.id, isSuspended: updated?.isSuspended, suspendedReason: updated?.suspendedReason ?? null });
+    } catch (error) {
+      console.error("Admin suspend error:", error);
+      res.status(500).json({ message: "Failed to update suspension" });
+    }
+  });
+
+  // First-week metrics: the numbers that tell whether new moms actually reach
+  // a connection and a meetup, not just whether they signed up.
+  app.get("/api/admin/metrics", requireAdmin, async (_req, res) => {
+    try {
+      res.json(await storage.getFirstWeekMetrics());
+    } catch (error) {
+      console.error("Admin metrics error:", error);
+      res.status(500).json({ message: "Failed to compute metrics" });
     }
   });
 

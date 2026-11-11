@@ -10,12 +10,13 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Trash2, Loader2, Ban, Bell, MapPin, UserCircle, LogOut } from "lucide-react";
+import { Trash2, Loader2, Ban, Bell, Eye, UserCircle, LogOut } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Language } from "@/lib/translations";
 import { apiRequest } from "@/lib/queryClient";
-import { setToken } from "@/lib/config";
+import { setToken, isNative } from "@/lib/config";
+import { PUSH_ENABLED, enablePush, disablePush } from "@/lib/push";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import AppHeader from "@/components/app-header";
@@ -25,54 +26,63 @@ interface BlockWithProfile extends Block {
   profile: Profile | null;
 }
 
+const PUSH_PREF_KEY = "heymama.push";
+
 export default function Settings() {
   const { language, setLanguage, t } = useLanguage();
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  const { logout, isLoggingOut } = useAuth();
+  const { user, logout, isLoggingOut } = useAuth();
 
-  // Device preferences (stored locally, come from the old settings popup)
-  const [notifications, setNotifications] = useState(
-    () => typeof window !== "undefined" && localStorage.getItem("notifications") !== "disabled",
+  // Push: a device preference (the token lives on the server). Only the
+  // native app can receive push; the web shows an explanation instead.
+  const [pushOn, setPushOn] = useState(
+    () => typeof window !== "undefined" && localStorage.getItem(PUSH_PREF_KEY) === "on",
   );
-  const [geolocation, setGeolocation] = useState(
-    () => typeof window !== "undefined" && localStorage.getItem("geolocation") === "enabled",
-  );
+  const [pushBusy, setPushBusy] = useState(false);
+  const pushAvailable = PUSH_ENABLED && user?.pushConfigured !== false;
 
-  const handleNotificationToggle = async (checked: boolean) => {
-    if (checked && "Notification" in window) {
-      const permission = await Notification.requestPermission();
-      const granted = permission === "granted";
-      setNotifications(granted);
-      localStorage.setItem("notifications", granted ? "enabled" : "disabled");
-    } else {
-      setNotifications(false);
-      localStorage.setItem("notifications", "disabled");
+  const handlePushToggle = async (checked: boolean) => {
+    setPushBusy(true);
+    try {
+      if (checked) {
+        const outcome = await enablePush();
+        if (outcome === "granted") {
+          setPushOn(true);
+          localStorage.setItem(PUSH_PREF_KEY, "on");
+        } else {
+          setPushOn(false);
+          localStorage.setItem(PUSH_PREF_KEY, "off");
+          toast({
+            title: t("pushNotificationsLabel"),
+            description: outcome === "denied" ? t("pushPermissionDenied") : t("pushNotConfigured"),
+          });
+        }
+      } else {
+        await disablePush();
+        setPushOn(false);
+        localStorage.setItem(PUSH_PREF_KEY, "off");
+      }
+    } finally {
+      setPushBusy(false);
     }
   };
 
-  const handleGeolocationToggle = (checked: boolean) => {
-    if (checked && "geolocation" in navigator) {
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          setGeolocation(true);
-          localStorage.setItem("geolocation", "enabled");
-          localStorage.setItem("latitude", position.coords.latitude.toString());
-          localStorage.setItem("longitude", position.coords.longitude.toString());
-        },
-        () => {
-          setGeolocation(false);
-          localStorage.setItem("geolocation", "disabled");
-        },
-      );
-    } else {
-      setGeolocation(false);
-      localStorage.setItem("geolocation", "disabled");
-      localStorage.removeItem("latitude");
-      localStorage.removeItem("longitude");
-    }
-  };
+  // Privacy: hide "active today / this week" and the online dot from others
+  const showActivity = user?.showActivity !== false;
+  const updateActivityPref = useMutation({
+    mutationFn: async (value: boolean) => {
+      const res = await apiRequest("PATCH", "/api/users/me/preferences", { showActivity: value });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+    },
+    onError: () => {
+      toast({ title: t("error"), description: t("somethingWentWrong"), variant: "destructive" });
+    },
+  });
 
   const { data: blockedUsers = [] } = useQuery<BlockWithProfile[]>({
     queryKey: ["/api/blocks"],
@@ -148,38 +158,47 @@ export default function Settings() {
           </CardContent>
         </Card>
 
-        {/* Device preferences */}
+        {/* Notifications + privacy */}
         <Card data-testid="card-device-settings">
           <CardContent className="pt-6 space-y-5">
             <div className="flex items-center gap-3">
               <Bell className="h-5 w-5 text-gray-500 shrink-0" />
               <div className="flex-1 min-w-0">
-                <Label htmlFor="notifications" className="font-medium text-gray-900">
-                  {t("notifications")}
+                <Label htmlFor="push" className="font-medium text-gray-900">
+                  {t("pushNotificationsLabel")}
                 </Label>
-                <p className="text-sm text-gray-500">{t("notificationsSettingDescription")}</p>
+                <p className="text-sm text-gray-500">{t("pushNotificationsDescription")}</p>
+                {!isNative ? (
+                  <p className="text-xs text-gray-400 mt-1">{t("pushWebOnly")}</p>
+                ) : !pushAvailable ? (
+                  <p className="text-xs text-gray-400 mt-1">{t("pushNotConfigured")}</p>
+                ) : null}
               </div>
               <Switch
-                id="notifications"
-                checked={notifications}
-                onCheckedChange={handleNotificationToggle}
+                id="push"
+                checked={pushOn}
+                disabled={!isNative || !pushAvailable || pushBusy}
+                onCheckedChange={handlePushToggle}
                 className="shrink-0"
+                data-testid="switch-push"
               />
             </div>
             <Separator />
             <div className="flex items-center gap-3">
-              <MapPin className="h-5 w-5 text-gray-500 shrink-0" />
+              <Eye className="h-5 w-5 text-gray-500 shrink-0" />
               <div className="flex-1 min-w-0">
-                <Label htmlFor="geolocation" className="font-medium text-gray-900">
-                  {t("locationServices")}
+                <Label htmlFor="show-activity" className="font-medium text-gray-900">
+                  {t("showActivityLabel")}
                 </Label>
-                <p className="text-sm text-gray-500">{t("locationServicesDescription")}</p>
+                <p className="text-sm text-gray-500">{t("showActivityDescription")}</p>
               </div>
               <Switch
-                id="geolocation"
-                checked={geolocation}
-                onCheckedChange={handleGeolocationToggle}
+                id="show-activity"
+                checked={showActivity}
+                disabled={updateActivityPref.isPending || !user}
+                onCheckedChange={(c) => updateActivityPref.mutate(c)}
                 className="shrink-0"
+                data-testid="switch-show-activity"
               />
             </div>
           </CardContent>

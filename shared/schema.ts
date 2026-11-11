@@ -25,6 +25,14 @@ export const users = pgTable("users", {
   termsAcceptedAt: timestamp("terms_accepted_at"),
   // Admin granted from the dashboard (in addition to ADMIN_EMAILS env bootstrap)
   isAdmin: boolean("is_admin").default(false).notNull(),
+  // Moderation: a suspended account can log in only to read the suspension
+  // notice; every other authenticated call is refused (see requireAuth).
+  isSuspended: boolean("is_suspended").default(false).notNull(),
+  suspendedReason: text("suspended_reason"),
+  suspendedAt: timestamp("suspended_at"),
+  // Privacy: when false the "active today / this week" badges and the online
+  // dot are hidden from other users.
+  showActivity: boolean("show_activity").default(true).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -67,13 +75,42 @@ export const appSettings = pgTable("app_settings", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
+// A row is a connection request from userId to matchedUserId; isMatch flips
+// to true (and acceptedAt is set) when the recipient accepts.
 export const matches = pgTable("matches", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull(),
   matchedUserId: varchar("matched_user_id").notNull(),
   isMatch: boolean("is_match").default(false).notNull(),
+  // Optional note attached to the request; becomes the first chat message
+  // once the connection is accepted.
+  message: text("message"),
+  acceptedAt: timestamp("accepted_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
+
+// Memory of declined requests: the requester can't ask the same mom again
+// for a cooldown period (the match row itself is deleted on decline).
+export const connectionDeclines = pgTable("connection_declines", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull(), // who declined
+  declinedUserId: varchar("declined_user_id").notNull(), // whose request was declined
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type ConnectionDecline = typeof connectionDeclines.$inferSelect;
+
+// Native push tokens (APNs via FCM / FCM), one row per device token.
+export const pushTokens = pgTable("push_tokens", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull(),
+  token: text("token").notNull().unique(),
+  platform: varchar("platform").notNull(), // 'ios' | 'android' | 'web'
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export type PushToken = typeof pushTokens.$inferSelect;
 
 export const messages = pgTable("messages", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -237,6 +274,13 @@ export const events = pgTable("events", {
   eventDate: timestamp("event_date").notNull(),
   location: text("location").notNull(), // free-text place (e.g. "Biblioteca Salaborsa, Bologna")
   link: text("link"), // optional website / registration link
+  // Map pin: either a HeyMama place (locationId) or coordinates picked from
+  // the address search. Both optional: a text-only event has no pin.
+  locationId: varchar("location_id"),
+  latitude: text("latitude"),
+  longitude: text("longitude"),
+  // Organizer's province at creation, for zone-level counts and filters
+  province: text("province"),
   // 'public' = whole community, 'private' = only the organizer's connections
   visibility: varchar("visibility").default("public").notNull(),
   // 'pending' | 'approved' | 'rejected' — events go live only when approved
@@ -248,6 +292,7 @@ export const insertEventSchema = createInsertSchema(events).omit({
   id: true,
   createdAt: true,
   status: true,
+  province: true,
 }).extend({
   eventDate: z.coerce.date(),
   visibility: z.enum(["public", "private"]).default("public"),
@@ -255,6 +300,18 @@ export const insertEventSchema = createInsertSchema(events).omit({
 
 export type Event = typeof events.$inferSelect;
 export type InsertEvent = z.infer<typeof insertEventSchema>;
+
+// RSVP: "going" or "maybe", one per (event, user). Attendee lists are the
+// "who else is coming" signal that turns an event into a reason to show up.
+export const eventRsvps = pgTable("event_rsvps", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  eventId: varchar("event_id").notNull(),
+  userId: varchar("user_id").notNull(),
+  status: varchar("status").default("going").notNull(), // 'going' | 'maybe'
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type EventRsvp = typeof eventRsvps.$inferSelect;
 
 export const insertMarketplaceItemSchema = createInsertSchema(marketplaceItems).omit({
   id: true,
@@ -294,6 +351,10 @@ export const insertReviewSchema = createInsertSchema(reviews).omit({
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type Profile = typeof profiles.$inferSelect;
+// Shape the API returns for OTHER users' profiles: exact activity timestamps
+// are replaced by a coarse band (null when older than a week or hidden).
+export type ActivityBand = "today" | "week" | null;
+export type PublicProfile = Profile & { activityBand?: ActivityBand };
 export type InsertProfile = z.infer<typeof insertProfileSchema>;
 export type UpdateProfile = z.infer<typeof updateProfileSchema>;
 export type Registration = z.infer<typeof registrationSchema>;

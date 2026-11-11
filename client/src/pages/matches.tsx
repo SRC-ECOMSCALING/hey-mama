@@ -6,11 +6,13 @@ import { useLocation } from "wouter";
 import { useState } from "react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { Match, Profile } from "@shared/schema";
+import type { Match, PublicProfile as Profile } from "@shared/schema";
 import { useLanguage } from "@/contexts/LanguageContext";
 import ReportBlockControls from "@/components/report-block";
 import PageSkeleton from "@/components/page-skeleton";
 import AppHeader from "@/components/app-header";
+import ActivityBadge from "@/components/activity-badge";
+import PhotoCarousel from "@/components/photo-carousel";
 
 const CURRENT_USER_ID = "current-user";
 
@@ -34,6 +36,7 @@ export default function Matches() {
   interface ConnectionRequest extends Match {
     otherUserId: string;
     profile: Profile;
+    message: string | null;
   }
 
   // Pending connection requests (incoming must be accepted before messaging)
@@ -146,6 +149,12 @@ export default function Matches() {
                       {req.profile?.firstName} {req.profile?.lastName}
                     </h3>
                     <p className="text-xs text-gray-500 truncate">{req.profile?.location}</p>
+                    <ActivityBadge isOnline={req.profile?.isOnline} activityBand={req.profile?.activityBand} className="mt-1" />
+                    {req.message && (
+                      <p className="text-sm text-gray-700 mt-2 bg-pink-50/70 rounded-xl px-3 py-2 italic" data-testid={`request-message-${req.id}`}>
+                        “{req.message}”
+                      </p>
+                    )}
                   </div>
                   <div className="flex gap-2 shrink-0">
                     <Button
@@ -227,7 +236,7 @@ export default function Matches() {
           <div className="text-center py-12">
             <div className="text-6xl mb-4">💕</div>
             <h2 className="text-2xl font-bold text-gray-800 mb-2">{t("noMatchesYet")}</h2>
-            <p className="text-gray-600">{t("keepSwiping")}</p>
+            <p className="text-gray-600">{t("noMatchesHint")}</p>
           </div>
         ) : (
           <div className="space-y-4">
@@ -320,19 +329,20 @@ export default function Matches() {
             </DialogHeader>
             
             <div className="space-y-4">
-              {/* Profile Image */}
-              <div className="w-full h-64 rounded-lg overflow-hidden">
-                <img
-                  src={selectedProfile.photoUrls[0]}
-                  alt={`${selectedProfile.firstName} ${selectedProfile.lastName}`}
-                  className="w-full h-full object-cover"
-                />
-              </div>
-              
-              {/* Location */}
-              <div className="flex items-center gap-2">
-                <MapPin className="h-4 w-4 text-gray-400" />
-                <span className="text-sm text-gray-600">{selectedProfile.location} • {selectedProfile.distanceAway}</span>
+              {/* Photos */}
+              <PhotoCarousel
+                photos={selectedProfile.photoUrls}
+                alt={`${selectedProfile.firstName} ${selectedProfile.lastName}`}
+                className="h-64"
+              />
+
+              {/* Location + activity */}
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  <MapPin className="h-4 w-4 text-gray-400 shrink-0" />
+                  <span className="text-sm text-gray-600 truncate">{selectedProfile.location}</span>
+                </div>
+                <ActivityBadge isOnline={selectedProfile.isOnline} activityBand={selectedProfile.activityBand} />
               </div>
               
               {/* Kids Info */}

@@ -2,7 +2,7 @@ import { type User, type InsertUser, type Profile, type InsertProfile, type Matc
 import bcrypt from "bcryptjs";
 import { coordinatesForProvince } from "@shared/provinces";
 import { db, withDbRetry } from "./db";
-import { eq, and, or, ne, notInArray, ilike, sql } from "drizzle-orm";
+import { eq, and, or, ne, ilike, inArray, gte, sql } from "drizzle-orm";
 import {
   users,
   profiles,
@@ -22,7 +22,12 @@ import {
   blocks,
   reports,
   events,
+  eventRsvps,
   conversationReads,
+  connectionDeclines,
+  pushTokens,
+  type EventRsvp,
+  type PushToken,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -46,9 +51,6 @@ export interface IStorage {
   // Message operations
   createMessage(message: InsertMessage): Promise<Message>;
   getMessagesByMatch(matchId: string): Promise<Message[]>;
-
-  // Discovery operations
-  getDiscoverableProfiles(userId: string): Promise<Profile[]>;
 
   // Location operations
   getAllLocations(): Promise<Location[]>;
@@ -352,6 +354,33 @@ export class DatabaseStorage implements IStorage {
     return user;
   }
 
+  // Moderation: suspend (with a reason shown to the user) or reinstate.
+  async setUserSuspended(userId: string, isSuspended: boolean, reason?: string | null): Promise<User | undefined> {
+    const [user] = await this.db.update(users)
+      .set({
+        isSuspended,
+        suspendedReason: isSuspended ? (reason?.trim() || null) : null,
+        suspendedAt: isSuspended ? new Date() : null,
+        updatedAt: new Date(),
+      })
+      .where(eq(users.id, userId))
+      .returning();
+    return user;
+  }
+
+  async getUserIdsWithActivityHidden(): Promise<string[]> {
+    const rows = await this.db.select({ id: users.id }).from(users).where(eq(users.showActivity, false));
+    return rows.map((r) => r.id);
+  }
+
+  async setShowActivity(userId: string, showActivity: boolean): Promise<User | undefined> {
+    const [user] = await this.db.update(users)
+      .set({ showActivity, updatedAt: new Date() })
+      .where(eq(users.id, userId))
+      .returning();
+    return user;
+  }
+
   // Record that the user accepted the Terms of Use + Privacy Policy.
   async setTermsAccepted(userId: string): Promise<User | undefined> {
     const [user] = await this.db.update(users)
@@ -378,7 +407,7 @@ export class DatabaseStorage implements IStorage {
       kidsNumber: 0,
       kidsAges: [],
       hobbies: [],
-      distanceAway: "0 km",
+      distanceAway: "",
     } as any);
   }
 
@@ -474,7 +503,7 @@ export class DatabaseStorage implements IStorage {
       kidsAges: registrationData.kidsAges,
       kidsGenders: registrationData.kidsGenders ?? [],
       hobbies: registrationData.hobbies,
-      distanceAway: "0 km",
+      distanceAway: "",
     }).returning();
 
     return { user, profile };
@@ -528,29 +557,35 @@ export class DatabaseStorage implements IStorage {
     await this.db.delete(profiles).where(eq(profiles.userId, id));
   }
 
-  async getDiscoverableProfiles(userId: string): Promise<Profile[]> {
-    const swipedUserIds = await this.db.select({ targetUserId: swipes.targetUserId })
-      .from(swipes)
-      .where(eq(swipes.userId, userId));
-
-    const swipedIds = swipedUserIds.map(s => s.targetUserId);
-
-    const discoveryProfiles = await this.db.select()
-      .from(profiles)
-      .where(and(
-        ne(profiles.userId, userId),
-        ne(profiles.accountType, "professional"), // professionals never appear in the swipe deck
-        swipedIds.length > 0 ? notInArray(profiles.userId, swipedIds) : undefined
-      ))
-      .limit(10);
-
-    return discoveryProfiles;
-  }
-
   // Mom profiles only (for the map); professionals live in "Intorno a te".
   async getAllMomProfiles(): Promise<Profile[]> {
     return this.db.select().from(profiles)
       .where(ne(profiles.accountType, "professional"));
+  }
+
+  // Honest density signal for a province: how many moms live there and how
+  // many opened the app in the last two weeks.
+  async getProvinceStats(province: string): Promise<{ totalMoms: number; activeMoms14d: number }> {
+    const since = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000);
+    const [row] = await this.db
+      .select({
+        total: sql<number>`count(*)::int`,
+        active: sql<number>`count(*) filter (where ${profiles.lastActiveAt} >= ${since})::int`,
+      })
+      .from(profiles)
+      .where(and(
+        ne(profiles.accountType, "professional"),
+        eq(profiles.isTestProfile, false),
+        eq(profiles.location, province),
+      ));
+    return { totalMoms: row?.total ?? 0, activeMoms14d: row?.active ?? 0 };
+  }
+
+  // Moms in a province (ids only), e.g. to tell them a new mom joined nearby
+  async getMomUserIdsByProvince(province: string): Promise<string[]> {
+    const rows = await this.db.select({ userId: profiles.userId }).from(profiles)
+      .where(and(ne(profiles.accountType, "professional"), eq(profiles.location, province)));
+    return rows.map((r) => r.userId);
   }
 
   async getProfessionalProfiles(): Promise<Profile[]> {
@@ -605,7 +640,7 @@ export class DatabaseStorage implements IStorage {
   // matchedUserId; accepting flips isMatch to true and enables messaging.
   async acceptMatch(matchId: string): Promise<Match | undefined> {
     const [match] = await this.db.update(matches)
-      .set({ isMatch: true })
+      .set({ isMatch: true, acceptedAt: new Date() })
       .where(eq(matches.id, matchId))
       .returning();
     return match;
@@ -627,8 +662,67 @@ export class DatabaseStorage implements IStorage {
       .where(and(eq(matches.userId, userId), eq(matches.isMatch, false)));
   }
 
+  // ===== Decline memory =====
+  async recordDecline(userId: string, declinedUserId: string): Promise<void> {
+    await this.db.insert(connectionDeclines).values({ userId, declinedUserId });
+  }
+
+  // Has `declinerId` declined `requesterId` since `since`?
+  async hasRecentDecline(declinerId: string, requesterId: string, since: Date): Promise<boolean> {
+    const [row] = await this.db.select({ id: connectionDeclines.id }).from(connectionDeclines)
+      .where(and(
+        eq(connectionDeclines.userId, declinerId),
+        eq(connectionDeclines.declinedUserId, requesterId),
+        gte(connectionDeclines.createdAt, since),
+      ))
+      .limit(1);
+    return !!row;
+  }
+
+  // Ids of users who declined `requesterId` since `since` (to grey out their cards)
+  async getRecentDeclinersOf(requesterId: string, since: Date): Promise<string[]> {
+    const rows = await this.db.select({ userId: connectionDeclines.userId }).from(connectionDeclines)
+      .where(and(eq(connectionDeclines.declinedUserId, requesterId), gte(connectionDeclines.createdAt, since)));
+    return Array.from(new Set(rows.map((r) => r.userId)));
+  }
+
+  // New-account rate limits
+  async countRequestsSentSince(userId: string, since: Date): Promise<number> {
+    const [row] = await this.db.select({ n: sql<number>`count(*)::int` }).from(matches)
+      .where(and(eq(matches.userId, userId), gte(matches.createdAt, since)));
+    return row?.n ?? 0;
+  }
+
+  async countMessagesSentSince(userId: string, since: Date): Promise<number> {
+    const [row] = await this.db.select({ n: sql<number>`count(*)::int` }).from(messages)
+      .where(and(eq(messages.senderId, userId), gte(messages.createdAt, since)));
+    return row?.n ?? 0;
+  }
+
+  // ===== Push tokens =====
+  async upsertPushToken(userId: string, token: string, platform: string): Promise<void> {
+    await this.db.insert(pushTokens)
+      .values({ userId, token, platform, updatedAt: new Date() })
+      .onConflictDoUpdate({
+        target: pushTokens.token,
+        set: { userId, platform, updatedAt: new Date() }, // token moved to another account
+      });
+  }
+
+  async getPushTokens(userId: string): Promise<PushToken[]> {
+    return this.db.select().from(pushTokens).where(eq(pushTokens.userId, userId));
+  }
+
+  async deletePushToken(token: string): Promise<void> {
+    await this.db.delete(pushTokens).where(eq(pushTokens.token, token));
+  }
+
+  async deletePushTokensForUser(userId: string): Promise<void> {
+    await this.db.delete(pushTokens).where(eq(pushTokens.userId, userId));
+  }
+
   // ===== Events =====
-  async createEvent(event: InsertEvent & { status?: string }): Promise<Event> {
+  async createEvent(event: InsertEvent & { status?: string; province?: string | null }): Promise<Event> {
     const [newEvent] = await this.db.insert(events).values(event).returning();
     return newEvent;
   }
@@ -652,6 +746,33 @@ export class DatabaseStorage implements IStorage {
 
   async deleteEvent(id: string): Promise<void> {
     await this.db.delete(events).where(eq(events.id, id));
+    await this.db.delete(eventRsvps).where(eq(eventRsvps.eventId, id));
+  }
+
+  // ===== Event RSVPs =====
+  async setEventRsvp(eventId: string, userId: string, status: "going" | "maybe"): Promise<EventRsvp> {
+    const [row] = await this.db.insert(eventRsvps)
+      .values({ eventId, userId, status })
+      .onConflictDoUpdate({
+        target: [eventRsvps.eventId, eventRsvps.userId],
+        set: { status, createdAt: new Date() },
+      })
+      .returning();
+    return row;
+  }
+
+  async removeEventRsvp(eventId: string, userId: string): Promise<void> {
+    await this.db.delete(eventRsvps)
+      .where(and(eq(eventRsvps.eventId, eventId), eq(eventRsvps.userId, userId)));
+  }
+
+  async getRsvpsForEvents(eventIds: string[]): Promise<EventRsvp[]> {
+    if (eventIds.length === 0) return [];
+    return this.db.select().from(eventRsvps).where(inArray(eventRsvps.eventId, eventIds));
+  }
+
+  async getRsvpsByUser(userId: string): Promise<EventRsvp[]> {
+    return this.db.select().from(eventRsvps).where(eq(eventRsvps.userId, userId));
   }
 
   async updateUserActivity(userId: string): Promise<void> {
@@ -1020,8 +1141,11 @@ export class DatabaseStorage implements IStorage {
     await this.db.delete(swipes).where(or(eq(swipes.userId, userId), eq(swipes.targetUserId, userId)));
     await this.db.delete(blocks).where(or(eq(blocks.blockerId, userId), eq(blocks.blockedId, userId)));
     await this.db.delete(events).where(eq(events.createdByUserId, userId));
+    await this.db.delete(eventRsvps).where(eq(eventRsvps.userId, userId));
     await this.db.delete(reports).where(eq(reports.reporterId, userId));
     await this.db.delete(conversationReads).where(eq(conversationReads.userId, userId));
+    await this.db.delete(connectionDeclines).where(or(eq(connectionDeclines.userId, userId), eq(connectionDeclines.declinedUserId, userId)));
+    await this.db.delete(pushTokens).where(eq(pushTokens.userId, userId));
     await this.db.delete(profiles).where(eq(profiles.userId, userId));
     await this.db.delete(users).where(eq(users.id, userId));
   }
@@ -1056,6 +1180,90 @@ export class DatabaseStorage implements IStorage {
       .from(notifications)
       .where(and(eq(notifications.recipientId, userId), eq(notifications.isRead, false)));
     return result.count;
+  }
+
+  async markAllNotificationsRead(userId: string): Promise<void> {
+    await this.db.update(notifications)
+      .set({ isRead: true })
+      .where(and(eq(notifications.recipientId, userId), eq(notifications.isRead, false)));
+  }
+
+  // ===== First-week metrics (admin dashboard) =====
+  // Peanut-style "the first 7 days decide retention": measure how fast new
+  // moms reach their first accepted connection and whether they RSVP early.
+  async getFirstWeekMetrics(): Promise<{
+    newUsers7d: number;
+    newUsers30d: number;
+    activeUsers7d: number;
+    requestsSent7d: number;
+    acceptedConnections7d: number;
+    pendingRequestsOlderThan48h: number;
+    medianHoursToFirstAccepted30d: number | null;
+    usersWithAcceptedWithin7d30d: number;
+    usersWithRsvpWithin7d30d: number;
+  }> {
+    const now = Date.now();
+    const d7 = new Date(now - 7 * 24 * 60 * 60 * 1000);
+    const d30 = new Date(now - 30 * 24 * 60 * 60 * 1000);
+    const h48 = new Date(now - 48 * 60 * 60 * 1000);
+
+    const [counts] = await this.db.execute<{
+      new_users_7d: number;
+      new_users_30d: number;
+      active_users_7d: number;
+      requests_7d: number;
+      accepted_7d: number;
+      stale_pending: number;
+    }>(sql`
+      SELECT
+        (SELECT count(*)::int FROM users WHERE created_at >= ${d7}) AS new_users_7d,
+        (SELECT count(*)::int FROM users WHERE created_at >= ${d30}) AS new_users_30d,
+        (SELECT count(*)::int FROM profiles WHERE last_active_at >= ${d7}) AS active_users_7d,
+        (SELECT count(*)::int FROM matches WHERE created_at >= ${d7}) AS requests_7d,
+        (SELECT count(*)::int FROM matches WHERE is_match = true AND accepted_at >= ${d7}) AS accepted_7d,
+        (SELECT count(*)::int FROM matches WHERE is_match = false AND created_at < ${h48}) AS stale_pending
+    `).then((r: any) => (r.rows ?? r) as any[]);
+
+    // Per new user (last 30 days): hours from signup to first accepted
+    // connection, and whether an RSVP happened in the first 7 days.
+    const perUser = await this.db.execute<{
+      user_id: string;
+      hours_to_first_accepted: number | null;
+      rsvp_within_7d: boolean;
+    }>(sql`
+      SELECT u.id AS user_id,
+        (SELECT EXTRACT(EPOCH FROM (min(m.accepted_at) - u.created_at)) / 3600
+           FROM matches m
+          WHERE m.is_match = true AND m.accepted_at IS NOT NULL
+            AND (m.user_id = u.id OR m.matched_user_id = u.id)) AS hours_to_first_accepted,
+        EXISTS (SELECT 1 FROM event_rsvps r
+                 WHERE r.user_id = u.id
+                   AND r.created_at <= u.created_at + interval '7 days') AS rsvp_within_7d
+      FROM users u
+      WHERE u.created_at >= ${d30}
+    `).then((r: any) => (r.rows ?? r) as any[]);
+
+    const hours = perUser
+      .map((r) => (r.hours_to_first_accepted == null ? null : Number(r.hours_to_first_accepted)))
+      .filter((h): h is number => h != null && h >= 0)
+      .sort((a, b) => a - b);
+    const median = hours.length === 0
+      ? null
+      : hours.length % 2 === 1
+        ? hours[(hours.length - 1) / 2]
+        : (hours[hours.length / 2 - 1] + hours[hours.length / 2]) / 2;
+
+    return {
+      newUsers7d: Number(counts?.new_users_7d ?? 0),
+      newUsers30d: Number(counts?.new_users_30d ?? 0),
+      activeUsers7d: Number(counts?.active_users_7d ?? 0),
+      requestsSent7d: Number(counts?.requests_7d ?? 0),
+      acceptedConnections7d: Number(counts?.accepted_7d ?? 0),
+      pendingRequestsOlderThan48h: Number(counts?.stale_pending ?? 0),
+      medianHoursToFirstAccepted30d: median == null ? null : Math.round(median * 10) / 10,
+      usersWithAcceptedWithin7d30d: hours.filter((h) => h <= 7 * 24).length,
+      usersWithRsvpWithin7d30d: perUser.filter((r) => r.rsvp_within_7d === true).length,
+    };
   }
 
   // ===== Block operations (App Store 1.2) =====

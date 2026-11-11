@@ -1,4 +1,4 @@
-import { Search, Users, MessageCircle, MapPin, ShoppingBag } from "lucide-react";
+import { Search, Users, MessageCircle, MapPin, ShoppingBag, CalendarDays } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
@@ -20,11 +20,13 @@ export default function Navigation({ includeMarketplace: _includeMarketplace }: 
   });
   const incomingCount = requests?.incoming?.length || 0;
 
-  // Profile is reachable from Impostazioni (gear on the home header): five
-  // icons keep the bar airy on small screens.
+  // Profile is reachable from Impostazioni (gear on the home header). Events
+  // sit in the bar because a meetup is the action that turns a request into
+  // a real friendship.
   const navItems = [
     { path: "/", icon: Search, label: t("discover") },
     { path: "/locations", icon: MapPin, label: t("aroundYou") },
+    { path: "/events", icon: CalendarDays, label: t("events") },
     { path: "/matches", icon: Users, label: t("connections"), badge: incomingCount },
     { path: "/messages", icon: MessageCircle, label: t("messages") },
     { path: "/marketplace", icon: ShoppingBag, label: t("marketplace") },
@@ -41,7 +43,7 @@ export default function Navigation({ includeMarketplace: _includeMarketplace }: 
               variant="ghost"
               aria-label={label}
               title={label}
-              className={`relative flex items-center justify-center p-0 h-11 w-11 min-w-0 flex-1 rounded-2xl transition-all duration-200 ${
+              className={`relative flex items-center justify-center p-0 h-11 w-10 min-w-0 flex-1 rounded-2xl transition-all duration-200 ${
                 isActive ? "bg-pink-50 hover:bg-pink-100/80 scale-105" : "hover:bg-gray-50"
               }`}
               onClick={() => setLocation(path)}

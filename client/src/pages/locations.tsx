@@ -28,6 +28,7 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { translations } from "@/lib/translations";
 import PageSkeleton from "@/components/page-skeleton";
 import AppHeader from "@/components/app-header";
+import ReportBlockControls from "@/components/report-block";
 import Fab from "@/components/fab";
 
 // Category keys for translation
@@ -450,6 +451,13 @@ function ProfessionalsTab() {
                   </div>
                 )}
               </div>
+              <ReportBlockControls
+                targetUserId={pro.userId}
+                targetType="profile"
+                targetId={pro.id}
+                variant="icons"
+                className="-mr-2 -mt-1 shrink-0"
+              />
             </div>
 
             {pro.bio && (

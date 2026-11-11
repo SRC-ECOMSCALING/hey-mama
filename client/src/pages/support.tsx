@@ -17,9 +17,11 @@ const CONTENT: Record<"it" | "en", Content> = {
     faqTitle: "Domande frequenti",
     faq: [
       { q: "Come funziona HeyMama!?", a: "HeyMama! è una community per mamme: puoi conoscere altre mamme vicine, organizzare playdate, scoprire luoghi a misura di bambino e comprare o vendere articoli per l'infanzia." },
-      { q: "Come mi connetto con un'altra mamma?", a: "Dalla schermata Scopri, apri il profilo di una mamma e tocca \"Connetti\": potrete iniziare subito a scrivervi nella sezione Messaggi." },
+      { q: "Come mi connetto con un'altra mamma?", a: "Dalla mappa, tocca una mamma e poi \"Connetti\": puoi allegare un messaggio. Lei riceve la richiesta e, quando la accetta, potete scrivervi nella sezione Messaggi. Ogni richiesta e risposta è gratuita." },
       { q: "Come elimino il mio account?", a: "Vai su Profilo → Impostazioni → Elimina account. La cancellazione rimuove il tuo profilo e tutti i dati collegati." },
-      { q: "Come gestisco l'abbonamento?", a: "Puoi gestire o annullare l'abbonamento dalle impostazioni del tuo account App Store (ID Apple → Abbonamenti)." },
+      { q: "HeyMama! è gratuita?", a: "Sì: connetterti, scrivere, partecipare agli eventi e usare il marketplace non costa nulla." },
+      { q: "Quali notifiche ricevo?", a: "Solo richieste di connessione, richieste accettate, nuovi messaggi ed eventi approvati. Puoi attivarle o disattivarle da Impostazioni; mai pubblicità." },
+      { q: "Come segnalo o blocco qualcuno?", a: "Su ogni profilo, chat, annuncio ed evento trovi le icone Segnala e Blocca. Il team rivede ogni segnalazione; un utente bloccato non vede più i tuoi contenuti." },
     ],
   },
   en: {
@@ -30,9 +32,11 @@ const CONTENT: Record<"it" | "en", Content> = {
     faqTitle: "Frequently asked questions",
     faq: [
       { q: "How does HeyMama! work?", a: "HeyMama! is a community for moms: meet other moms nearby, plan playdates, discover family-friendly places, and buy or sell kids' items." },
-      { q: "How do I connect with another mom?", a: "On the Discover screen, open a mom's profile and tap \"Connect\": you can start messaging right away in the Messages section." },
+      { q: "How do I connect with another mom?", a: "On the map, tap a mom and then \"Connect\": you can attach a note. She receives the request and, once she accepts, you can chat in Messages. Every request and reply is free." },
       { q: "How do I delete my account?", a: "Go to Profile → Settings → Delete account. Deletion removes your profile and all related data." },
-      { q: "How do I manage my subscription?", a: "You can manage or cancel your subscription from your App Store account settings (Apple ID → Subscriptions)." },
+      { q: "Is HeyMama! free?", a: "Yes: connecting, messaging, joining events and using the marketplace cost nothing." },
+      { q: "Which notifications will I get?", a: "Only connection requests, accepted requests, new messages and approved events. Turn them on or off in Settings; never marketing." },
+      { q: "How do I report or block someone?", a: "Every profile, chat, listing and event has Report and Block icons. The team reviews every report; a blocked user no longer sees your content." },
     ],
   },
 };

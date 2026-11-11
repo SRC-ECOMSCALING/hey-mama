@@ -10,3 +10,6 @@ HeyMama/
 .env
 .vercel
 .env*
+.claude/
+research_notes/
+reports/

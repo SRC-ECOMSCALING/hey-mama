@@ -12,7 +12,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useLanguage } from "@/contexts/LanguageContext";
 
-export type ReportTargetType = "profile" | "marketplace_item" | "service" | "message" | "review";
+export type ReportTargetType = "profile" | "marketplace_item" | "service" | "message" | "review" | "event";
 
 interface ReportBlockControlsProps {
   // The user the content belongs to (and who gets blocked)

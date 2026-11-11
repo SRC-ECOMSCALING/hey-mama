@@ -8,6 +8,8 @@ import { useAuth } from "@/hooks/useAuth";
 import { LanguageProvider } from "@/contexts/LanguageContext";
 import Navigation from "@/components/navigation";
 import TermsGate from "@/components/terms-gate";
+import SuspendedGate from "@/components/suspended-gate";
+import { PUSH_ENABLED, enablePush, pushTargetPath } from "@/lib/push";
 import PageSkeleton, { type SkeletonVariant } from "@/components/page-skeleton";
 
 // Login/registration load eagerly (first paint pre-auth); Discover is the home.
@@ -37,6 +39,7 @@ const pageLoaders = {
   terms: () => import("@/pages/terms"),
   support: () => import("@/pages/support"),
   forgotPassword: () => import("@/pages/forgot-password"),
+  notifications: () => import("@/pages/notifications"),
 };
 
 const Locations = lazy(pageLoaders.locations);
@@ -56,10 +59,11 @@ const Privacy = lazy(pageLoaders.privacy);
 const Terms = lazy(pageLoaders.terms);
 const Support = lazy(pageLoaders.support);
 const ForgotPassword = lazy(pageLoaders.forgotPassword);
+const Notifications = lazy(pageLoaders.notifications);
 
 // Routes that show the persistent bottom navigation
 const NAV_PATHS = new Set([
-  "/", "/locations", "/matches", "/messages", "/marketplace", "/events", "/profile",
+  "/", "/locations", "/matches", "/messages", "/marketplace", "/events", "/profile", "/notifications",
 ]);
 
 // Skeleton variant matching the page being loaded, so the placeholder already
@@ -103,6 +107,7 @@ function usePrefetchApp(isAuthenticated: boolean) {
         "/api/locations",
         "/api/professionals",
         "/api/events",
+        "/api/notifications/unread-count",
         "/api/marketplace/items",
         "/api/services",
       ];
@@ -116,8 +121,20 @@ function usePrefetchApp(isAuthenticated: boolean) {
 
 function Router() {
   const { isAuthenticated, isLoading } = useAuth();
-  const [location] = useLocation();
+  const [location, setLocation] = useLocation();
   usePrefetchApp(isAuthenticated);
+
+  // Native push: register once the user is in. First launch asks for the
+  // permission; a user who switched it off in Settings is left alone.
+  useEffect(() => {
+    if (!isAuthenticated || !PUSH_ENABLED) return;
+    if (localStorage.getItem("heymama.push") === "off") return;
+    enablePush((data) => setLocation(pushTargetPath(data))).then((outcome) => {
+      if (outcome === "granted") localStorage.setItem("heymama.push", "on");
+      else if (outcome === "denied") localStorage.setItem("heymama.push", "off");
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated]);
 
   // Show loading state while checking authentication
   if (isLoading) {
@@ -150,6 +167,7 @@ function Router() {
   return (
     <>
       <TermsGate />
+      <SuspendedGate />
       <Suspense fallback={<PageSkeleton variant={skeletonFor(location)} />}>
         {/* Keyed wrapper: soft fade-up on every page change for smooth navigation */}
         <div key={location} className="animate-fade-up">
@@ -168,6 +186,7 @@ function Router() {
           <Route path="/profile/edit" component={ProfileEdit} />
           <Route path="/settings" component={Settings} />
           <Route path="/events" component={Events} />
+          <Route path="/notifications" component={Notifications} />
           <Route path="/privacy" component={Privacy} />
           <Route path="/terms" component={Terms} />
           <Route path="/support" component={Support} />

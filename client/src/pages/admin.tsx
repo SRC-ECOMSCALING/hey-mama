@@ -5,7 +5,7 @@ import {
   Upload, MapPin, CheckCircle, XCircle, LogOut, Users, BarChart3,
   Settings as SettingsIcon, Trash2, TreePine, Loader2, FlaskConical, Eye, EyeOff,
   ShoppingBag, Wrench, Home, Search, ShieldCheck, BadgeCheck, CreditCard, Flag,
-  CalendarDays,
+  CalendarDays, Ban, Clock,
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -44,7 +44,14 @@ interface AdminReport {
 interface AdminUser {
   id: string; email: string; isEmailVerified: boolean; subscriptionStatus: string | null;
   isAdmin: boolean; isEnvAdmin: boolean;
-  profile: { id: string; firstName: string; lastName: string; location: string; isTestProfile: boolean; createdAt: string } | null;
+  isSuspended: boolean; suspendedReason: string | null; createdAt: string;
+  profile: { id: string; firstName: string; lastName: string; location: string; accountType: string; isTestProfile: boolean; createdAt: string } | null;
+}
+interface FirstWeekMetrics {
+  newUsers7d: number; newUsers30d: number; activeUsers7d: number;
+  requestsSent7d: number; acceptedConnections7d: number; pendingRequestsOlderThan48h: number;
+  medianHoursToFirstAccepted30d: number | null;
+  usersWithAcceptedWithin7d30d: number; usersWithRsvpWithin7d30d: number;
 }
 interface AdminItem { id: string; title: string; price: number; category: string; condition: string; createdAt: string; sellerName: string }
 interface AdminService { id: string; title: string; serviceType: string; hourlyRate: number | null; location: string; isAvailable: boolean | null; createdAt: string; providerName: string }
@@ -76,6 +83,15 @@ function eur(cents: number | null) {
   return cents == null ? "—" : `€${(cents / 100).toFixed(0)}`;
 }
 
+function Metric({ label, value, accent }: { label: string; value: number | string | null | undefined; accent?: string }) {
+  return (
+    <div className="rounded-xl bg-gray-50 p-3">
+      <p className={`text-2xl font-bold ${accent ?? "text-gray-900"}`}>{value ?? "…"}</p>
+      <p className="text-xs text-gray-500 mt-1">{label}</p>
+    </div>
+  );
+}
+
 export default function Admin() {
   const { user, isLoading, isAdmin: isAdminUser } = useAuth();
   const [, setLocation] = useLocation();
@@ -101,6 +117,7 @@ export default function Admin() {
   const { data: adminServices = [] } = useQuery<AdminService[]>({ queryKey: ["/api/admin/services"], enabled: isAdmin });
   const { data: adminReports = [] } = useQuery<AdminReport[]>({ queryKey: ["/api/admin/reports"], enabled: isAdmin });
   const { data: adminEvents = [] } = useQuery<AdminEvent[]>({ queryKey: ["/api/admin/events"], enabled: isAdmin });
+  const { data: metrics } = useQuery<FirstWeekMetrics>({ queryKey: ["/api/admin/metrics"], enabled: isAdmin });
 
   const invalidate = (...keys: string[]) =>
     keys.forEach((k) => queryClient.invalidateQueries({ queryKey: [k] }));
@@ -128,6 +145,15 @@ export default function Admin() {
       (await apiRequest("PATCH", `/api/admin/users/${d.userId}/admin`, { isAdmin: d.isAdmin })).json(),
     onSuccess: () => invalidateAll(),
     onError: (e: any) => toast({ title: "Errore", description: e.message, variant: "destructive" }),
+  });
+  const suspendUser = useMutation({
+    mutationFn: async (d: { userId: string; isSuspended: boolean; reason?: string }) =>
+      (await apiRequest("PATCH", `/api/admin/users/${d.userId}/suspend`, { isSuspended: d.isSuspended, reason: d.reason })).json(),
+    onSuccess: (data: any) => {
+      invalidateAll();
+      toast({ title: data.isSuspended ? "Account sospeso" : "Account riattivato" });
+    },
+    onError: (e: any) => toast({ title: "Errore", description: e.message.replace(/^\d+:\s*/, ""), variant: "destructive" }),
   });
   const addAdmin = useMutation({
     mutationFn: async (email: string) => {
@@ -392,6 +418,24 @@ export default function Admin() {
                 <StatCard icon={CalendarDays} label="Eventi in attesa" value={stats?.pendingEvents} accent="text-amber-600" />
                 <StatCard icon={Wrench} label="Professionisti" value={stats?.professionals} />
               </div>
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2"><Clock className="w-5 h-5" /> Prima settimana</CardTitle>
+                  <CardDescription>
+                    Le nuove mamme arrivano davvero a una connessione accettata e a un incontro? Numeri sugli ultimi 7 e 30 giorni.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <Metric label="Nuove iscritte (7 gg)" value={metrics?.newUsers7d} />
+                  <Metric label="Attive negli ultimi 7 gg" value={metrics?.activeUsers7d} />
+                  <Metric label="Richieste inviate (7 gg)" value={metrics?.requestsSent7d} />
+                  <Metric label="Connessioni accettate (7 gg)" value={metrics?.acceptedConnections7d} accent="text-green-600" />
+                  <Metric label="Richieste in attesa da oltre 48 h" value={metrics?.pendingRequestsOlderThan48h} accent="text-amber-600" />
+                  <Metric label="Ore alla 1ª connessione (mediana, 30 gg)" value={metrics ? (metrics.medianHoursToFirstAccepted30d ?? "—") : undefined} />
+                  <Metric label="Iscritte con una connessione entro 7 gg" value={metrics ? `${metrics.usersWithAcceptedWithin7d30d}/${metrics.newUsers30d}` : undefined} />
+                  <Metric label="Iscritte con un RSVP entro 7 gg" value={metrics ? `${metrics.usersWithRsvpWithin7d30d}/${metrics.newUsers30d}` : undefined} />
+                </CardContent>
+              </Card>
               {TestVisibilityCard}
               {EventApprovalCard}
             </div>
@@ -414,6 +458,7 @@ export default function Admin() {
                       <TableHead className="hidden md:table-cell">Abbonamento</TableHead>
                       <TableHead className="text-center">Admin</TableHead>
                       <TableHead className="text-center">Test</TableHead>
+                      <TableHead className="text-center">Stato</TableHead>
                       <TableHead className="text-right">Azioni</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -448,6 +493,29 @@ export default function Admin() {
                             />
                           ) : <span className="text-gray-300">—</span>}
                         </TableCell>
+                        <TableCell className="text-center">
+                          {u.isSuspended ? (
+                            <div className="flex flex-col items-center gap-1">
+                              <Badge className="bg-red-100 text-red-700" title={u.suspendedReason ?? ""}>sospeso</Badge>
+                              <Button variant="ghost" size="sm" className="h-7 text-xs"
+                                onClick={() => suspendUser.mutate({ userId: u.id, isSuspended: false })}
+                                disabled={suspendUser.isPending} data-testid={`button-reinstate-${u.id}`}>
+                                riattiva
+                              </Button>
+                            </div>
+                          ) : (
+                            !u.isEnvAdmin && u.id !== user?.id ? (
+                              <Button variant="ghost" size="sm" className="h-7 text-xs text-amber-700"
+                                onClick={() => {
+                                  const reason = window.prompt(`Motivo della sospensione di ${u.email} (l'utente lo leggerà):`);
+                                  if (reason !== null) suspendUser.mutate({ userId: u.id, isSuspended: true, reason });
+                                }}
+                                disabled={suspendUser.isPending} data-testid={`button-suspend-${u.id}`}>
+                                <Ban className="w-3.5 h-3.5 mr-1" /> sospendi
+                              </Button>
+                            ) : <span className="text-gray-300">—</span>
+                          )}
+                        </TableCell>
                         <TableCell className="text-right">
                           {u.email !== "admin@claudio.com" && (
                             <Button variant="ghost" size="icon" className="text-red-500 hover:text-red-700"
@@ -460,7 +528,7 @@ export default function Admin() {
                       </TableRow>
                     ))}
                     {filteredUsers.length === 0 && (
-                      <TableRow><TableCell colSpan={7} className="text-center text-gray-400 py-8">Nessun utente</TableCell></TableRow>
+                      <TableRow><TableCell colSpan={8} className="text-center text-gray-400 py-8">Nessun utente</TableCell></TableRow>
                     )}
                   </TableBody>
                 </Table>
