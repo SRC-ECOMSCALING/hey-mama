@@ -1,6 +1,6 @@
 import { type User, type InsertUser, type Profile, type InsertProfile, type Match, type InsertMatch, type Message, type InsertMessage, type Swipe, type InsertSwipe, type Location, type InsertLocation, type Review, type InsertReview, type MarketplaceItem, type InsertMarketplaceItem, type MarketplaceMessage, type InsertMarketplaceMessage, type LookingForPost, type InsertLookingForPost, type Service, type InsertService, type ServiceLookingForPost, type InsertServiceLookingForPost, type SavedItem, type InsertSavedItem, type Notification, type InsertNotification, type Block, type Report, type InsertReport, type Event, type InsertEvent, type Registration, type Login } from "@shared/schema";
 import bcrypt from "bcryptjs";
-import { coordinatesForProvince } from "@shared/provinces";
+import { scatteredCoordinatesForProvince } from "@shared/provinces";
 import { db, withDbRetry } from "./db";
 import { eq, and, or, ne, ilike, inArray, gte, sql } from "drizzle-orm";
 import {
@@ -495,9 +495,9 @@ export class DatabaseStorage implements IStorage {
       sex: registrationData.sex,
       bio: registrationData.bio,
       location: registrationData.location,
-      // Map placement: the picker only offers provinces, so this resolves for
-      // every new profile.
-      ...coordinatesForProvince(registrationData.location),
+      // Map placement: a stable point near the province capital (the picker
+      // only offers provinces, so this resolves for every new profile).
+      ...scatteredCoordinatesForProvince(registrationData.location, user.id),
       photoUrls: registrationData.photoUrls,
       kidsNumber: registrationData.kidsNumber,
       kidsAges: registrationData.kidsAges,
@@ -539,13 +539,19 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createProfile(profile: InsertProfile): Promise<Profile> {
-    const [newProfile] = await this.db.insert(profiles).values(profile).returning();
+    const coords = profile.latitude && profile.longitude
+      ? null
+      : scatteredCoordinatesForProvince(profile.location, profile.userId);
+    const [newProfile] = await this.db.insert(profiles)
+      .values(coords ? { ...profile, ...coords } : profile)
+      .returning();
     return newProfile;
   }
 
   async updateProfile(id: string, profileData: Partial<InsertProfile>): Promise<Profile | undefined> {
-    // Changing province moves the marker on the map
-    const coords = profileData.location ? coordinatesForProvince(profileData.location) : null;
+    // Changing province moves the marker on the map (same user + province
+    // always gives the same point, so re-saving the profile doesn't move it)
+    const coords = profileData.location ? scatteredCoordinatesForProvince(profileData.location, id) : null;
     const [profile] = await this.db.update(profiles)
       .set(coords ? { ...profileData, ...coords } : profileData)
       .where(eq(profiles.userId, id))

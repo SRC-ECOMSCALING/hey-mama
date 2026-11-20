@@ -111,13 +111,48 @@ export const PROVINCE_COORDINATES: Record<string, { lat: number; lng: number }> 
   "Viterbo": { lat: 42.4207, lng: 12.1077 },
 };
 
-// Coordinates for a province name as stored in profiles.location, or null when
-// the value isn't one of the picker's provinces (legacy free-text locations).
-export function coordinatesForProvince(
+// Stable pseudo-random number in [0, 1) from a string (FNV-1a + avalanche).
+function seededUnit(seed: string, salt: number): number {
+  let h = (2166136261 ^ salt) >>> 0;
+  for (let i = 0; i < seed.length; i++) {
+    h ^= seed.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  h ^= h >>> 15;
+  h = Math.imul(h, 0x2c1b3c6d);
+  h ^= h >>> 12;
+  h = Math.imul(h, 0x297a2d39);
+  h ^= h >>> 15;
+  return (h >>> 0) / 4294967296;
+}
+
+const SCATTER_MIN_KM = 0.5;
+const SCATTER_MAX_KM = 3;
+
+// Map position for a profile, or null when `location` isn't one of the
+// picker's provinces (legacy free-text locations): a random-looking point
+// 0.5–3 km from the province capital, derived from the user id so it never moves between loads
+// (and moves only if the province changes). Without it every mom of a
+// province sat on the exact same point and only the top marker was visible.
+// It is not the user's real position, so privacy is unchanged.
+export function scatteredCoordinatesForProvince(
   location: string | null | undefined,
+  seed: string,
 ): { latitude: string; longitude: string } | null {
-  const coords = location ? PROVINCE_COORDINATES[location.trim()] : undefined;
-  return coords ? { latitude: String(coords.lat), longitude: String(coords.lng) } : null;
+  const center = location ? PROVINCE_COORDINATES[location.trim()] : undefined;
+  if (!center) return null;
+  const key = `${seed}:${location!.trim()}`;
+  const angle = 2 * Math.PI * seededUnit(key, 1);
+  // Uniform over the ring's area, so points don't bunch near the centre
+  const r = Math.sqrt(
+    SCATTER_MIN_KM ** 2 + seededUnit(key, 2) * (SCATTER_MAX_KM ** 2 - SCATTER_MIN_KM ** 2),
+  );
+  const dLat = (r * Math.cos(angle)) / 111.32;
+  const dLng = (r * Math.sin(angle)) / (111.32 * Math.cos((center.lat * Math.PI) / 180));
+  return {
+    latitude: (center.lat + dLat).toFixed(6),
+    longitude: (center.lng + dLng).toFixed(6),
+  };
 }
 
 // The picker list (registration province, marketplace city): one source of
