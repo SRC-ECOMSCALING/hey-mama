@@ -1,4 +1,4 @@
-package com.heymama.app;
+package app.heymama.android;
 
 import com.getcapacitor.BridgeActivity;
 
