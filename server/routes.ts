@@ -55,10 +55,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Credentialed CORS must not reflect arbitrary origins: allow only the
   // native WebView origins, localhost dev, the app's own host, and any extra
   // origins from CORS_ORIGINS (comma-separated).
-  const EXTRA_CORS_ORIGINS = (process.env.CORS_ORIGINS || "")
-    .split(",")
-    .map((o) => o.trim().replace(/\/$/, ""))
-    .filter(Boolean);
+  // The web app is served on more than one host (custom domain + Vercel
+  // URL); a page loaded on one of them may call the other (e.g. a tab still
+  // running an older bundle), so both are always allowed.
+  const APP_ORIGINS = ["https://my.heymama.app", "https://hey-mama-lac.vercel.app"];
+  const EXTRA_CORS_ORIGINS = [
+    ...APP_ORIGINS,
+    ...(process.env.CORS_ORIGINS || "")
+      .split(",")
+      .map((o) => o.trim().replace(/\/$/, ""))
+      .filter(Boolean),
+  ];
   const isAllowedOrigin = (req: any, origin: string): boolean => {
     if (/^(capacitor|ionic):\/\/localhost$/i.test(origin)) return true;
     if (/^https?:\/\/localhost(:\d+)?$/i.test(origin)) return true;
