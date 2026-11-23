@@ -16,8 +16,19 @@ export default function PhotoCarousel({ photos, alt, className = "h-48", rounded
   // Pictures that failed to load are dropped instead of showing a broken image
   const [broken, setBroken] = useState<Set<string>>(() => new Set());
   const list = (photos || []).filter((url) => url && !broken.has(url));
+  // No (loadable) photo: the name's initial on a soft tint, like the avatars
   if (list.length === 0) {
-    return <div className={`w-full ${className} ${rounded} bg-gray-100`} />;
+    return (
+      <div
+        className={`flex w-full items-center justify-center ${className} ${rounded} bg-gradient-to-br from-pink-50 via-pink-100 to-purple-50`}
+        role="img"
+        aria-label={alt}
+      >
+        <span className="font-display text-[96px] font-semibold leading-none text-pink-700/80" aria-hidden="true">
+          {alt.trim().charAt(0).toUpperCase()}
+        </span>
+      </div>
+    );
   }
   const current = Math.min(index, list.length - 1);
   const go = (delta: number) => setIndex((i) => (i + delta + list.length) % list.length);

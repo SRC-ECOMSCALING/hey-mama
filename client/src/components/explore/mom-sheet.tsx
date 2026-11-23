@@ -27,7 +27,8 @@ export const kidAgeLabel = (t: Translate, age: string): string => {
   const n = parseAge(age);
   if (n == null) return age;
   if (n < 1) return t("momKidBaby");
-  return fill(t("momKidAge"), { age: Math.round(n) });
+  const years = Math.round(n);
+  return years === 1 ? t("kidAgeOne") : fill(t("momKidAge"), { age: years });
 };
 
 // What the viewer shares with another mom: kids of the same age and
