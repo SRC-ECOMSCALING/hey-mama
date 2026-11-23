@@ -50,6 +50,7 @@ import PageSkeleton from "@/components/page-skeleton";
 import NotificationIcon from "@/components/notification-icon";
 import ActivityBadge from "@/components/activity-badge";
 import LocationModal from "@/components/location-modal";
+import PhotoOrInitial from "@/components/photo-or-initial";
 import MomSheet, { commonGround, kidAgeLabel, type MomConnectionState } from "@/components/explore/mom-sheet";
 import AddLocationDialog from "@/components/explore/add-location-dialog";
 import ProfessionalsList from "@/components/explore/professionals-list";
@@ -584,11 +585,7 @@ export default function Discover() {
                               : "0 6px 16px rgba(23,17,31,0.2)",
                           }}
                         >
-                          {profile.photoUrls?.[0] ? (
-                            <img src={profile.photoUrls[0]} alt="" className="h-full w-full object-cover" />
-                          ) : (
-                            profile.firstName.charAt(0).toUpperCase()
-                          )}
+                          <PhotoOrInitial src={profile.photoUrls?.[0]} name={profile.firstName} />
                         </div>
                         {state === "connected" && (
                           <span className="absolute -bottom-0.5 -right-0.5 flex h-[18px] w-[18px] items-center justify-center rounded-full bg-pink-500 ring-2 ring-white">
@@ -806,11 +803,7 @@ export default function Discover() {
                                   fresh ? "ring-online" : ""
                                 }`}
                               >
-                                {profile.photoUrls?.[0] ? (
-                                  <img src={profile.photoUrls[0]} alt="" className="h-full w-full object-cover" />
-                                ) : (
-                                  profile.firstName.charAt(0).toUpperCase()
-                                )}
+                                <PhotoOrInitial src={profile.photoUrls?.[0]} name={profile.firstName} />
                               </span>
                               <span className="min-w-0">
                                 <span className="block truncate font-display text-[15px] font-semibold leading-tight text-gray-900">

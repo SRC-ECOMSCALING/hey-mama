@@ -5,6 +5,7 @@ import { Drawer, DrawerContent, DrawerDescription, DrawerTitle } from "@/compone
 import { Textarea } from "@/components/ui/textarea";
 import ActivityBadge from "@/components/activity-badge";
 import PhotoCarousel from "@/components/photo-carousel";
+import PhotoOrInitial from "@/components/photo-or-initial";
 import ReportBlockControls from "@/components/report-block";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { fill } from "@/lib/format";
@@ -209,7 +210,7 @@ export default function MomSheet({ profile, me, state, incoming, isSending, onCl
                   p.isOnline || p.activityBand === "today" ? "ring-online" : ""
                 }`}
               >
-                {p.photoUrls?.[0] ? <img src={p.photoUrls[0]} alt="" className="h-full w-full object-cover" /> : p.firstName.charAt(0)}
+                <PhotoOrInitial src={p.photoUrls?.[0]} name={p.firstName} />
               </span>
               <div className="min-w-0 flex-1">
                 <DrawerTitle className="text-[21px] leading-tight">{fill(t("requestTitle"), { name: p.firstName })}</DrawerTitle>

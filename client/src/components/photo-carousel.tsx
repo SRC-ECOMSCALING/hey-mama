@@ -13,7 +13,9 @@ interface PhotoCarouselProps {
 export default function PhotoCarousel({ photos, alt, className = "h-48", rounded = "rounded-3xl" }: PhotoCarouselProps) {
   const [index, setIndex] = useState(0);
   const [touchStartX, setTouchStartX] = useState<number | null>(null);
-  const list = (photos || []).filter(Boolean);
+  // Pictures that failed to load are dropped instead of showing a broken image
+  const [broken, setBroken] = useState<Set<string>>(() => new Set());
+  const list = (photos || []).filter((url) => url && !broken.has(url));
   if (list.length === 0) {
     return <div className={`w-full ${className} ${rounded} bg-gray-100`} />;
   }
@@ -32,7 +34,12 @@ export default function PhotoCarousel({ photos, alt, className = "h-48", rounded
       }}
       data-testid="photo-carousel"
     >
-      <img src={list[current]} alt={alt} className="w-full h-full object-cover" />
+      <img
+        src={list[current]}
+        alt={alt}
+        onError={() => setBroken((prev) => new Set(prev).add(list[current]))}
+        className="w-full h-full object-cover"
+      />
       {list.length > 1 && (
         <>
           <button
