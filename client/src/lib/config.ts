@@ -24,9 +24,14 @@ function normalizeBaseUrl(raw: string | undefined): string {
   return /^https?:\/\//i.test(value) ? value : `https://${value}`;
 }
 
-export const API_BASE_URL = normalizeBaseUrl(
-  import.meta.env.VITE_API_BASE_URL as string | undefined,
-);
+//
+// The web app always talks to the host that served it, whatever the build
+// says: it is reachable on more than one domain (my.heymama.app, the Vercel
+// URL), and calling the "other" one would be a cross-origin request the
+// browser blocks, with session cookies that do not follow.
+export const API_BASE_URL = isNative
+  ? normalizeBaseUrl(import.meta.env.VITE_API_BASE_URL as string | undefined)
+  : "";
 
 // Resolve an API path to a full URL.
 export function apiUrl(path: string): string {
