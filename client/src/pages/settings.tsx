@@ -1,16 +1,15 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
-import { Separator } from "@/components/ui/separator";
+import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Trash2, Loader2, Ban, Bell, Eye, UserCircle, LogOut } from "lucide-react";
+import { Trash2, Loader2, Ban, Bell, ChevronRight, Eye, Globe, LogOut } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Language } from "@/lib/translations";
@@ -28,12 +27,39 @@ interface BlockWithProfile extends Block {
 
 const PUSH_PREF_KEY = "heymama.push";
 
+// One row of a settings card; rows are separated by hairlines.
+const ROW = "flex w-full items-center gap-3 border-b border-gray-100 text-left last:border-0";
+const ROW_LABEL = "text-[15px] font-semibold leading-tight text-gray-900";
+
+function IconTile({ tone = "pink", children }: { tone?: "pink" | "violet"; children: ReactNode }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl [&_svg]:h-[18px] [&_svg]:w-[18px] ${
+        tone === "pink" ? "bg-pink-50 text-pink-700" : "bg-purple-50 text-purple-700"
+      }`}
+    >
+      {children}
+    </span>
+  );
+}
+
+function Group({ id, title, children, testId }: { id: string; title: string; children: ReactNode; testId?: string }) {
+  return (
+    <section className="space-y-2" aria-labelledby={id}>
+      <h2 id={id} className="section-label font-sans tracking-normal">{title}</h2>
+      <div className="card-float px-4" data-testid={testId}>{children}</div>
+    </section>
+  );
+}
+
 export default function Settings() {
   const { language, setLanguage, t } = useLanguage();
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const { user, logout, isLoggingOut } = useAuth();
+  const [blockedOpen, setBlockedOpen] = useState(false);
 
   // Push: a device preference (the token lives on the server). Only the
   // native app can receive push; the web shows an explanation instead.
@@ -120,200 +146,193 @@ export default function Settings() {
   });
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-nav">
-      <AppHeader backTo="history" />
+    <div className="min-h-screen bg-gray-50 pb-10">
+      <AppHeader title={t("settingsTitle")} right={null} />
 
-      {/* Settings Content */}
-      <div className="max-w-4xl mx-auto px-4 py-6 space-y-6">
-        <h1 className="text-2xl font-bold text-gray-900" data-testid="text-settings-title">
-          {t("settingsTitle")}
-        </h1>
-
-        {/* Account */}
-        <Card data-testid="card-account">
-          <CardContent className="pt-6 space-y-1">
-            <button
-              onClick={() => setLocation("/profile")}
-              className="w-full flex items-center gap-3 py-3 text-left rounded-xl px-2 hover:bg-gray-50 transition-colors"
-              data-testid="button-open-profile"
-            >
-              <UserCircle className="h-5 w-5 text-pink-500 shrink-0" />
-              <span className="flex-1 min-w-0">
-                <span className="block font-medium text-gray-900">{t("profile")}</span>
-                <span className="block text-sm text-gray-500 truncate">{t("viewProfile")}</span>
-              </span>
-            </button>
-            <Separator />
-            <button
-              onClick={logout}
-              disabled={isLoggingOut}
-              className="w-full flex items-center gap-3 py-3 text-left rounded-xl px-2 hover:bg-red-50 transition-colors"
-              data-testid="button-logout"
-            >
-              <LogOut className="h-5 w-5 text-red-500 shrink-0" />
-              <span className="font-medium text-red-600">
-                {isLoggingOut ? t("loggingOut") : t("logout")}
-              </span>
-            </button>
-          </CardContent>
-        </Card>
-
-        {/* Notifications + privacy */}
-        <Card data-testid="card-device-settings">
-          <CardContent className="pt-6 space-y-5">
-            <div className="flex items-center gap-3">
-              <Bell className="h-5 w-5 text-gray-500 shrink-0" />
-              <div className="flex-1 min-w-0">
-                <Label htmlFor="push" className="font-medium text-gray-900">
-                  {t("pushNotificationsLabel")}
-                </Label>
-                <p className="text-sm text-gray-500">{t("pushNotificationsDescription")}</p>
-                {!isNative ? (
-                  <p className="text-xs text-gray-400 mt-1">{t("pushWebOnly")}</p>
-                ) : !pushAvailable ? (
-                  <p className="text-xs text-gray-400 mt-1">{t("pushNotConfigured")}</p>
-                ) : null}
-              </div>
-              <Switch
-                id="push"
-                checked={pushOn}
-                disabled={!isNative || !pushAvailable || pushBusy}
-                onCheckedChange={handlePushToggle}
-                className="shrink-0"
-                data-testid="switch-push"
-              />
+      <main className="mx-auto max-w-2xl space-y-[18px] px-5 pt-1">
+        {/* Notifications + presence */}
+        <Group id="settings-notifications" title={t("settingsGroupNotifications")} testId="card-device-settings">
+          <div className={`${ROW} min-h-[60px] py-3`}>
+            <IconTile><Bell /></IconTile>
+            <div className="min-w-0 flex-1">
+              <Label htmlFor="push" className={ROW_LABEL}>
+                {t("pushNotificationsLabel")}
+              </Label>
+              <p className="mt-1 text-xs leading-snug text-gray-600">{t("pushNotificationsDescription")}</p>
+              {!isNative ? (
+                <p className="mt-1 text-xs leading-snug text-gray-500">{t("pushWebOnly")}</p>
+              ) : !pushAvailable ? (
+                <p className="mt-1 text-xs leading-snug text-gray-500">{t("pushNotConfigured")}</p>
+              ) : null}
             </div>
-            <Separator />
-            <div className="flex items-center gap-3">
-              <Eye className="h-5 w-5 text-gray-500 shrink-0" />
-              <div className="flex-1 min-w-0">
-                <Label htmlFor="show-activity" className="font-medium text-gray-900">
-                  {t("showActivityLabel")}
-                </Label>
-                <p className="text-sm text-gray-500">{t("showActivityDescription")}</p>
-              </div>
-              <Switch
-                id="show-activity"
-                checked={showActivity}
-                disabled={updateActivityPref.isPending || !user}
-                onCheckedChange={(c) => updateActivityPref.mutate(c)}
-                className="shrink-0"
-                data-testid="switch-show-activity"
-              />
+            <Switch
+              id="push"
+              checked={pushOn}
+              disabled={!isNative || !pushAvailable || pushBusy}
+              onCheckedChange={handlePushToggle}
+              className="shrink-0"
+              data-testid="switch-push"
+            />
+          </div>
+          <div className={`${ROW} min-h-[60px] py-3`}>
+            <IconTile><Eye /></IconTile>
+            <div className="min-w-0 flex-1">
+              <Label htmlFor="show-activity" className={ROW_LABEL}>
+                {t("showActivityLabel")}
+              </Label>
+              <p className="mt-1 text-xs leading-snug text-gray-600">{t("showActivityDescription")}</p>
             </div>
-          </CardContent>
-        </Card>
+            <Switch
+              id="show-activity"
+              checked={showActivity}
+              disabled={updateActivityPref.isPending || !user}
+              onCheckedChange={(c) => updateActivityPref.mutate(c)}
+              className="shrink-0"
+              data-testid="switch-show-activity"
+            />
+          </div>
+        </Group>
 
-        <Card data-testid="card-language-settings">
-          <CardHeader>
-            <CardTitle>{t("languagePreference")}</CardTitle>
-            <CardDescription>{t("selectLanguage")}</CardDescription>
-          </CardHeader>
-          <CardContent>
+        {/* Preferences */}
+        <Group id="settings-preferences" title={t("settingsGroupPreferences")}>
+          <div className={`${ROW} min-h-[54px] py-1`} data-testid="card-language-settings">
+            <IconTile tone="violet"><Globe /></IconTile>
+            <Label htmlFor="language" className={`${ROW_LABEL} flex-1`}>
+              {t("settingsLanguage")}
+            </Label>
             <Select
               value={language}
               onValueChange={(value) => setLanguage(value as Language)}
             >
-              <SelectTrigger id="language" data-testid="select-language">
+              <SelectTrigger
+                id="language"
+                className="-mr-2 h-11 w-auto gap-1.5 border-0 bg-transparent px-2 text-sm font-medium text-gray-600 focus:ring-offset-0"
+                data-testid="select-language"
+              >
                 <SelectValue placeholder={t("selectLanguage")} />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent align="end">
                 <SelectItem value="en" data-testid="option-english">{t("english")}</SelectItem>
                 <SelectItem value="it" data-testid="option-italian">{t("italian")}</SelectItem>
               </SelectContent>
             </Select>
-          </CardContent>
-        </Card>
+          </div>
+          {/* Blocked users (App Store 1.2) */}
+          <button
+            type="button"
+            className={`${ROW} min-h-[54px] py-1`}
+            onClick={() => setBlockedOpen(true)}
+            aria-haspopup="dialog"
+            data-testid="button-blocked-users"
+          >
+            <IconTile tone="violet"><Ban /></IconTile>
+            <span className={`${ROW_LABEL} flex-1`}>{t("blockedUsers")}</span>
+            <span className="text-sm font-medium text-gray-600" data-testid="text-blocked-count">{blockedUsers.length}</span>
+            <ChevronRight className="h-[18px] w-[18px] shrink-0 text-gray-500" aria-hidden="true" />
+          </button>
+        </Group>
 
-        {/* Blocked users (App Store 1.2) */}
-        <Card data-testid="card-blocked-users">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Ban className="h-5 w-5 text-red-500" />
-              {t("blockedUsers")}
-            </CardTitle>
-            <CardDescription>{t("blockedUsersDescription")}</CardDescription>
-          </CardHeader>
-          <CardContent>
+        {/* Help and legal */}
+        <Group id="settings-help" title={t("settingsGroupHelp")}>
+          <Link href="/support" className={`${ROW} min-h-[54px] py-1`} data-testid="link-settings-support">
+            <span className={`${ROW_LABEL} flex-1`}>{t("settingsSupportFaq")}</span>
+            <ChevronRight className="h-[18px] w-[18px] shrink-0 text-gray-500" aria-hidden="true" />
+          </Link>
+          <Link href="/privacy" className={`${ROW} min-h-[54px] py-1`} data-testid="link-settings-privacy">
+            <span className={`${ROW_LABEL} flex-1`}>{t("privacyPolicy")}</span>
+            <ChevronRight className="h-[18px] w-[18px] shrink-0 text-gray-500" aria-hidden="true" />
+          </Link>
+          <Link href="/terms" className={`${ROW} min-h-[54px] py-1`} data-testid="link-settings-terms">
+            <span className={`${ROW_LABEL} flex-1`}>{t("termsOfUse")}</span>
+            <ChevronRight className="h-[18px] w-[18px] shrink-0 text-gray-500" aria-hidden="true" />
+          </Link>
+        </Group>
+
+        {/* Account: logout and deletion */}
+        <Group id="settings-account" title={t("settingsGroupAccount")} testId="card-account">
+          <button
+            type="button"
+            onClick={logout}
+            disabled={isLoggingOut}
+            className={`${ROW} min-h-[54px] py-1 disabled:opacity-50`}
+            data-testid="button-logout"
+          >
+            <LogOut className="h-5 w-5 shrink-0 text-gray-900" strokeWidth={1.9} aria-hidden="true" />
+            <span className={`${ROW_LABEL} flex-1`}>{isLoggingOut ? t("loggingOut") : t("logout")}</span>
+          </button>
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <button type="button" className={`${ROW} min-h-[54px] py-1 text-destructive`} data-testid="button-delete-account">
+                <Trash2 className="h-5 w-5 shrink-0" strokeWidth={1.9} aria-hidden="true" />
+                <span className="flex-1 text-[15px] font-semibold leading-tight">{t("deleteAccount")}</span>
+              </button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>{t("deleteAccountConfirmTitle")}</AlertDialogTitle>
+                <AlertDialogDescription>{t("deleteAccountConfirmDescription")}</AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel data-testid="button-cancel-delete">{t("cancel")}</AlertDialogCancel>
+                <AlertDialogAction
+                  className="bg-destructive text-destructive-foreground"
+                  onClick={() => deleteAccount.mutate()}
+                  disabled={deleteAccount.isPending}
+                  data-testid="button-confirm-delete-account"
+                >
+                  {deleteAccount.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : t("deleteAccountConfirm")}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </Group>
+      </main>
+
+      {/* Blocked users: list and unblock */}
+      <Drawer open={blockedOpen} onOpenChange={setBlockedOpen} shouldScaleBackground={false}>
+        <DrawerContent data-testid="card-blocked-users">
+          <DrawerHeader className="px-5 pt-5 text-left">
+            <DrawerTitle>{t("blockedUsers")}</DrawerTitle>
+            <DrawerDescription className="text-gray-600">{t("blockedUsersDescription")}</DrawerDescription>
+          </DrawerHeader>
+          <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-[calc(1.5rem_+_env(safe-area-inset-bottom))]">
             {blockedUsers.length === 0 ? (
-              <p className="text-sm text-muted-foreground" data-testid="text-no-blocked-users">
+              <p className="py-4 text-sm text-gray-600" data-testid="text-no-blocked-users">
                 {t("noBlockedUsers")}
               </p>
             ) : (
-              <div className="space-y-3">
-                {blockedUsers.map((b) => (
-                  <div key={b.id} className="flex items-center gap-3" data-testid={`row-blocked-${b.blockedId}`}>
-                    <img
-                      src={b.profile?.photoUrls?.[0] || "https://via.placeholder.com/80"}
-                      alt=""
-                      className="w-10 h-10 rounded-full object-cover"
-                    />
-                    <span className="flex-1 text-sm font-medium text-gray-800 truncate">
-                      {b.profile ? `${b.profile.firstName} ${b.profile.lastName}`.trim() : "—"}
-                    </span>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => unblock.mutate(b.blockedId)}
-                      disabled={unblock.isPending}
-                      data-testid={`button-unblock-${b.blockedId}`}
-                    >
-                      {t("unblock")}
-                    </Button>
-                  </div>
-                ))}
+              <div>
+                {blockedUsers.map((b) => {
+                  const name = b.profile ? `${b.profile.firstName} ${b.profile.lastName}`.trim() : "—";
+                  const photo = b.profile?.photoUrls?.[0];
+                  return (
+                    <div key={b.id} className="flex items-center gap-3 border-b border-gray-100 py-3.5 last:border-0" data-testid={`row-blocked-${b.blockedId}`}>
+                      {photo ? (
+                        <img src={photo} alt="" className="h-11 w-11 shrink-0 rounded-full object-cover" />
+                      ) : (
+                        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-pink-100 font-display text-base font-semibold text-gray-900" aria-hidden="true">
+                          {name.charAt(0).toUpperCase()}
+                        </span>
+                      )}
+                      <span className="min-w-0 flex-1 truncate text-[15px] font-semibold text-gray-900">{name}</span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-11"
+                        onClick={() => unblock.mutate(b.blockedId)}
+                        disabled={unblock.isPending}
+                        data-testid={`button-unblock-${b.blockedId}`}
+                      >
+                        {t("unblock")}
+                      </Button>
+                    </div>
+                  );
+                })}
               </div>
             )}
-          </CardContent>
-        </Card>
-
-        {/* Legal */}
-        <Card>
-          <CardHeader>
-            <CardTitle>{t("legal")}</CardTitle>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-2">
-            <Link href="/terms" className="text-sm text-pink-600 hover:text-pink-700 underline" data-testid="link-settings-terms">{t("termsOfUse")}</Link>
-            <Link href="/privacy" className="text-sm text-pink-600 hover:text-pink-700 underline" data-testid="link-settings-privacy">{t("privacyPolicy")}</Link>
-            <Link href="/support" className="text-sm text-pink-600 hover:text-pink-700 underline" data-testid="link-settings-support">{t("support")}</Link>
-          </CardContent>
-        </Card>
-
-        {/* Danger zone: account deletion */}
-        <Card className="border-red-200">
-          <CardHeader>
-            <CardTitle className="text-red-600">{t("deleteAccount")}</CardTitle>
-            <CardDescription>{t("deleteAccountDescription")}</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <Button variant="outline" className="text-red-600 border-red-200 hover:bg-red-50" data-testid="button-delete-account">
-                  <Trash2 className="h-4 w-4 mr-2" />
-                  {t("deleteAccount")}
-                </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent className="max-w-[calc(100vw-2rem)] rounded-2xl">
-                <AlertDialogHeader>
-                  <AlertDialogTitle>{t("deleteAccountConfirmTitle")}</AlertDialogTitle>
-                  <AlertDialogDescription>{t("deleteAccountConfirmDescription")}</AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel data-testid="button-cancel-delete">{t("cancel")}</AlertDialogCancel>
-                  <AlertDialogAction
-                    className="bg-red-600 hover:bg-red-700"
-                    onClick={() => deleteAccount.mutate()}
-                    disabled={deleteAccount.isPending}
-                    data-testid="button-confirm-delete-account"
-                  >
-                    {deleteAccount.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : t("deleteAccountConfirm")}
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
-          </CardContent>
-        </Card>
-      </div>
+          </div>
+        </DrawerContent>
+      </Drawer>
     </div>
   );
 }

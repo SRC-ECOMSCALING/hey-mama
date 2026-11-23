@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -9,19 +9,18 @@ import { fill } from "@/lib/format";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent } from "@/components/ui/card";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge";
+import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ObjectUploader } from "@/components/ObjectUploader";
 import CityPicker from "@/components/city-picker";
 import {
   Eye, EyeOff, Plus, X, Upload, Heart, Briefcase, ArrowLeft, ArrowRight,
-  Check, Users, Sparkles, Minus,
+  Check, Users, Minus,
 } from "lucide-react";
-import heyMamaLogo from "@assets/logo_gradient_text-min_1757514869714.png";
+import heyMamaSymbol from "@assets/heymama-symbol.png";
 import { useLanguage } from "@/contexts/LanguageContext";
 import type { TranslationKey } from "@/lib/translations";
 
@@ -52,16 +51,30 @@ const INTEREST_KEYS: TranslationKey[] = [
 
 type StepKey = "type" | "account" | "about" | "where" | "kids" | "interests" | "photos" | "review";
 
+// Each step asks one question (the title) and explains it in one sentence.
 const STEP_TITLES: Record<StepKey, TranslationKey> = {
   type: "stepWhoAreYou",
-  account: "stepAccount",
-  about: "stepAboutYou",
+  account: "regAccountTitle",
+  about: "regAboutTitle",
   where: "stepWhere",
-  kids: "stepKids",
-  interests: "stepInterests",
-  photos: "stepPhotos",
-  review: "stepReview",
+  kids: "regKidsTitle",
+  interests: "regInterestsTitle",
+  photos: "regPhotosTitle",
+  review: "regReviewTitle",
 };
+
+const STEP_HINTS: Record<StepKey, TranslationKey> = {
+  type: "regTypeHint",
+  account: "accountHint",
+  about: "regAboutHint",
+  where: "whereHint",
+  kids: "kidsHint",
+  interests: "suggestedInterests",
+  photos: "photosHint",
+  review: "regReviewHint",
+};
+
+const STEP_TITLE_CLASS = "font-display text-[32px] font-semibold leading-[1.1] tracking-[-0.03em] text-gray-900";
 
 interface CommunityStats {
   totalMoms: number;
@@ -292,61 +305,55 @@ export default function Register() {
     });
   };
 
-  const progress = ((stepIndex + 1) / steps.length) * 100;
-  const gradientButton = "bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-600 hover:to-purple-700 text-white";
+  const customHobbies = hobbies.filter((h) => !INTEREST_KEYS.some((k) => t(k).toLowerCase() === h.toLowerCase()));
+  const stepTitle = step === "about" && isProfessional ? t("regAboutProTitle") : t(STEP_TITLES[step]);
+  const stepHint = step === "about" && isProfessional ? t("regAboutProHint") : t(STEP_HINTS[step]);
 
   // ---------- Email verification screen ----------
   if (showVerification) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-pink-50 to-purple-50 px-4 safe-page">
-        <div className="max-w-md mx-auto">
-          <Card className="rounded-3xl">
-            <CardContent className="pt-8 space-y-6">
-              <div className="flex justify-center">
-                <img src={heyMamaLogo} alt="HeyMama" className="h-14 w-auto object-contain" />
-              </div>
-              <div className="text-center">
-                <h3 className="text-lg font-semibold mb-2">{t("checkYourEmail")}</h3>
-                <p className="text-sm text-muted-foreground">
-                  {t("verificationSentMessage")} <strong>{userEmail}</strong>
-                </p>
-              </div>
-              <div>
-                <label htmlFor="verification-code" className="block text-sm font-medium mb-2">
-                  {t("verificationCode")}
-                </label>
-                <Input
-                  id="verification-code"
-                  type="text"
-                  inputMode="numeric"
-                  maxLength={6}
-                  placeholder={t("enterVerificationCode")}
-                  value={verificationCode}
-                  onChange={(e) => setVerificationCode(e.target.value.replace(/[^0-9]/g, ""))}
-                  className="text-center text-xl tracking-widest"
-                  data-testid="input-verification-code"
-                />
-              </div>
-              <Button
-                onClick={() => verifyEmailMutation.mutate(verificationCode)}
-                className={`w-full ${gradientButton}`}
-                disabled={verificationCode.length !== 6 || verifyEmailMutation.isPending}
-                data-testid="button-verify-email"
-              >
-                {verifyEmailMutation.isPending ? t("verifying") : t("verifyEmail")}
-              </Button>
-              <div className="text-center">
-                <Button
-                  variant="ghost"
-                  onClick={() => setShowVerification(false)}
-                  className="text-sm text-muted-foreground hover:text-foreground"
-                  data-testid="button-back-to-form"
-                >
-                  {t("backToRegistration")}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+      <div className="safe-page min-h-screen bg-gray-50 px-5">
+        <div className="mx-auto flex w-full max-w-md flex-col gap-7">
+          <button
+            type="button"
+            className="icon-btn"
+            onClick={() => setShowVerification(false)}
+            aria-label={t("back")}
+            data-testid="button-back-to-form"
+          >
+            <ArrowLeft className="h-5 w-5" />
+          </button>
+          <div className="flex flex-col gap-2.5">
+            <img src={heyMamaSymbol} alt="HeyMama" className="mb-2 h-14 w-14 object-contain" />
+            <h1 className={STEP_TITLE_CLASS}>{t("checkYourEmail")}</h1>
+            <p className="text-pretty text-base leading-normal text-gray-600">
+              {t("verificationSentMessage")} <strong className="break-all font-semibold text-gray-900">{userEmail}</strong>
+            </p>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="verification-code">{t("verificationCode")}</Label>
+            <Input
+              id="verification-code"
+              type="text"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              maxLength={6}
+              placeholder={t("enterVerificationCode")}
+              value={verificationCode}
+              onChange={(e) => setVerificationCode(e.target.value.replace(/[^0-9]/g, ""))}
+              className="h-14 text-center font-display text-xl tracking-widest placeholder:font-sans placeholder:text-base placeholder:tracking-normal"
+              data-testid="input-verification-code"
+            />
+          </div>
+          <Button
+            size="lg"
+            onClick={() => verifyEmailMutation.mutate(verificationCode)}
+            className="w-full"
+            disabled={verificationCode.length !== 6 || verifyEmailMutation.isPending}
+            data-testid="button-verify-email"
+          >
+            {verifyEmailMutation.isPending ? t("verifying") : t("verifyEmail")}
+          </Button>
         </div>
       </div>
     );
@@ -354,90 +361,151 @@ export default function Register() {
 
   // ---------- Wizard ----------
   return (
-    <div className="min-h-screen bg-gradient-to-br from-pink-50 to-purple-50 px-4 safe-page">
-      <div className="max-w-md mx-auto">
-        <div className="flex items-center justify-between mb-4">
+    <div className="safe-page flex min-h-screen flex-col bg-gray-50 px-5">
+      <div className="mx-auto flex w-full max-w-md flex-1 flex-col gap-7">
+        <div className="flex items-center gap-3.5">
           {stepIndex > 0 ? (
-            <Button variant="ghost" size="icon" className="rounded-full" onClick={back} aria-label={t("back")} data-testid="button-wizard-back">
-              <ArrowLeft className="h-5 w-5 text-gray-600" />
-            </Button>
+            <button type="button" className="icon-btn" onClick={back} aria-label={t("back")} data-testid="button-wizard-back">
+              <ArrowLeft className="h-5 w-5" />
+            </button>
           ) : (
-            <Link href="/login">
-              <Button variant="ghost" size="icon" className="rounded-full" aria-label={t("back")} data-testid="button-wizard-login">
-                <ArrowLeft className="h-5 w-5 text-gray-600" />
-              </Button>
+            <Link href="/login" className="icon-btn" aria-label={t("back")} data-testid="button-wizard-login">
+              <ArrowLeft className="h-5 w-5" />
             </Link>
           )}
-          <img src={heyMamaLogo} alt="HeyMama" className="h-10 w-auto object-contain" />
-          <span className="w-10 text-right text-xs font-medium text-gray-500">{stepIndex + 1}/{steps.length}</span>
-        </div>
-
-        {/* Progress */}
-        <div className="h-1.5 w-full rounded-full bg-white/70 overflow-hidden mb-5">
           <div
-            className="h-full rounded-full transition-all duration-300"
-            style={{ width: `${progress}%`, background: "linear-gradient(to right, var(--primary-pink), var(--accent-coral))" }}
-          />
+            role="img"
+            aria-label={fill(t("stepOf"), { current: stepIndex + 1, total: steps.length })}
+            className="flex flex-1 gap-[5px]"
+          >
+            {steps.map((key, i) => (
+              <span key={key} className={`h-[5px] flex-1 rounded-full ${i <= stepIndex ? "bg-pink-500" : "bg-gray-300"}`} />
+            ))}
+          </div>
+          <span className="shrink-0 text-[13px] font-semibold leading-none text-gray-600" aria-hidden="true">
+            {fill(t("regStepCount"), { current: stepIndex + 1, total: steps.length })}
+          </span>
         </div>
 
-        <Card className="rounded-3xl shadow-sm">
-          <CardContent className="pt-6">
-            <p className="text-xs font-semibold uppercase tracking-wide text-pink-500 mb-1">
-              {fill(t("stepOf"), { current: stepIndex + 1, total: steps.length })}
-            </p>
-            <h1 className="text-2xl font-bold text-gray-900 mb-5">{t(STEP_TITLES[step])}</h1>
+        <div className="flex flex-col gap-2.5">
+          <h1 className={STEP_TITLE_CLASS}>{stepTitle}</h1>
+          <p className="text-pretty text-base leading-normal text-gray-600">{stepHint}</p>
+        </div>
 
-            <Form {...form}>
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  if (step === "review") form.handleSubmit(onSubmit, onInvalid)(e);
-                  else next();
-                }}
-                className="space-y-5"
-              >
-                {/* STEP: account type */}
-                {step === "type" && (
-                  <div className="grid grid-cols-1 gap-3">
-                    <button
-                      type="button"
-                      onClick={() => { form.setValue("accountType", "mom"); setStepIndex(1); }}
-                      className={`rounded-2xl border-2 p-4 text-left transition-all ${
-                        !isProfessional ? "border-pink-400 bg-pink-50/60 shadow-sm" : "border-gray-200 bg-white hover:border-gray-300"
-                      }`}
-                      data-testid="button-account-mom"
-                    >
-                      <Heart className={`h-6 w-6 mb-2 ${!isProfessional ? "text-pink-500" : "text-gray-400"}`} />
-                      <p className="font-semibold text-gray-900">{t("iAmMom")}</p>
-                      <p className="text-sm text-gray-500 mt-1">{t("iAmMomDesc")}</p>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => { form.setValue("accountType", "professional"); setStepIndex(1); }}
-                      className={`rounded-2xl border-2 p-4 text-left transition-all ${
-                        isProfessional ? "border-pink-400 bg-pink-50/60 shadow-sm" : "border-gray-200 bg-white hover:border-gray-300"
-                      }`}
-                      data-testid="button-account-professional"
-                    >
-                      <Briefcase className={`h-6 w-6 mb-2 ${isProfessional ? "text-pink-500" : "text-gray-400"}`} />
-                      <p className="font-semibold text-gray-900">{t("iAmProfessional")}</p>
-                      <p className="text-sm text-gray-500 mt-1">{t("iAmProfessionalDesc")}</p>
-                    </button>
-                  </div>
-                )}
+        <Form {...form}>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (step === "review") form.handleSubmit(onSubmit, onInvalid)(e);
+              else next();
+            }}
+            className="flex flex-1 flex-col gap-7"
+          >
+            {/* STEP: account type */}
+            {step === "type" && (
+              <div className="grid grid-cols-1 gap-3">
+                <ChoiceCard
+                  icon={<Heart className="h-5 w-5" />}
+                  title={t("iAmMom")}
+                  description={t("iAmMomDesc")}
+                  selected={!isProfessional}
+                  onClick={() => { form.setValue("accountType", "mom"); setStepIndex(1); }}
+                  testId="button-account-mom"
+                />
+                <ChoiceCard
+                  icon={<Briefcase className="h-5 w-5" />}
+                  title={t("iAmProfessional")}
+                  description={t("iAmProfessionalDesc")}
+                  selected={isProfessional}
+                  onClick={() => { form.setValue("accountType", "professional"); setStepIndex(1); }}
+                  testId="button-account-professional"
+                />
+              </div>
+            )}
 
-                {/* STEP: account */}
-                {step === "account" && (
-                  <div className="space-y-4">
-                    <p className="text-sm text-muted-foreground">{t("accountHint")}</p>
+            {/* STEP: account */}
+            {step === "account" && (
+              <div className="space-y-4">
+                <FormField
+                  control={form.control}
+                  name="email"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>{t("email")}</FormLabel>
+                      <FormControl>
+                        <Input type="email" autoComplete="email" inputMode="email" placeholder={t("enterYourEmail")} data-testid="input-email" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="password"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>{t("password")}</FormLabel>
+                      <FormControl>
+                        <div className="relative">
+                          <Input
+                            type={showPassword ? "text" : "password"}
+                            autoComplete="new-password"
+                            placeholder={t("createStrongPassword")}
+                            className="pr-12"
+                            data-testid="input-password"
+                            {...field}
+                          />
+                          <button
+                            type="button"
+                            className="absolute right-0.5 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full text-gray-600"
+                            onClick={() => setShowPassword(!showPassword)}
+                            aria-label={showPassword ? t("hidePassword") : t("showPassword")}
+                            aria-pressed={showPassword}
+                            data-testid="button-toggle-password"
+                          >
+                            {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                          </button>
+                        </div>
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="confirmPassword"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>{t("confirmPassword")}</FormLabel>
+                      <FormControl>
+                        <Input
+                          type={showPassword ? "text" : "password"}
+                          autoComplete="new-password"
+                          placeholder={t("confirmYourPassword")}
+                          data-testid="input-confirmPassword"
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+            )}
+
+            {/* STEP: about you (+ business for professionals) */}
+            {step === "about" && (
+              <div className="space-y-4">
+                {isProfessional && (
+                  <>
                     <FormField
                       control={form.control}
-                      name="email"
+                      name="businessName"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>{t("email")}</FormLabel>
+                          <FormLabel>{t("businessNameLabel")}</FormLabel>
                           <FormControl>
-                            <Input type="email" autoComplete="email" inputMode="email" placeholder={t("enterYourEmail")} data-testid="input-email" {...field} />
+                            <Input placeholder={t("businessNamePlaceholder")} data-testid="input-businessName" {...field} value={field.value || ""} />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -445,496 +513,485 @@ export default function Register() {
                     />
                     <FormField
                       control={form.control}
-                      name="password"
+                      name="professionalCategory"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>{t("password")}</FormLabel>
+                          <FormLabel>{t("professionalCategoryLabel")}</FormLabel>
+                          <Select onValueChange={field.onChange} value={field.value || ""}>
+                            <FormControl>
+                              <SelectTrigger data-testid="select-professionalCategory">
+                                <SelectValue placeholder={t("selectProfessionalCategory")} />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              {PROFESSIONAL_CATEGORIES.map((cat) => (
+                                <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <h2 className="section-label pt-3 font-sans tracking-normal">{t("referentName")}</h2>
+                  </>
+                )}
+                <div className="grid grid-cols-2 gap-3">
+                  <FormField
+                    control={form.control}
+                    name="firstName"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>{t("firstName")}</FormLabel>
+                        <FormControl>
+                          <Input autoComplete="given-name" placeholder={t("yourFirstName")} data-testid="input-firstName" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="lastName"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>{t("lastName")}</FormLabel>
+                        <FormControl>
+                          <Input autoComplete="family-name" placeholder={t("yourLastName")} data-testid="input-lastName" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <FormField
+                    control={form.control}
+                    name="age"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>{t("age")} <span className="font-normal text-gray-600">({t("optional")})</span></FormLabel>
+                        <FormControl>
+                          <Input
+                            type="number"
+                            inputMode="numeric"
+                            min="18"
+                            max="65"
+                            data-testid="input-age"
+                            name={field.name}
+                            ref={field.ref}
+                            onBlur={field.onBlur}
+                            value={field.value ?? ""}
+                            onChange={(e) => field.onChange(e.target.value === "" ? undefined : parseInt(e.target.value))}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="sex"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>{t("gender")} <span className="font-normal text-gray-600">({t("optional")})</span></FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value ?? ""} data-testid="select-sex">
                           <FormControl>
-                            <div className="relative">
-                              <Input
-                                type={showPassword ? "text" : "password"}
-                                autoComplete="new-password"
-                                placeholder={t("createStrongPassword")}
-                                data-testid="input-password"
-                                {...field}
-                              />
-                              <Button
+                            <SelectTrigger>
+                              <SelectValue placeholder={t("selectGender")} />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="female">{t("female")}</SelectItem>
+                            <SelectItem value="male">{t("male")}</SelectItem>
+                            <SelectItem value="other">{t("other")}</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* STEP: where */}
+            {step === "where" && (
+              <div className="space-y-4">
+                <FormField
+                  control={form.control}
+                  name="location"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>{t("province")}</FormLabel>
+                      <FormControl>
+                        <CityPicker value={field.value} onChange={field.onChange} testId="select-province" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                {!isProfessional && province && community && (
+                  <div className="hero-card flex items-center gap-3.5" data-testid="province-density">
+                    <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white text-pink-700" aria-hidden="true">
+                      <Users className="h-5 w-5" />
+                    </span>
+                    <p className="text-pretty text-[15px] font-semibold leading-snug text-gray-900">
+                      {community.totalMoms > 0
+                        ? fill(t("momsAlreadyHere"), { count: community.totalMoms, province })
+                        : fill(t("firstMomsHere"), { province })}
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* STEP: kids */}
+            {step === "kids" && (
+              <div className="space-y-3">
+                <div className="card-float flex items-center justify-between gap-3 p-4">
+                  <span className="text-[15px] font-semibold text-gray-900">{t("numberOfKids")}</span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      className="flex h-11 w-11 items-center justify-center rounded-full bg-gray-100 text-gray-900 disabled:opacity-40"
+                      onClick={() => setKidsNumber(kidsNumber - 1)}
+                      disabled={kidsNumber <= 1}
+                      aria-label={t("regFewerKids")}
+                      data-testid="button-kids-minus"
+                    >
+                      <Minus className="h-4 w-4" />
+                    </button>
+                    <span className="w-8 text-center font-display text-2xl font-semibold text-gray-900" aria-live="polite" data-testid="text-kids-number">{kidsNumber}</span>
+                    <button
+                      type="button"
+                      className="flex h-11 w-11 items-center justify-center rounded-full bg-gray-100 text-gray-900 disabled:opacity-40"
+                      onClick={() => setKidsNumber(kidsNumber + 1)}
+                      disabled={kidsNumber >= 6}
+                      aria-label={t("regMoreKids")}
+                      data-testid="button-kids-plus"
+                    >
+                      <Plus className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+                {Array.from({ length: kidsNumber }, (_, index) => {
+                  const gender = form.watch("kidsGenders")?.[index] || "";
+                  return (
+                    <div key={index} className="card-float space-y-3 p-4">
+                      <h2 className="section-label font-sans tracking-normal">{t("kid")} {index + 1}</h2>
+                      <div className="flex items-end gap-3">
+                        <div className="w-24 shrink-0 space-y-2">
+                          <Label htmlFor={`kid-age-${index}`}>{t("age")}</Label>
+                          <Input
+                            id={`kid-age-${index}`}
+                            type="number"
+                            inputMode="numeric"
+                            min="0"
+                            max="18"
+                            placeholder={t("age")}
+                            data-testid={`input-kid-age-${index}`}
+                            value={form.watch("kidsAges")?.[index] ?? ""}
+                            onChange={(e) => {
+                              const newAges = [...(form.getValues("kidsAges") || [])];
+                              newAges[index] = e.target.value;
+                              form.setValue("kidsAges", newAges);
+                            }}
+                          />
+                        </div>
+                        <div className="flex flex-1 flex-wrap gap-2" role="group" aria-label={t("gender")} data-testid={`select-kid-gender-${index}`}>
+                          {([["male", t("kidBoy")], ["female", t("kidGirl")]] as const).map(([value, label]) => {
+                            const active = gender === value;
+                            return (
+                              <button
+                                key={value}
                                 type="button"
-                                variant="ghost"
-                                size="sm"
-                                className="absolute right-2 top-1/2 -translate-y-1/2 h-8 w-8 p-0"
-                                onClick={() => setShowPassword(!showPassword)}
-                                data-testid="button-toggle-password"
-                              >
-                                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                              </Button>
-                            </div>
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name="confirmPassword"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>{t("confirmPassword")}</FormLabel>
-                          <FormControl>
-                            <Input
-                              type={showPassword ? "text" : "password"}
-                              autoComplete="new-password"
-                              placeholder={t("confirmYourPassword")}
-                              data-testid="input-confirmPassword"
-                              {...field}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
-                )}
-
-                {/* STEP: about you (+ business for professionals) */}
-                {step === "about" && (
-                  <div className="space-y-4">
-                    {isProfessional && (
-                      <>
-                        <FormField
-                          control={form.control}
-                          name="businessName"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>{t("businessNameLabel")}</FormLabel>
-                              <FormControl>
-                                <Input placeholder={t("businessNamePlaceholder")} data-testid="input-businessName" {...field} value={field.value || ""} />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                        <FormField
-                          control={form.control}
-                          name="professionalCategory"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>{t("professionalCategoryLabel")}</FormLabel>
-                              <Select onValueChange={field.onChange} value={field.value || ""}>
-                                <FormControl>
-                                  <SelectTrigger data-testid="select-professionalCategory">
-                                    <SelectValue placeholder={t("selectProfessionalCategory")} />
-                                  </SelectTrigger>
-                                </FormControl>
-                                <SelectContent>
-                                  {PROFESSIONAL_CATEGORIES.map((cat) => (
-                                    <SelectItem key={cat} value={cat}>{cat}</SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                        <p className="text-sm font-medium text-gray-700 pt-2">{t("referentName")}</p>
-                      </>
-                    )}
-                    <div className="grid grid-cols-2 gap-3">
-                      <FormField
-                        control={form.control}
-                        name="firstName"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>{t("firstName")}</FormLabel>
-                            <FormControl>
-                              <Input autoComplete="given-name" placeholder={t("yourFirstName")} data-testid="input-firstName" {...field} />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={form.control}
-                        name="lastName"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>{t("lastName")}</FormLabel>
-                            <FormControl>
-                              <Input autoComplete="family-name" placeholder={t("yourLastName")} data-testid="input-lastName" {...field} />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                    </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <FormField
-                        control={form.control}
-                        name="age"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>{t("age")} <span className="text-muted-foreground font-normal">({t("optional")})</span></FormLabel>
-                            <FormControl>
-                              <Input
-                                type="number"
-                                inputMode="numeric"
-                                min="18"
-                                max="65"
-                                data-testid="input-age"
-                                name={field.name}
-                                ref={field.ref}
-                                onBlur={field.onBlur}
-                                value={field.value ?? ""}
-                                onChange={(e) => field.onChange(e.target.value === "" ? undefined : parseInt(e.target.value))}
-                              />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={form.control}
-                        name="sex"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>{t("gender")} <span className="text-muted-foreground font-normal">({t("optional")})</span></FormLabel>
-                            <Select onValueChange={field.onChange} value={field.value ?? ""} data-testid="select-sex">
-                              <FormControl>
-                                <SelectTrigger>
-                                  <SelectValue placeholder={t("selectGender")} />
-                                </SelectTrigger>
-                              </FormControl>
-                              <SelectContent>
-                                <SelectItem value="female">{t("female")}</SelectItem>
-                                <SelectItem value="male">{t("male")}</SelectItem>
-                                <SelectItem value="other">{t("other")}</SelectItem>
-                              </SelectContent>
-                            </Select>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                    </div>
-                  </div>
-                )}
-
-                {/* STEP: where */}
-                {step === "where" && (
-                  <div className="space-y-4">
-                    <p className="text-sm text-muted-foreground">{t("whereHint")}</p>
-                    <FormField
-                      control={form.control}
-                      name="location"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>{t("province")}</FormLabel>
-                          <FormControl>
-                            <CityPicker value={field.value} onChange={field.onChange} testId="select-province" />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    {!isProfessional && province && community && (
-                      <div className="rounded-2xl bg-pink-50 border border-pink-100 p-4 flex items-start gap-3" data-testid="province-density">
-                        <Users className="h-5 w-5 text-pink-500 shrink-0 mt-0.5" />
-                        <p className="text-sm text-gray-700">
-                          {community.totalMoms > 0
-                            ? fill(t("momsAlreadyHere"), { count: community.totalMoms, province })
-                            : fill(t("firstMomsHere"), { province })}
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* STEP: kids */}
-                {step === "kids" && (
-                  <div className="space-y-4">
-                    <p className="text-sm text-muted-foreground">{t("kidsHint")}</p>
-                    <div className="flex items-center justify-between rounded-2xl border p-3">
-                      <span className="font-medium text-gray-800">{t("numberOfKids")}</span>
-                      <div className="flex items-center gap-3">
-                        <Button type="button" variant="outline" size="icon" className="rounded-full h-9 w-9" onClick={() => setKidsNumber(kidsNumber - 1)} disabled={kidsNumber <= 1} data-testid="button-kids-minus">
-                          <Minus className="h-4 w-4" />
-                        </Button>
-                        <span className="w-6 text-center text-lg font-semibold" data-testid="text-kids-number">{kidsNumber}</span>
-                        <Button type="button" variant="outline" size="icon" className="rounded-full h-9 w-9" onClick={() => setKidsNumber(kidsNumber + 1)} disabled={kidsNumber >= 6} data-testid="button-kids-plus">
-                          <Plus className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
-                    <div className="space-y-3">
-                      {Array.from({ length: kidsNumber }, (_, index) => (
-                        <div key={index} className="rounded-2xl bg-gray-50 p-3">
-                          <p className="text-sm font-medium text-gray-800 mb-2">{t("kid")} {index + 1}</p>
-                          <div className="grid grid-cols-2 gap-3">
-                            <div>
-                              <FormLabel className="text-xs">{t("age")}</FormLabel>
-                              <Input
-                                type="number"
-                                inputMode="numeric"
-                                min="0"
-                                max="18"
-                                placeholder={t("age")}
-                                data-testid={`input-kid-age-${index}`}
-                                value={form.watch("kidsAges")?.[index] ?? ""}
-                                onChange={(e) => {
-                                  const newAges = [...(form.getValues("kidsAges") || [])];
-                                  newAges[index] = e.target.value;
-                                  form.setValue("kidsAges", newAges);
-                                }}
-                              />
-                            </div>
-                            <div>
-                              <FormLabel className="text-xs">{t("gender")}</FormLabel>
-                              <Select
-                                onValueChange={(value) => {
+                                className={`chip chip-lg ${active ? "chip-on pl-3" : "bg-gray-50"}`}
+                                aria-pressed={active}
+                                onClick={() => {
                                   const newGenders = [...(form.getValues("kidsGenders") || [])];
                                   newGenders[index] = value;
                                   form.setValue("kidsGenders", newGenders);
                                 }}
-                                value={form.watch("kidsGenders")?.[index] || ""}
+                                data-testid={`chip-kid-gender-${index}-${value}`}
                               >
-                                <SelectTrigger data-testid={`select-kid-gender-${index}`}>
-                                  <SelectValue placeholder={t("select")} />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="male">{t("boy")}</SelectItem>
-                                  <SelectItem value="female">{t("girl")}</SelectItem>
-                                </SelectContent>
-                              </Select>
-                            </div>
-                          </div>
+                                {active && <Check className="h-4 w-4 text-pink-500" strokeWidth={2.6} />}
+                                {label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* STEP: interests */}
+            {step === "interests" && (
+              <div className="space-y-5">
+                <div className="flex flex-wrap gap-2.5">
+                  {INTEREST_KEYS.map((key) => {
+                    const label = t(key);
+                    const active = hobbies.some((h) => h.toLowerCase() === label.toLowerCase());
+                    return (
+                      <button
+                        key={key}
+                        type="button"
+                        onClick={() => toggleHobby(label)}
+                        className={`chip chip-lg ${active ? "chip-on pl-3" : ""}`}
+                        aria-pressed={active}
+                        data-testid={`chip-${key}`}
+                      >
+                        {active && <Check className="h-4 w-4 text-pink-500" strokeWidth={2.6} />}
+                        {label}
+                      </button>
+                    );
+                  })}
+                  {customHobbies.map((hobby, index) => (
+                    <span key={hobby} className="chip chip-lg chip-on pr-1.5">
+                      {hobby}
+                      <button
+                        type="button"
+                        onClick={() => toggleHobby(hobby)}
+                        className="flex h-8 w-8 items-center justify-center rounded-full"
+                        aria-label={`${t("delete")} ${hobby}`}
+                        data-testid={`button-remove-hobby-${index}`}
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+                <div className="flex gap-2">
+                  <Input
+                    placeholder={t("hobbyExamples")}
+                    aria-label={t("addHobby")}
+                    value={hobbiesInput}
+                    onChange={(e) => setHobbiesInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        addHobby();
+                      }
+                    }}
+                    data-testid="input-hobby"
+                  />
+                  <Button type="button" variant="outline" size="icon" className="h-12 w-12 shrink-0" onClick={addHobby} aria-label={t("addHobby")} data-testid="button-add-hobby">
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {/* STEP: photos + bio */}
+            {step === "photos" && (
+              <div className="space-y-6">
+                <div className="space-y-3">
+                  {uploadedPhotos.length > 0 && (
+                    <div className="grid grid-cols-3 gap-3">
+                      {uploadedPhotos.map((photoUrl, index) => (
+                        <div key={index} className="relative aspect-square">
+                          <img src={photoUrl} alt={`${t("profilePhoto")} ${index + 1}`} className="h-full w-full rounded-[20px] object-cover" />
+                          <button
+                            type="button"
+                            className="glass absolute right-1.5 top-1.5 flex h-8 w-8 items-center justify-center rounded-full text-gray-900"
+                            onClick={() => removePhoto(index)}
+                            aria-label={t("delete")}
+                            data-testid={`button-remove-photo-${index}`}
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
                         </div>
                       ))}
                     </div>
-                  </div>
-                )}
-
-                {/* STEP: interests */}
-                {step === "interests" && (
-                  <div className="space-y-4">
-                    <p className="text-sm text-muted-foreground">{t("suggestedInterests")}</p>
-                    <div className="flex flex-wrap gap-2">
-                      {INTEREST_KEYS.map((key) => {
-                        const label = t(key);
-                        const active = hobbies.some((h) => h.toLowerCase() === label.toLowerCase());
-                        return (
-                          <button
-                            key={key}
-                            type="button"
-                            onClick={() => toggleHobby(label)}
-                            className={`rounded-full border px-3 py-1.5 text-sm transition-colors ${
-                              active ? "border-pink-400 bg-pink-50 text-pink-700 font-medium" : "border-gray-200 bg-white text-gray-700 hover:border-gray-300"
-                            }`}
-                            aria-pressed={active}
-                            data-testid={`chip-${key}`}
-                          >
-                            {active && <Check className="inline h-3.5 w-3.5 mr-1 -mt-0.5" />}
-                            {label}
-                          </button>
-                        );
-                      })}
-                    </div>
-                    <div className="flex gap-2">
-                      <Input
-                        placeholder={t("hobbyExamples")}
-                        value={hobbiesInput}
-                        onChange={(e) => setHobbiesInput(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") {
-                            e.preventDefault();
-                            addHobby();
-                          }
-                        }}
-                        data-testid="input-hobby"
-                      />
-                      <Button type="button" variant="outline" onClick={addHobby} data-testid="button-add-hobby">
-                        <Plus className="h-4 w-4" />
-                      </Button>
-                    </div>
-                    {hobbies.filter((h) => !INTEREST_KEYS.some((k) => t(k).toLowerCase() === h.toLowerCase())).length > 0 && (
-                      <div className="flex flex-wrap gap-2">
-                        {hobbies
-                          .filter((h) => !INTEREST_KEYS.some((k) => t(k).toLowerCase() === h.toLowerCase()))
-                          .map((hobby, index) => (
-                            <Badge key={index} variant="secondary" className="flex items-center gap-1">
-                              {hobby}
-                              <button type="button" onClick={() => toggleHobby(hobby)} className="ml-1" aria-label={t("delete")} data-testid={`button-remove-hobby-${index}`}>
-                                <X className="h-3 w-3" />
-                              </button>
-                            </Badge>
-                          ))}
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* STEP: photos + bio */}
-                {step === "photos" && (
-                  <div className="space-y-5">
-                    <div className="space-y-3">
-                      <p className="text-sm text-muted-foreground">{t("photosHint")}</p>
-                      {uploadedPhotos.length > 0 && (
-                        <div className="grid grid-cols-3 gap-3">
-                          {uploadedPhotos.map((photoUrl, index) => (
-                            <div key={index} className="relative aspect-square">
-                              <img src={photoUrl} alt={`${t("profilePhoto")} ${index + 1}`} className="w-full h-full object-cover rounded-xl" />
-                              <button
-                                type="button"
-                                className="absolute top-1 right-1 h-6 w-6 rounded-full bg-white/90 shadow flex items-center justify-center"
-                                onClick={() => removePhoto(index)}
-                                aria-label={t("delete")}
-                                data-testid={`button-remove-photo-${index}`}
-                              >
-                                <X className="h-3.5 w-3.5 text-gray-700" />
-                              </button>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                      {uploadedPhotos.length < 5 && (
-                        <ObjectUploader
-                          maxNumberOfFiles={5 - uploadedPhotos.length}
-                          maxFileSize={5 * 1024 * 1024}
-                          onGetUploadParameters={handleGetUploadParameters}
-                          onComplete={handleUploadComplete}
-                          buttonClassName="w-full"
-                        >
-                          <Upload className="h-4 w-4 mr-2" />
-                          {t("uploadPhotos")} ({uploadedPhotos.length}/5)
-                        </ObjectUploader>
-                      )}
-                    </div>
-                    <FormField
-                      control={form.control}
-                      name="bio"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>{t("aboutYou")}</FormLabel>
-                          <p className="text-xs text-muted-foreground">{t("bioHint")}</p>
-                          <FormControl>
-                            <Textarea
-                              placeholder={isProfessional ? t("professionalBioPlaceholder") : t("aboutYouPlaceholder")}
-                              className="min-h-[100px]"
-                              data-testid="textarea-bio"
-                              {...field}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
-                )}
-
-                {/* STEP: review + terms */}
-                {step === "review" && (
-                  <div className="space-y-4">
-                    <p className="text-sm text-muted-foreground">{t("reviewYourProfile")}</p>
-                    <div className="rounded-2xl border divide-y">
-                      <ReviewRow label={t("email")} value={form.getValues("email")} onEdit={() => goTo("account")} editLabel={t("edit")} />
-                      <ReviewRow
-                        label={isProfessional ? t("businessNameLabel") : t("basicInformation")}
-                        value={isProfessional
-                          ? `${form.getValues("businessName")} · ${form.getValues("professionalCategory")} · ${form.getValues("firstName")} ${form.getValues("lastName")}`
-                          : `${form.getValues("firstName")} ${form.getValues("lastName")}${form.getValues("age") ? `, ${form.getValues("age")}` : ""}`}
-                        onEdit={() => goTo("about")}
-                        editLabel={t("edit")}
-                      />
-                      <ReviewRow label={t("province")} value={province} onEdit={() => goTo("where")} editLabel={t("edit")} />
-                      {!isProfessional && (
-                        <>
-                          <ReviewRow
-                            label={t("kids")}
-                            value={(form.getValues("kidsAges") || []).slice(0, kidsNumber).map((a) => `${a} ${t("yearsOld")}`).join(", ")}
-                            onEdit={() => goTo("kids")}
-                            editLabel={t("edit")}
-                          />
-                          <ReviewRow label={t("interests")} value={hobbies.join(", ")} onEdit={() => goTo("interests")} editLabel={t("edit")} />
-                        </>
-                      )}
-                      <div className="p-3 flex items-center justify-between gap-3">
-                        <div className="flex -space-x-2">
-                          {uploadedPhotos.slice(0, 5).map((url, i) => (
-                            <img key={i} src={url} alt="" className="w-10 h-10 rounded-full object-cover border-2 border-white" />
-                          ))}
-                        </div>
-                        <Button type="button" variant="ghost" size="sm" className="text-pink-600" onClick={() => goTo("photos")} data-testid="button-edit-photos">
-                          {t("edit")}
-                        </Button>
-                      </div>
-                    </div>
-
-                    <label className="flex items-start gap-3 cursor-pointer">
-                      <Checkbox
-                        checked={acceptedTerms}
-                        onCheckedChange={(v) => setAcceptedTerms(v === true)}
-                        className="mt-0.5"
-                        data-testid="checkbox-register-terms"
-                      />
-                      <span className="text-sm text-muted-foreground">
-                        {t("registerAcceptTerms")}{" "}
-                        (
-                        <Link href="/terms" className="text-pink-600 hover:text-pink-700 underline" data-testid="link-register-terms">
-                          {t("termsOfUse")}
-                        </Link>
-                        {" · "}
-                        <Link href="/privacy" className="text-pink-600 hover:text-pink-700 underline" data-testid="link-register-privacy">
-                          {t("privacyPolicy")}
-                        </Link>
-                        )
-                      </span>
-                    </label>
-                  </div>
-                )}
-
-                {/* Footer action */}
-                {step !== "type" && (
-                  <Button
-                    type="submit"
-                    className={`w-full h-12 rounded-full ${gradientButton}`}
-                    disabled={step === "review" ? registerMutation.isPending || !acceptedTerms : false}
-                    data-testid={step === "review" ? "button-register" : "button-wizard-next"}
-                  >
-                    {step === "review" ? (
-                      registerMutation.isPending ? t("sendingVerification") : (<><Sparkles className="h-4 w-4 mr-2" />{t("createAccount")}</>)
-                    ) : (
-                      <>{t("next")}<ArrowRight className="h-4 w-4 ml-2" /></>
-                    )}
-                  </Button>
-                )}
-              </form>
-            </Form>
-
-            {stepIndex === 0 && (
-              <div className="mt-6 text-center text-sm">
-                <span className="text-muted-foreground">{t("alreadyHaveAccount")} </span>
-                <Link href="/login">
-                  <Button variant="link" className="p-0 h-auto text-sm font-medium text-pink-600 hover:text-pink-700" data-testid="link-login">
-                    {t("signInHere")}
-                  </Button>
-                </Link>
+                  )}
+                  {uploadedPhotos.length < 5 && (
+                    <ObjectUploader
+                      maxNumberOfFiles={5 - uploadedPhotos.length}
+                      maxFileSize={5 * 1024 * 1024}
+                      onGetUploadParameters={handleGetUploadParameters}
+                      onComplete={handleUploadComplete}
+                      buttonClassName="h-14 w-full"
+                    >
+                      <Upload />
+                      {t("uploadPhotos")} ({uploadedPhotos.length}/5)
+                    </ObjectUploader>
+                  )}
+                </div>
+                <FormField
+                  control={form.control}
+                  name="bio"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>{t("aboutYou")}</FormLabel>
+                      <p className="text-[13px] leading-snug text-gray-600">{t("bioHint")}</p>
+                      <FormControl>
+                        <Textarea
+                          placeholder={isProfessional ? t("professionalBioPlaceholder") : t("aboutYouPlaceholder")}
+                          className="min-h-[120px]"
+                          data-testid="textarea-bio"
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
               </div>
             )}
-          </CardContent>
-        </Card>
+
+            {/* STEP: review + terms */}
+            {step === "review" && (
+              <div className="space-y-3">
+                <div className="card-float px-4">
+                  <ReviewRow label={t("email")} value={form.getValues("email")} onEdit={() => goTo("account")} editLabel={t("edit")} />
+                  <ReviewRow
+                    label={isProfessional ? t("businessNameLabel") : t("basicInformation")}
+                    value={isProfessional
+                      ? `${form.getValues("businessName")} · ${form.getValues("professionalCategory")} · ${form.getValues("firstName")} ${form.getValues("lastName")}`
+                      : `${form.getValues("firstName")} ${form.getValues("lastName")}${form.getValues("age") ? `, ${form.getValues("age")}` : ""}`}
+                    onEdit={() => goTo("about")}
+                    editLabel={t("edit")}
+                  />
+                  <ReviewRow label={t("province")} value={province} onEdit={() => goTo("where")} editLabel={t("edit")} />
+                </div>
+                {!isProfessional && (
+                  <div className="card-float px-4">
+                    <ReviewRow
+                      label={t("kids")}
+                      value={(form.getValues("kidsAges") || []).slice(0, kidsNumber).map((a) => `${a} ${t("yearsOld")}`).join(", ")}
+                      onEdit={() => goTo("kids")}
+                      editLabel={t("edit")}
+                    />
+                    <ReviewRow label={t("interests")} value={hobbies.join(", ")} onEdit={() => goTo("interests")} editLabel={t("edit")} />
+                  </div>
+                )}
+                <div className="card-float flex items-center justify-between gap-3 px-4 py-3.5">
+                  <div className="flex -space-x-2">
+                    {uploadedPhotos.slice(0, 5).map((url, i) => (
+                      <img key={i} src={url} alt="" className="h-11 w-11 rounded-full border-2 border-white object-cover" />
+                    ))}
+                  </div>
+                  <button
+                    type="button"
+                    className="-mr-2 flex min-h-11 shrink-0 items-center px-2 text-sm font-semibold text-pink-700"
+                    onClick={() => goTo("photos")}
+                    data-testid="button-edit-photos"
+                  >
+                    {t("edit")}
+                  </button>
+                </div>
+
+                <label className="card-float flex cursor-pointer items-start gap-3 p-4">
+                  <Checkbox
+                    checked={acceptedTerms}
+                    onCheckedChange={(v) => setAcceptedTerms(v === true)}
+                    className="mt-0.5"
+                    data-testid="checkbox-register-terms"
+                  />
+                  <span className="text-sm leading-relaxed text-gray-700">
+                    {t("registerAcceptTerms")}{" "}
+                    (
+                    <Link href="/terms" className="font-medium text-pink-700 underline" data-testid="link-register-terms">
+                      {t("termsOfUse")}
+                    </Link>
+                    {" · "}
+                    <Link href="/privacy" className="font-medium text-pink-700 underline" data-testid="link-register-privacy">
+                      {t("privacyPolicy")}
+                    </Link>
+                    )
+                  </span>
+                </label>
+              </div>
+            )}
+
+            {/* Footer action, pushed to the bottom of the screen */}
+            <div className="mt-auto flex flex-col gap-3">
+              {step === "interests" && (
+                <p className="text-center text-[13px] font-medium leading-snug text-gray-600" aria-live="polite">
+                  {fill(t("regInterestsCount"), { count: hobbies.length })}
+                </p>
+              )}
+              {step !== "type" && (
+                <Button
+                  type="submit"
+                  size="lg"
+                  className="w-full gap-2.5 [&_svg]:size-[18px]"
+                  disabled={step === "review" ? registerMutation.isPending || !acceptedTerms : false}
+                  data-testid={step === "review" ? "button-register" : "button-wizard-next"}
+                >
+                  {step === "review" ? (
+                    registerMutation.isPending ? t("sendingVerification") : t("createAccount")
+                  ) : (
+                    <>{t("regContinue")}<ArrowRight strokeWidth={2.2} /></>
+                  )}
+                </Button>
+              )}
+              {stepIndex === 0 && (
+                <p className="text-center text-sm text-gray-600">
+                  {t("alreadyHaveAccount")}{" "}
+                  <Link href="/login" className="font-semibold text-pink-700" data-testid="link-login">
+                    {t("signInHere")}
+                  </Link>
+                </p>
+              )}
+            </div>
+          </form>
+        </Form>
       </div>
     </div>
   );
 }
 
+function ChoiceCard({ icon, title, description, selected, onClick, testId }: {
+  icon: ReactNode;
+  title: string;
+  description: string;
+  selected: boolean;
+  onClick: () => void;
+  testId: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={selected}
+      className={`flex items-center gap-3.5 rounded-3xl p-4 text-left transition-colors ${
+        selected ? "bg-pink-50 shadow-[inset_0_0_0_2px_var(--magenta)]" : "card-float"
+      }`}
+      data-testid={testId}
+    >
+      <span
+        className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl ${selected ? "bg-white text-pink-500" : "bg-gray-100 text-gray-700"}`}
+        aria-hidden="true"
+      >
+        {icon}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className={`block font-display text-[17px] font-semibold leading-tight ${selected ? "text-pink-700" : "text-gray-900"}`}>{title}</span>
+        <span className="mt-1 block text-sm leading-snug text-gray-600">{description}</span>
+      </span>
+      {selected && <Check className="h-5 w-5 shrink-0 text-pink-500" strokeWidth={2.6} aria-hidden="true" />}
+    </button>
+  );
+}
+
 function ReviewRow({ label, value, onEdit, editLabel }: { label: string; value: string; onEdit: () => void; editLabel: string }) {
   return (
-    <div className="p-3 flex items-center justify-between gap-3">
+    <div className="flex items-center justify-between gap-3 border-b border-gray-100 py-3.5 last:border-0">
       <div className="min-w-0">
-        <p className="text-xs text-gray-500">{label}</p>
-        <p className="text-sm font-medium text-gray-900 truncate">{value || "—"}</p>
+        <p className="text-xs font-medium text-gray-600">{label}</p>
+        <p className="mt-1 truncate text-[15px] font-semibold text-gray-900">{value || "—"}</p>
       </div>
-      <Button type="button" variant="ghost" size="sm" className="text-pink-600 shrink-0" onClick={onEdit}>
+      <button
+        type="button"
+        className="-mr-2 flex min-h-11 shrink-0 items-center px-2 text-sm font-semibold text-pink-700"
+        onClick={onEdit}
+      >
         {editLabel}
-      </Button>
+      </button>
     </div>
   );
 }

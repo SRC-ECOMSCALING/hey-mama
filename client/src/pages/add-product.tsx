@@ -3,19 +3,18 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { ArrowLeft, Upload, X, Plus, Loader2 } from "lucide-react";
+import { Camera, Check, X, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { Label } from "@/components/ui/label";
-import { Card, CardContent } from "@/components/ui/card";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
 import { insertMarketplaceItemSchema, type InsertMarketplaceItem, type Profile } from "@shared/schema";
 import { ITALIAN_PROVINCES } from "@shared/provinces";
 import CityPicker from "@/components/city-picker";
+import AppHeader from "@/components/app-header";
 import { z } from "zod";
 import { apiRequest } from "@/lib/queryClient";
 import { useLanguage } from "@/contexts/LanguageContext";
@@ -366,485 +365,457 @@ export default function AddProduct() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white shadow-sm sticky top-0 z-50">
-        <div className="flex items-center p-4">
-          <Button 
-            variant="ghost" 
-            size="icon" 
-            className="rounded-full mr-3"
-            onClick={() => setLocation("/marketplace")}
-            data-testid="button-back"
-          >
-            <ArrowLeft className="h-5 w-5 text-gray-600" />
-          </Button>
-          <h1 className="text-xl font-semibold text-gray-900 flex-1">{t("addProduct")}</h1>
-        </div>
-      </header>
+    <div className="min-h-screen bg-gray-50 pb-10">
+      <AppHeader title={t("addProduct")} backTo="/marketplace" right={null} />
 
-      {/* Form */}
-      <div className="p-4 pb-6">
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-            
-            {/* Photo Upload */}
-            <Card>
-              <CardContent className="p-4">
-                <Label className="text-base font-semibold text-gray-900 mb-3 block">
-                  {t("productPhotosLabel")}
-                </Label>
-                <p className="text-sm text-gray-600 mb-4">
-                  {t("productPhotosHint")}
-                </p>
+      <Form {...form}>
+        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5 px-5">
 
-                <div className="grid grid-cols-2 gap-3 mb-4">
-                  {uploadedImages.map((image, index) => (
-                    <div key={index} className="relative">
-                      <img
-                        src={image.previewUrl}
-                        alt={`Preview ${index + 1}`}
-                        className="w-full h-32 object-cover rounded-lg border"
-                      />
-                      
-                      {/* Upload Status Overlay */}
-                      {image.isUploading && (
-                        <div className="absolute inset-0 bg-black bg-opacity-50 rounded-lg flex items-center justify-center">
-                          <div className="text-white text-center">
-                            <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2" />
-                            <span className="text-xs">{t("uploading")}</span>
-                          </div>
-                        </div>
-                      )}
-                      
-                      {/* Success Indicator */}
-                      {image.uploadUrl && !image.isUploading && (
-                        <div className="absolute top-1 left-1 bg-green-500 text-white rounded-full w-6 h-6 flex items-center justify-center">
-                          <svg className="h-4 w-4" fill="none" strokeWidth="2" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"></path>
-                          </svg>
-                        </div>
-                      )}
-                      
-                      {/* Error Indicator */}
-                      {image.uploadError && !image.isUploading && (
-                        <div className="absolute inset-0 bg-red-500 bg-opacity-90 rounded-lg flex items-center justify-center">
-                          <div className="text-white text-center p-2">
-                            <X className="h-6 w-6 mx-auto mb-2" />
-                            <span className="text-xs">{t("uploadError")}</span>
-                            <button
-                              type="button"
-                              onClick={() => retryUpload(index)}
-                              className="block mx-auto mt-2 text-xs underline hover:no-underline"
-                            >
-                              {t("retry")}
-                            </button>
-                          </div>
-                        </div>
-                      )}
-                      
-                      {/* Remove Button */}
-                      <button
-                        type="button"
-                        onClick={() => removeImage(index)}
-                        className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center hover:bg-red-600"
-                        disabled={image.isUploading}
-                      >
-                        <X className="h-4 w-4" />
-                      </button>
-                    </div>
-                  ))}
-                  
-                  {uploadedImages.length < 5 && (
-                    <label className="w-full h-32 border-2 border-dashed border-gray-300 rounded-lg flex flex-col items-center justify-center cursor-pointer hover:bg-gray-50">
-                      <Upload className="h-8 w-8 text-gray-400 mb-2" />
-                      <span className="text-sm text-gray-500">{t("addPhoto")}</span>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        multiple
-                        onChange={handleImageUpload}
-                        className="hidden"
-                      />
-                    </label>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
+          {/* Photo Upload */}
+          <section className="space-y-2.5">
+            <h2 className="section-label">{t("productPhotosLabel")}</h2>
+            <div className="card-float p-5">
+              <p className="mb-4 text-sm leading-relaxed text-gray-600">
+                {t("productPhotosHint")}
+              </p>
 
-            {/* Basic Information */}
-            <Card>
-              <CardContent className="p-4 space-y-4">
-                <h3 className="text-base font-semibold text-gray-900">{t("basicInfo")}</h3>
+              <div className="grid grid-cols-3 gap-2.5">
+                {uploadedImages.map((image, index) => (
+                  <div key={index} className="relative aspect-square overflow-hidden rounded-[20px] bg-gray-100">
+                    <img
+                      src={image.previewUrl}
+                      alt={t("marketPhotoN").replace("{n}", String(index + 1))}
+                      className="h-full w-full object-cover"
+                    />
 
-                <FormField
-                  control={form.control}
-                  name="title"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>{t("listingTitleRequired")}</FormLabel>
-                      <FormControl>
-                        <Input 
-                          placeholder={t("listingTitlePlaceholder")}
-                          {...field}
-                          data-testid="input-title"
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="category"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>{t("categoryRequired")}</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value}>
-                        <FormControl>
-                          <SelectTrigger data-testid="select-category">
-                            <SelectValue placeholder={t("selectCategory")} />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {categories.map((category) => (
-                            <SelectItem key={category.value} value={category.value}>
-                              {optionLabel(t, category.value)}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="brand"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>{t("brandRequired")}</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value}>
-                        <FormControl>
-                          <SelectTrigger data-testid="select-brand">
-                            <SelectValue placeholder={t("selectBrand")} />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {brands.map((brand) => (
-                            <SelectItem key={brand} value={brand}>
-                              {brand}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="size"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>{t("sizeRequired")}</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value}>
-                        <FormControl>
-                          <SelectTrigger data-testid="select-size">
-                            <SelectValue placeholder={t("selectSize")} />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {sizes.map((size) => (
-                            <SelectItem key={size} value={size}>
-                              {optionLabel(t, size)}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="condition"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>{t("conditionRequired")}</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value}>
-                        <FormControl>
-                          <SelectTrigger data-testid="select-condition">
-                            <SelectValue placeholder={t("selectCondition")} />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {conditions.map((condition) => (
-                            <SelectItem key={condition.value} value={condition.value}>
-                              {optionLabel(t, condition.value)}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </CardContent>
-            </Card>
-
-            {/* Price and Location */}
-            <Card>
-              <CardContent className="p-4 space-y-4">
-                <h3 className="text-base font-semibold text-gray-900">{t("priceAndLocation")}</h3>
-
-                <FormField
-                  control={form.control}
-                  name="price"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>{t("priceRequired")}</FormLabel>
-                      <FormControl>
-                        <div className="relative">
-                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">€</span>
-                          <Input
-                            type="text"
-                            inputMode="decimal"
-                            placeholder="es. 12,50"
-                            className="pl-8"
-                            value={priceText}
-                            name={field.name}
-                            ref={field.ref}
-                            onBlur={field.onBlur}
-                            onChange={(e) => {
-                              // Accept only digits with one comma/dot decimal separator
-                              const raw = e.target.value.replace(/[^\d.,]/g, "");
-                              setPriceText(raw);
-                              const parsed = parseFloat(raw.replace(",", "."));
-                              field.onChange(Number.isFinite(parsed) ? parsed : undefined);
-                            }}
-                            data-testid="input-price"
-                          />
-                        </div>
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="negotiable"
-                  render={({ field }) => (
-                    <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
-                      <div className="space-y-0.5">
-                        <FormLabel className="text-base">{t("negotiablePrice")}</FormLabel>
-                        <p className="text-sm text-gray-500">
-                          {t("allowNegotiation")}
-                        </p>
+                    {/* Upload Status Overlay */}
+                    {image.isUploading && (
+                      <div className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 bg-gray-900/55 text-white">
+                        <Loader2 className="h-5 w-5 animate-spin" />
+                        <span className="text-[11px] font-medium">{t("uploading")}</span>
                       </div>
-                      <FormControl>
-                        <Switch
-                          checked={field.value}
-                          onCheckedChange={field.onChange}
-                          data-testid="switch-negotiable"
-                        />
-                      </FormControl>
-                    </FormItem>
-                  )}
-                />
+                    )}
 
-                <FormField
-                  control={form.control}
-                  name="location"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>{t("cityRequired")}</FormLabel>
-                      <FormControl>
-                        <CityPicker value={field.value ?? ""} onChange={field.onChange} testId="input-location" />
-                      </FormControl>
-                      <p className="text-xs text-gray-500">{t("cityOfferHint")}</p>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </CardContent>
-            </Card>
+                    {/* Success Indicator */}
+                    {image.uploadUrl && !image.isUploading && (
+                      <div
+                        className="absolute left-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-white text-pink-500"
+                        role="img"
+                        aria-label={t("marketPhotoUploaded")}
+                      >
+                        <Check className="h-3.5 w-3.5" strokeWidth={2.6} />
+                      </div>
+                    )}
 
-            {/* Description */}
-            <Card>
-              <CardContent className="p-4">
-                <FormField
-                  control={form.control}
-                  name="description"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>{t("descriptionRequired")}</FormLabel>
-                      <p className="text-sm text-gray-500 mb-2">
-                        {t("productDescriptionHint")}
-                      </p>
-                      <FormControl>
-                        <Textarea 
-                          placeholder={t("productDescriptionPlaceholder")}
-                          rows={4}
-                          {...field}
-                          data-testid="textarea-description"
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </CardContent>
-            </Card>
+                    {/* Error Indicator */}
+                    {image.uploadError && !image.isUploading && (
+                      <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 bg-destructive p-2 text-center text-white">
+                        <span className="text-[11px] font-medium leading-tight">{t("uploadError")}</span>
+                        <button
+                          type="button"
+                          onClick={() => retryUpload(index)}
+                          className="rounded-full bg-white px-3 py-1.5 text-[11px] font-semibold text-gray-900"
+                        >
+                          {t("retry")}
+                        </button>
+                      </div>
+                    )}
 
-            {/* Optional Details */}
-            <Card>
-              <CardContent className="p-4 space-y-4">
-                <h3 className="text-base font-semibold text-gray-900">{t("additionalDetailsOptional")}</h3>
-
-                <FormField
-                  control={form.control}
-                  name="color"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>{t("colorLabel")}</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value || ""}>
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder={t("selectColor")} />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {colors.map((color) => (
-                            <SelectItem key={color} value={color}>
-                              {optionLabel(t, color)}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="material"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>{t("materialLabel")}</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value || ""}>
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder={t("selectMaterial")} />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {materials.map((material) => (
-                            <SelectItem key={material} value={material}>
-                              {optionLabel(t, material)}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="season"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>{t("seasonLabel")}</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value || ""}>
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder={t("selectSeason")} />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {seasons.map((season) => (
-                            <SelectItem key={season.value} value={season.value}>
-                              {optionLabel(t, season.value)}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="measurements"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>{t("specialMeasurements")}</FormLabel>
-                      <FormControl>
-                        <Input 
-                          placeholder={t("measurementsPlaceholder")}
-                          {...field}
-                          value={field.value || ""}
-                        />
-                      </FormControl>
-                      <p className="text-xs text-gray-500">
-                        {t("specialMeasurementsHint")}
-                      </p>
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="vintedUrl"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>{t("vintedLink")}</FormLabel>
-                      <FormControl>
-                        <Input 
-                          placeholder="https://www.vinted.it/..."
-                          {...field}
-                          value={field.value || ""}
-                        />
-                      </FormControl>
-                      <p className="text-xs text-gray-500">
-                        {t("vintedLinkHint")}
-                      </p>
-                    </FormItem>
-                  )}
-                />
-              </CardContent>
-            </Card>
-
-            {/* Submit Button */}
-            <div className="pt-4">
-              <Button
-                type="submit"
-                className="w-full"
-                style={{ 
-                  background: "linear-gradient(to right, var(--primary-pink), var(--accent-coral))"
-                }}
-                disabled={addProductMutation.isPending}
-                data-testid="button-submit"
-              >
-                {addProductMutation.isPending ? (
-                  <div className="flex items-center">
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                    {t("publishing")}
+                    {/* Remove Button */}
+                    <button
+                      type="button"
+                      onClick={() => removeImage(index)}
+                      className="glass absolute right-1.5 top-1.5 flex h-8 w-8 items-center justify-center rounded-full text-gray-900 disabled:opacity-50"
+                      aria-label={t("marketRemovePhoto")}
+                      disabled={image.isUploading}
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
                   </div>
-                ) : (
-                  "Pubblica Prodotto"
+                ))}
+
+                {uploadedImages.length < 5 && (
+                  <label className="flex aspect-square cursor-pointer flex-col items-center justify-center gap-1.5 rounded-[20px] border-2 border-dashed border-gray-300 bg-white px-1 text-center text-gray-600">
+                    <Camera className="h-6 w-6 text-pink-500" />
+                    <span className="text-xs font-medium leading-tight">{t("addPhoto")}</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      onChange={handleImageUpload}
+                      className="hidden"
+                    />
+                  </label>
                 )}
-              </Button>
+              </div>
             </div>
-          </form>
-        </Form>
-      </div>
+          </section>
+
+          {/* Basic Information */}
+          <section className="space-y-2.5">
+            <h2 className="section-label">{t("basicInfo")}</h2>
+            <div className="card-float space-y-4 p-5">
+              <FormField
+                control={form.control}
+                name="title"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t("listingTitleRequired")}</FormLabel>
+                    <FormControl>
+                      <Input 
+                        placeholder={t("listingTitlePlaceholder")}
+                        {...field}
+                        data-testid="input-title"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="category"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t("categoryRequired")}</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger data-testid="select-category">
+                          <SelectValue placeholder={t("selectCategory")} />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {categories.map((category) => (
+                          <SelectItem key={category.value} value={category.value}>
+                            {optionLabel(t, category.value)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="brand"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t("brandRequired")}</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger data-testid="select-brand">
+                          <SelectValue placeholder={t("selectBrand")} />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {brands.map((brand) => (
+                          <SelectItem key={brand} value={brand}>
+                            {brand}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="size"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t("sizeRequired")}</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger data-testid="select-size">
+                          <SelectValue placeholder={t("selectSize")} />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {sizes.map((size) => (
+                          <SelectItem key={size} value={size}>
+                            {optionLabel(t, size)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="condition"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t("conditionRequired")}</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger data-testid="select-condition">
+                          <SelectValue placeholder={t("selectCondition")} />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {conditions.map((condition) => (
+                          <SelectItem key={condition.value} value={condition.value}>
+                            {optionLabel(t, condition.value)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+          </section>
+
+          {/* Price and Location */}
+          <section className="space-y-2.5">
+            <h2 className="section-label">{t("priceAndLocation")}</h2>
+            <div className="card-float space-y-4 p-5">
+              <FormField
+                control={form.control}
+                name="price"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t("priceRequired")}</FormLabel>
+                    <FormControl>
+                      <div className="relative">
+                        <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 font-display font-semibold text-gray-900">€</span>
+                        <Input
+                          type="text"
+                          inputMode="decimal"
+                          placeholder={t("marketPricePlaceholder")}
+                          className="pl-9"
+                          value={priceText}
+                          name={field.name}
+                          ref={field.ref}
+                          onBlur={field.onBlur}
+                          onChange={(e) => {
+                            // Accept only digits with one comma/dot decimal separator
+                            const raw = e.target.value.replace(/[^\d.,]/g, "");
+                            setPriceText(raw);
+                            const parsed = parseFloat(raw.replace(",", "."));
+                            field.onChange(Number.isFinite(parsed) ? parsed : undefined);
+                          }}
+                          data-testid="input-price"
+                        />
+                      </div>
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="negotiable"
+                render={({ field }) => (
+                  <FormItem className="flex items-center justify-between gap-4 space-y-0 rounded-2xl bg-gray-50 p-4">
+                    <div className="space-y-1.5">
+                      <FormLabel className="text-[15px] font-semibold">{t("negotiablePrice")}</FormLabel>
+                      <p className="text-[13px] leading-snug text-gray-600">
+                        {t("allowNegotiation")}
+                      </p>
+                    </div>
+                    <FormControl>
+                      <Switch
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                        data-testid="switch-negotiable"
+                      />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="location"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t("cityRequired")}</FormLabel>
+                    <FormControl>
+                      <CityPicker value={field.value ?? ""} onChange={field.onChange} testId="input-location" />
+                    </FormControl>
+                    <p className="text-xs leading-relaxed text-gray-600">{t("cityOfferHint")}</p>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+          </section>
+
+          {/* Description */}
+          <FormField
+            control={form.control}
+            name="description"
+            render={({ field }) => (
+              <FormItem className="space-y-2.5">
+                <FormLabel className="block text-[13px] font-semibold text-gray-600">{t("descriptionRequired")}</FormLabel>
+                <div className="card-float space-y-3 p-5">
+                  <p className="text-sm leading-relaxed text-gray-600">
+                    {t("productDescriptionHint")}
+                  </p>
+                  <FormControl>
+                    <Textarea 
+                      placeholder={t("productDescriptionPlaceholder")}
+                      rows={4}
+                      {...field}
+                      data-testid="textarea-description"
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </div>
+              </FormItem>
+            )}
+          />
+
+          {/* Optional Details */}
+          <section className="space-y-2.5">
+            <h2 className="section-label">{t("additionalDetailsOptional")}</h2>
+            <div className="card-float space-y-4 p-5">
+              <FormField
+                control={form.control}
+                name="color"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t("colorLabel")}</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value || ""}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder={t("selectColor")} />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {colors.map((color) => (
+                          <SelectItem key={color} value={color}>
+                            {optionLabel(t, color)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="material"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t("materialLabel")}</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value || ""}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder={t("selectMaterial")} />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {materials.map((material) => (
+                          <SelectItem key={material} value={material}>
+                            {optionLabel(t, material)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="season"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t("seasonLabel")}</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value || ""}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder={t("selectSeason")} />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {seasons.map((season) => (
+                          <SelectItem key={season.value} value={season.value}>
+                            {optionLabel(t, season.value)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="measurements"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t("specialMeasurements")}</FormLabel>
+                    <FormControl>
+                      <Input 
+                        placeholder={t("measurementsPlaceholder")}
+                        {...field}
+                        value={field.value || ""}
+                      />
+                    </FormControl>
+                    <p className="text-xs leading-relaxed text-gray-600">
+                      {t("specialMeasurementsHint")}
+                    </p>
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="vintedUrl"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t("vintedLink")}</FormLabel>
+                    <FormControl>
+                      <Input 
+                        placeholder="https://www.vinted.it/..."
+                        {...field}
+                        value={field.value || ""}
+                      />
+                    </FormControl>
+                    <p className="text-xs leading-relaxed text-gray-600">
+                      {t("vintedLinkHint")}
+                    </p>
+                  </FormItem>
+                )}
+              />
+            </div>
+          </section>
+
+          {/* Submit Button */}
+          <div className="pt-2">
+            <Button
+              type="submit"
+              size="lg"
+              className="w-full"
+              disabled={addProductMutation.isPending}
+              data-testid="button-submit"
+            >
+              {addProductMutation.isPending ? (
+                <>
+                  <Loader2 className="animate-spin" />
+                  {t("publishing")}
+                </>
+              ) : (
+                t("marketPublishListing")
+              )}
+            </Button>
+          </div>
+        </form>
+      </Form>
     </div>
   );
 }

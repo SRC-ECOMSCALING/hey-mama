@@ -1,23 +1,15 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef, type MutableRefObject } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { fill } from "@/lib/format";
+import { APIProvider, Map, AdvancedMarker, useMap } from "@vis.gl/react-google-maps";
 import {
-  APIProvider,
-  Map,
-  AdvancedMarker,
-  InfoWindow,
-} from "@vis.gl/react-google-maps";
-import {
-  X,
   MapPin,
-  UserPlus,
   Baby,
   Trees,
-  Star,
   BookOpen,
   Palette,
   Waves,
@@ -25,80 +17,102 @@ import {
   Coffee,
   ShoppingBag,
   Theater,
+  Blocks,
   CalendarDays,
-  Users,
   Clock,
-  Loader2,
+  Check,
+  ChevronRight,
+  Plus,
+  SlidersHorizontal,
+  Navigation as NavigationIcon,
+  Users,
+  type LucideIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import { Drawer, DrawerContent, DrawerDescription, DrawerTitle } from "@/components/ui/drawer";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Textarea } from "@/components/ui/textarea";
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import type { PublicProfile, Location } from "@shared/schema";
+import { PROVINCE_COORDINATES } from "@shared/provinces";
 import type { TranslationKey } from "@/lib/translations";
-import heyMamaLogo from "@assets/logo_gradient_text-min_1757514869714.png";
+import heyMamaSymbol from "@assets/heymama-symbol.png";
+import barImage from "@assets/bar_1757514529485.jpg";
+import libraryImage from "@assets/library_1757514529486.jpg";
+import parkImage from "@assets/park_1757514529486.jpg";
+import playgroundImage from "@assets/playground_1757514529486.jpg";
 import { useLanguage } from "@/contexts/LanguageContext";
 import PageSkeleton from "@/components/page-skeleton";
-import AppHeader from "@/components/app-header";
+import NotificationIcon from "@/components/notification-icon";
 import ActivityBadge from "@/components/activity-badge";
-import PhotoCarousel from "@/components/photo-carousel";
-import ReportBlockControls from "@/components/report-block";
+import LocationModal from "@/components/location-modal";
+import MomSheet, { commonGround, kidAgeLabel, type MomConnectionState } from "@/components/explore/mom-sheet";
+import AddLocationDialog from "@/components/explore/add-location-dialog";
+import ProfessionalsList from "@/components/explore/professionals-list";
 
-// Category icon and color mapping
-const getCategoryStyle = (category: string) => {
-  const styles = {
-    parco: { Icon: Trees, bgColor: "bg-green-600", borderColor: "border-green-900" },
-    biblioteca: { Icon: BookOpen, bgColor: "bg-purple-600", borderColor: "border-purple-800" },
-    museo: { Icon: Palette, bgColor: "from-purple-500", borderColor: "border-purple-600" },
-    playground: { Icon: Baby, bgColor: "bg-yellow-500", borderColor: "border-yellow-600" },
-    piscina: { Icon: Waves, bgColor: "bg-blue-500", borderColor: "border-blue-600" },
-    ristorante: { Icon: Utensils, bgColor: "bg-red-500", borderColor: "border-red-600" },
-    cafe: { Icon: Coffee, bgColor: "bg-orange-500", borderColor: "border-orange-600" },
-    "centro-commerciale": { Icon: ShoppingBag, bgColor: "bg-pink-500", borderColor: "border-pink-600" },
-    teatro: { Icon: Theater, bgColor: "bg-indigo-500", borderColor: "border-indigo-600" },
-  };
+// --- Places: one normalised "kind" per category ---------------------------
+// Categories are stored in different shapes ("parco" from the admin CSV,
+// "Parco" from the OSM import, "Parco Giochi" from user submissions).
+type PlaceKind = "park" | "playground" | "library" | "cafe" | "water" | "activity" | "restaurant" | "museum" | "mall" | "theatre" | "other";
 
-  // Categories are stored in different shapes ("parco" from the admin CSV,
-  // "Parco" from the OSM import, "Parco Giochi" from user submissions):
-  // normalize and alias them so every park gets the green tree marker etc.
-  const aliases: Record<string, keyof typeof styles> = {
-    parco: "parco",
-    park: "parco",
-    "parco giochi": "playground",
-    playground: "playground",
-    biblioteca: "biblioteca",
-    library: "biblioteca",
-    museo: "museo",
-    "caffè": "cafe",
-    caffe: "cafe",
-    cafe: "cafe",
-    "café": "cafe",
-    piscina: "piscina",
-    "parco acquatico": "piscina",
-    "water park": "piscina",
-    ristorante: "ristorante",
-    ristoranti: "ristorante",
-    restaurants: "ristorante",
-    "centro-commerciale": "centro-commerciale",
-    "centro attività": "playground",
-    "activity center": "playground",
-    teatro: "teatro",
-  };
-
-  const normalized = aliases[category.trim().toLowerCase()];
-  return (
-    (normalized && styles[normalized]) || {
-      Icon: MapPin,
-      bgColor: "bg-gray-500",
-      borderColor: "border-gray-600",
-    }
-  );
+const PLACE_ALIASES: Record<string, PlaceKind> = {
+  parco: "park",
+  park: "park",
+  "parco giochi": "playground",
+  playground: "playground",
+  biblioteca: "library",
+  library: "library",
+  museo: "museum",
+  "caffè": "cafe",
+  caffe: "cafe",
+  cafe: "cafe",
+  "café": "cafe",
+  bar: "cafe",
+  piscina: "water",
+  "parco acquatico": "water",
+  "water park": "water",
+  ristorante: "restaurant",
+  ristoranti: "restaurant",
+  restaurants: "restaurant",
+  "centro-commerciale": "mall",
+  "centro attività": "activity",
+  "activity center": "activity",
+  teatro: "theatre",
 };
+
+const PLACE_ICONS: Record<PlaceKind, LucideIcon> = {
+  park: Trees,
+  playground: Baby,
+  library: BookOpen,
+  cafe: Coffee,
+  water: Waves,
+  activity: Blocks,
+  restaurant: Utensils,
+  museum: Palette,
+  mall: ShoppingBag,
+  theatre: Theater,
+  other: MapPin,
+};
+
+const placeKindOf = (category: string): PlaceKind => PLACE_ALIASES[category.trim().toLowerCase()] ?? "other";
+
+const placeImageOf = (kind: PlaceKind): string =>
+  kind === "cafe" || kind === "restaurant" ? barImage : kind === "library" || kind === "museum" ? libraryImage : kind === "playground" || kind === "activity" ? playgroundImage : parkImage;
+
+const PLACE_FILTERS: { key: "all" | PlaceKind; label: TranslationKey }[] = [
+  { key: "all", label: "categoryAll" },
+  { key: "park", label: "categoryPark" },
+  { key: "playground", label: "categoryPlayground" },
+  { key: "cafe", label: "categoryCafe" },
+  { key: "library", label: "categoryLibrary" },
+  { key: "water", label: "categoryWaterPark" },
+  { key: "activity", label: "categoryActivityCenter" },
+  { key: "restaurant", label: "categoryRestaurants" },
+];
 
 const CURRENT_USER_ID = "current-user";
 const DEFAULT_CENTER = { lat: 41.9028, lng: 12.4964 }; // Rome, Italy as default
@@ -129,6 +143,9 @@ const matchesAgeBand = (ages: string[] | null | undefined, band: AgeBand): boole
     }
   });
 };
+
+// The map shows one family of things at a time
+type Layer = "moms" | "places" | "events" | "pros";
 
 interface LocationWithReviews extends Location {
   reviewCount: number;
@@ -176,14 +193,45 @@ const parseApiError = (error: any): { status: number; code?: string } => {
   return { status: Number.isNaN(status) ? 0 : status, code };
 };
 
+const kmBetween = (a: { lat: number; lng: number }, b: { lat: number; lng: number }): number => {
+  const rad = Math.PI / 180;
+  const dLat = (b.lat - a.lat) * rad;
+  const dLng = (b.lng - a.lng) * rad;
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * rad) * Math.cos(b.lat * rad) * Math.sin(dLng / 2) ** 2;
+  return 6371 * 2 * Math.asin(Math.sqrt(h));
+};
+
+// Hands the Google map instance to the page, so lists and buttons can pan it.
+function MapBridge({ mapRef }: { mapRef: MutableRefObject<any> }) {
+  const map = useMap();
+  useEffect(() => {
+    mapRef.current = map;
+  }, [map, mapRef]);
+  return null;
+}
+
+const initialLayer = (isProfessional: boolean): Layer => {
+  const asked = new URLSearchParams(window.location.search).get("layer");
+  const allowed: Layer[] = isProfessional ? ["places", "pros"] : ["moms", "places", "events", "pros"];
+  return allowed.includes(asked as Layer) ? (asked as Layer) : allowed[0];
+};
+
 export default function Discover() {
   const [, setLocation] = useLocation();
+  const { toast } = useToast();
+  const { t } = useLanguage();
+  const { user } = useAuth();
+
+  // Professional accounts don't connect with moms: they see places only.
+  const isProfessional = user?.accountType === "professional";
+  const myProvince = user?.province ?? null;
+
+  const [layer, setLayer] = useState<Layer>(() => initialLayer(isProfessional));
+  const [sheetOpen, setSheetOpen] = useState(true);
+  const [placeFilter, setPlaceFilter] = useState<"all" | PlaceKind>("all");
   const [selectedProfile, setSelectedProfile] = useState<PublicProfile | null>(null);
   const [selectedLocation, setSelectedLocation] = useState<LocationWithReviews | null>(null);
   const [selectedEvent, setSelectedEvent] = useState<MapEvent | null>(null);
-  const [showReviewModal, setShowReviewModal] = useState(false);
-  const [connectTarget, setConnectTarget] = useState<PublicProfile | null>(null);
-  const [connectMessage, setConnectMessage] = useState("");
   const [ageBand, setAgeBand] = useState<AgeBand>(() => {
     try {
       const saved = localStorage.getItem(AGE_FILTER_KEY) as AgeBand | null;
@@ -210,17 +258,17 @@ export default function Discover() {
   const [mapCenter, setMapCenter] = useState(savedPosition.center);
   const [mapZoom, setMapZoom] = useState(savedPosition.zoom);
   const [requestStates, setRequestStates] = useState<Record<string, "requested" | "connected">>({});
-  const { toast } = useToast();
-  const { t } = useLanguage();
-  const { user } = useAuth();
+  const mapRef = useRef<any>(null);
 
   const { data: profiles = [], isLoading } = useQuery<PublicProfile[]>({
     queryKey: ["/api/profiles/map"],
   });
 
-  // Professional accounts don't connect with moms: they see places only.
-  const isProfessional = user?.accountType === "professional";
-  const myProvince = user?.province ?? null;
+  // The viewer's own profile, to show what she has in common with each mom
+  const { data: myProfile } = useQuery<PublicProfile>({
+    queryKey: ["/api/profiles", CURRENT_USER_ID],
+    enabled: !isProfessional,
+  });
 
   // Honest density: how many moms are really around (last two weeks)
   const { data: community } = useQuery<CommunityStats>({
@@ -234,28 +282,21 @@ export default function Discover() {
     queryKey: ["/api/connections/status"],
   });
 
-  // Fetch locations from database
   const { data: locations = [] } = useQuery<LocationWithReviews[]>({
     queryKey: ["/api/locations"],
   });
 
-  // Upcoming events with a pin go on the map too
   const { data: events = [] } = useQuery<MapEvent[]>({
     queryKey: ["/api/events"],
     enabled: !isProfessional,
   });
-  const mapEvents = useMemo(() => {
+  const upcomingEvents = useMemo(() => {
     const now = Date.now();
-    return events.filter(
-      (e) => e.status === "approved" && e.latitude && e.longitude && new Date(e.eventDate).getTime() >= now - 3 * 60 * 60 * 1000,
-    );
+    return events
+      .filter((e) => e.status === "approved" && new Date(e.eventDate).getTime() >= now - 3 * 60 * 60 * 1000)
+      .sort((a, b) => new Date(a.eventDate).getTime() - new Date(b.eventDate).getTime());
   }, [events]);
-
-  // Fetch reviews for selected location
-  const { data: locationReviews = [] } = useQuery<any[]>({
-    queryKey: ["/api/locations", selectedLocation?.id, "reviews"],
-    enabled: !!selectedLocation?.id,
-  });
+  const mapEvents = useMemo(() => upcomingEvents.filter((e) => e.latitude && e.longitude), [upcomingEvents]);
 
   // Save map position to localStorage
   const saveMapPosition = () => {
@@ -338,8 +379,6 @@ export default function Discover() {
         ...prev,
         [variables.profileId]: data.connected ? "connected" : "requested",
       }));
-      setConnectTarget(null);
-      setConnectMessage("");
       setSelectedProfile(null);
       toast(
         data.connected
@@ -357,7 +396,7 @@ export default function Discover() {
       } else {
         toast({ title: t("error"), description: t("swipeError"), variant: "destructive" });
       }
-      setConnectTarget(null);
+      setSelectedProfile(null);
       invalidateConnections();
     },
   });
@@ -375,53 +414,8 @@ export default function Discover() {
     onError: () => toast({ title: t("error"), variant: "destructive" }),
   });
 
-  // Submit review mutation
-  const reviewMutation = useMutation({
-    mutationFn: async (reviewData: { locationId: string; rating: number; comment: string; visitedWith: string }) => {
-      const response = await apiRequest("POST", "/api/reviews", reviewData);
-      return response.json();
-    },
-    onSuccess: () => {
-      setShowReviewModal(false);
-      setReviewRating(0);
-      setReviewComment("");
-      toast({ title: t("reviewSent"), description: t("reviewSentDescription") });
-      queryClient.invalidateQueries({ queryKey: ["/api/locations", selectedLocation?.id, "reviews"] });
-    },
-    onError: () => {
-      toast({ title: t("error"), description: t("reviewSendFailedShort"), variant: "destructive" });
-    },
-  });
-
-  const [reviewRating, setReviewRating] = useState(0);
-  const [reviewComment, setReviewComment] = useState("");
-
-  const handleSubmitReview = () => {
-    if (!selectedLocation?.id || reviewRating === 0 || !reviewComment.trim()) {
-      toast({ title: t("missingFields"), description: t("fillAllFields"), variant: "destructive" });
-      return;
-    }
-    reviewMutation.mutate({
-      locationId: selectedLocation.id,
-      rating: reviewRating,
-      comment: reviewComment,
-      visitedWith: "Con i miei bambini",
-    });
-  };
-
-  if (isLoading) {
-    return <PageSkeleton variant="map" />;
-  }
-
-  const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
-
-  // Moms with coordinates (professionals see no mom markers), then the age filter
-  const allMoms = isProfessional ? [] : profiles.filter((p) => p.latitude && p.longitude);
-  const profilesWithCoords = allMoms.filter((p) => matchesAgeBand(p.kidsAges, ageBand));
-
-  // Marker state combining server-side status with this session's optimistic
-  // state: 'none' | 'pending' | 'connected' | 'cooldown'
-  const markerStateOf = (profile: PublicProfile): "none" | "pending" | "connected" | "cooldown" => {
+  // Marker state combining server-side status with this session's optimistic state
+  const markerStateOf = (profile: PublicProfile): MomConnectionState => {
     const status = connectionStatus[profile.userId];
     if (status === "connected" || requestStates[profile.id] === "connected") return "connected";
     if (status === "pending_sent" || status === "pending_received" || requestStates[profile.id] === "requested") return "pending";
@@ -429,92 +423,114 @@ export default function Discover() {
     return "none";
   };
 
-  const formatEventDate = (iso: string) =>
-    new Date(iso).toLocaleString(user?.language === "en" ? "en-GB" : "it-IT", {
-      weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit",
-    });
+  // Moms with coordinates (professionals see no mom markers), then the age
+  // filter; whoever is around right now comes first in the list.
+  const allMoms = useMemo(() => (isProfessional ? [] : profiles.filter((p) => p.latitude && p.longitude)), [profiles, isProfessional]);
+  const moms = useMemo(() => {
+    const rank = (p: PublicProfile) => (p.isOnline ? 0 : p.activityBand === "today" ? 1 : p.activityBand === "week" ? 2 : 3);
+    return allMoms
+      .filter((p) => matchesAgeBand(p.kidsAges, ageBand))
+      .map((p) => ({ profile: p, common: commonGround(t, myProfile, p) }))
+      .sort((a, b) => rank(a.profile) - rank(b.profile) || b.common.length - a.common.length);
+  }, [allMoms, ageBand, myProfile, t]);
 
+  // Places nearest to where the map is looking (rounded, so the list doesn't
+  // reshuffle on every pixel of a pan)
+  const listAnchor = useMemo(
+    () => ({ lat: Math.round(mapCenter.lat * 50) / 50, lng: Math.round(mapCenter.lng * 50) / 50 }),
+    [mapCenter.lat, mapCenter.lng],
+  );
+  const places = useMemo(() => {
+    return locations
+      .map((location) => {
+        const [lat, lng] = location.coordinates.split(",").map((v) => parseFloat(v));
+        const kind = placeKindOf(location.category);
+        return { location, lat, lng, kind, distance: Number.isNaN(lat) || Number.isNaN(lng) ? Infinity : kmBetween(listAnchor, { lat, lng }) };
+      })
+      .filter((p) => !Number.isNaN(p.lat) && !Number.isNaN(p.lng));
+  }, [locations, listAnchor]);
+  const listedPlaces = useMemo(
+    () =>
+      places
+        .filter((p) => placeFilter === "all" || p.kind === placeFilter)
+        .sort((a, b) => a.distance - b.distance)
+        .slice(0, 30),
+    [places, placeFilter],
+  );
+
+  if (isLoading) {
+    return <PageSkeleton variant="map" />;
+  }
+
+  const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
+  const locale = user?.language === "en" ? "en-GB" : "it-IT";
   const zoneIsThin = !!community && !community.isOpenZone;
+
+  const panTo = (lat: number, lng: number, minZoom = 13) => {
+    const map = mapRef.current;
+    if (!map) return;
+    map.panTo({ lat, lng });
+    if ((map.getZoom?.() ?? 0) < minZoom) map.setZoom(minZoom);
+  };
+
+  const recenter = () => {
+    const home = myProvince ? PROVINCE_COORDINATES[myProvince] : undefined;
+    if (home) return panTo(home.lat, home.lng, 12);
+    const first = allMoms[0];
+    if (first) panTo(parseFloat(first.latitude!), parseFloat(first.longitude!), 12);
+  };
+
+  const clearSelection = () => {
+    setSelectedProfile(null);
+    setSelectedLocation(null);
+    setSelectedEvent(null);
+  };
+
+  const openMom = (profile: PublicProfile) => {
+    setSelectedLocation(null);
+    setSelectedEvent(null);
+    setSelectedProfile(profile);
+    panTo(parseFloat(profile.latitude!), parseFloat(profile.longitude!));
+  };
+
+  const openEvent = (event: MapEvent) => {
+    setSelectedProfile(null);
+    setSelectedLocation(null);
+    setSelectedEvent(event);
+    if (event.latitude && event.longitude) panTo(parseFloat(event.latitude), parseFloat(event.longitude));
+  };
+
+  const eventDay = (iso: string) => {
+    const d = new Date(iso);
+    return {
+      weekday: d.toLocaleDateString(locale, { weekday: "short" }).replace(".", "").toUpperCase(),
+      day: d.getDate(),
+      time: d.toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" }),
+      full: d.toLocaleString(locale, { weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" }),
+    };
+  };
+
+  const layers: { key: Layer; label: string }[] = isProfessional
+    ? [
+        { key: "places", label: t("places") },
+        { key: "pros", label: t("professionals") },
+      ]
+    : [
+        { key: "moms", label: t("exploreLayerMoms") },
+        { key: "places", label: t("places") },
+        { key: "events", label: t("events") },
+        { key: "pros", label: t("professionals") },
+      ];
+
+  const showMoms = layer === "moms";
+  const showPlaces = layer === "places";
+  const showEvents = layer === "moms" || layer === "events";
+  const momCountLabel = moms.length === 1 ? t("exploreMomsCountOne") : fill(t("exploreMomsCount"), { count: moms.length });
+  const activeAgeLabel = AGE_BANDS.find((b) => b.key === ageBand)!.label;
 
   return (
     <>
-      {/* Map Content */}
-      <main className="relative h-[100dvh] overflow-hidden bg-white">
-        {/* Header - Floating on top of map */}
-        <AppHeader left="settings" floating />
-
-        {/* Density + kids' age filter: honest numbers, never a padded map */}
-        {!isProfessional && (
-          <div className="absolute left-4 right-4 z-40 top-[calc(5.75rem_+_env(safe-area-inset-top))] space-y-2 pointer-events-none">
-            {community && (
-              <div
-                className="inline-flex items-center gap-1.5 rounded-full bg-white/90 backdrop-blur px-3 py-1.5 text-xs font-medium text-gray-700 shadow pointer-events-auto"
-                data-testid="density-chip"
-              >
-                <Users className="h-3.5 w-3.5 text-pink-500" />
-                {fill(t("activeMomsInProvince"), { count: community.activeMoms14d, province: community.province })}
-              </div>
-            )}
-            <div className="flex gap-1.5 overflow-x-auto pb-1 pointer-events-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-              {AGE_BANDS.map((b) => {
-                const active = ageBand === b.key;
-                return (
-                  <button
-                    key={b.key}
-                    type="button"
-                    onClick={() => setAgeBand(b.key)}
-                    className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-medium shadow transition-colors ${
-                      active ? "text-white" : "bg-white/90 text-gray-700 backdrop-blur"
-                    }`}
-                    style={active ? { background: "linear-gradient(to right, var(--primary-pink), var(--accent-coral))" } : undefined}
-                    aria-pressed={active}
-                    data-testid={`filter-age-${b.key}`}
-                  >
-                    {b.key === "all" ? t(b.label) : `${t("filterKidsAge")} ${t(b.label)}`}
-                  </button>
-                );
-              })}
-              {ageBand !== "all" && (
-                <span className="shrink-0 self-center text-xs text-gray-600 bg-white/80 rounded-full px-2 py-1">
-                  {fill(t("momsMatchingFilter"), { count: profilesWithCoords.length })}
-                </span>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Empty states live on top of the map: places and events stay visible */}
-        {!isProfessional && profilesWithCoords.length === 0 && (
-          <div className="absolute left-6 right-6 z-30 top-[calc(11rem_+_env(safe-area-inset-top))] pointer-events-none">
-            <div className="bg-white/95 backdrop-blur rounded-2xl shadow-lg p-4 text-center pointer-events-auto">
-              <div className="text-3xl mb-1">📍</div>
-              {allMoms.length === 0 ? (
-                <>
-                  <h2 className="font-bold text-gray-800">
-                    {myProvince ? fill(t("zoneGrowingTitle"), { province: myProvince }) : t("noMomsYetTitle")}
-                  </h2>
-                  <p className="text-sm text-gray-600 mt-1">{t("zoneGrowingHint")}</p>
-                </>
-              ) : (
-                <>
-                  <h2 className="font-bold text-gray-800">{t("noMomsWithFilter")}</h2>
-                  <Button variant="link" className="text-pink-600" onClick={() => setAgeBand("all")} data-testid="button-show-all-moms">
-                    {t("showAllMoms")}
-                  </Button>
-                </>
-              )}
-            </div>
-          </div>
-        )}
-        {!isProfessional && profilesWithCoords.length > 0 && zoneIsThin && community && (
-          <div className="absolute left-6 right-6 z-30 bottom-[calc(6rem_+_env(safe-area-inset-bottom))] pointer-events-none">
-            <div className="bg-white/95 backdrop-blur rounded-2xl shadow p-3 text-xs text-gray-600 text-center pointer-events-auto">
-              <span className="font-semibold text-gray-800">{fill(t("zoneGrowingTitle"), { province: community.province })}</span>{" "}
-              {t("zoneGrowingHint")}
-            </div>
-          </div>
-        )}
-
+      <main className="relative h-[100dvh] overflow-hidden bg-gray-100">
         <APIProvider apiKey={apiKey} libraries={["places"]}>
           <Map
             style={{ width: "100%", height: "100%" }}
@@ -538,413 +554,525 @@ export default function Discover() {
                 setMapZoom(ev.detail.zoom);
               }
             }}
-            onClick={() => {
-              setSelectedProfile(null);
-              setSelectedLocation(null);
-              setSelectedEvent(null);
-            }}
+            onClick={clearSelection}
           >
-            {profilesWithCoords.map((profile) => {
-              // Marker semantics: white = not connected, pink = request
-              // pending, profile photo = connection accepted, grey = she
-              // declined recently.
-              const markerState = markerStateOf(profile);
-              const markerBgColor =
-                markerState === "pending" ? "bg-pink-400" : markerState === "cooldown" ? "bg-gray-100" : "bg-white";
-              const borderColor =
-                markerState === "connected" || markerState === "pending"
-                  ? "border-pink-500"
-                  : markerState === "cooldown"
-                    ? "border-gray-300"
-                    : "border-pink-200";
+            <MapBridge mapRef={mapRef} />
 
-              return (
-                <AdvancedMarker
-                  key={profile.id}
-                  position={{ lat: parseFloat(profile.latitude!), lng: parseFloat(profile.longitude!) }}
-                  onClick={() => { setSelectedEvent(null); setSelectedLocation(null); setSelectedProfile(profile); }}
-                  zIndex={100}
-                >
-                  <div className="relative">
-                    <div
-                      className={`w-12 h-12 ${markerBgColor} rounded-full flex items-center justify-center shadow-lg cursor-pointer hover:scale-110 transition-all duration-300 border-2 ${borderColor} overflow-hidden`}
-                    >
-                      {markerState === "connected" && profile.photoUrls?.[0] ? (
-                        <img src={profile.photoUrls[0]} alt={profile.firstName} className="w-full h-full object-cover" />
-                      ) : (
-                        <img
-                          src={heyMamaLogo}
-                          alt="HeyMama"
-                          className="w-8 h-8 object-contain transition-all duration-300"
-                          style={{
-                            filter: markerState === "pending" ? "brightness(0) invert(1)" : markerState === "cooldown" ? "grayscale(1) opacity(0.6)" : "none",
-                          }}
-                        />
-                      )}
-                    </div>
-                    {(profile.isOnline || profile.activityBand === "today") && (
-                      <div
-                        className={`absolute -top-1 -right-1 w-3 h-3 rounded-full border-2 border-white ${profile.isOnline ? "bg-green-500" : "bg-green-300"}`}
-                      />
-                    )}
-                  </div>
-                </AdvancedMarker>
-              );
-            })}
-
-            {selectedProfile && (
-              <InfoWindow
-                position={{ lat: parseFloat(selectedProfile.latitude!), lng: parseFloat(selectedProfile.longitude!) }}
-                onCloseClick={() => setSelectedProfile(null)}
-                maxWidth={350}
-              >
-                <div className="p-2 relative">
-                  <button
-                    onClick={() => setSelectedProfile(null)}
-                    className="absolute top-1 right-1 w-6 h-6 bg-white rounded-full shadow-md flex items-center justify-center hover:bg-gray-100 transition-colors z-10"
-                    data-testid="button-close-profile-popup"
+            {/* Moms: photo (or initial) in a white ring; magenta ring when she
+                is around today; a small badge for pending / connected */}
+            {showMoms &&
+              moms.map(({ profile }) => {
+                const state = markerStateOf(profile);
+                const fresh = profile.isOnline || profile.activityBand === "today";
+                const selected = selectedProfile?.id === profile.id;
+                return (
+                  <AdvancedMarker
+                    key={profile.id}
+                    position={{ lat: parseFloat(profile.latitude!), lng: parseFloat(profile.longitude!) }}
+                    onClick={() => openMom(profile)}
+                    zIndex={selected ? 200 : 100}
                   >
-                    <X className="w-4 h-4 text-gray-600" />
-                  </button>
-
-                  {/* Photos: every picture, not just the first */}
-                  <div className="mb-3">
-                    <PhotoCarousel photos={selectedProfile.photoUrls} alt={selectedProfile.firstName} className="h-48" />
-                  </div>
-
-                  <div className="mb-2">
-                    <h3 className="text-xl font-bold text-gray-800">
-                      {selectedProfile.firstName}{selectedProfile.age != null ? `, ${selectedProfile.age}` : ""}
-                    </h3>
-                    <div className="flex items-center justify-between gap-2 mt-1">
-                      <div className="flex items-center gap-1 text-sm text-gray-600 min-w-0">
-                        <MapPin className="w-4 h-4 shrink-0" />
-                        <span className="truncate">{selectedProfile.location}</span>
-                      </div>
-                      <ActivityBadge isOnline={selectedProfile.isOnline} activityBand={selectedProfile.activityBand} />
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2 mb-3 text-sm text-gray-700">
-                    <Baby className="w-4 h-4 text-pink-500" />
-                    <span>
-                      {selectedProfile.kidsNumber} {selectedProfile.kidsNumber === 1 ? t("child") : t("children")}
-                    </span>
-                    {selectedProfile.kidsAges.length > 0 && (
-                      <span className="text-gray-500">• {selectedProfile.kidsAges.join(", ")}</span>
-                    )}
-                  </div>
-
-                  <p className="text-sm text-gray-700 mb-3 line-clamp-3">{selectedProfile.bio}</p>
-
-                  {selectedProfile.hobbies && selectedProfile.hobbies.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5 mb-4">
-                      {selectedProfile.hobbies.slice(0, 5).map((hobby, index) => (
-                        <Badge key={index} variant="secondary" className="text-xs bg-pink-50 text-pink-700 border border-pink-200">
-                          {hobby}
-                        </Badge>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Connect: a request, messaging opens once she accepts */}
-                  <div className="flex items-center gap-2">
-                    {(() => {
-                      const state = markerStateOf(selectedProfile);
-                      const incoming = connectionStatus[selectedProfile.userId] === "pending_received";
-                      const label =
-                        state === "connected"
-                          ? t("connected")
-                          : incoming
-                            ? t("accept")
-                            : state === "pending"
-                              ? t("requestPending")
-                              : state === "cooldown"
-                                ? t("requestNotAvailable")
-                                : t("connect");
-                      const disabled =
-                        requestMutation.isPending ||
-                        state === "connected" ||
-                        state === "cooldown" ||
-                        (state === "pending" && !incoming);
-                      return (
-                        <Button
-                          onClick={() => {
-                            if (incoming) {
-                              requestMutation.mutate({ targetUserId: selectedProfile.userId, profileId: selectedProfile.id });
-                            } else {
-                              setConnectMessage("");
-                              setConnectTarget(selectedProfile);
-                            }
+                    <div className="flex flex-col items-center gap-1.5" data-testid={`marker-mom-${profile.id}`}>
+                      <div className="relative">
+                        <div
+                          className={`flex items-center justify-center overflow-hidden rounded-full border-[3px] border-white bg-pink-100 font-display font-semibold text-gray-900 transition-all duration-200 ${
+                            selected ? "h-[68px] w-[68px] text-2xl" : "h-12 w-12 text-base"
+                          } ${state === "cooldown" ? "opacity-60 grayscale" : ""}`}
+                          style={{
+                            boxShadow: fresh
+                              ? `0 0 0 3px var(--magenta)${selected ? ", 0 0 0 12px rgba(216,27,114,0.16)" : ""}, 0 8px 20px rgba(23,17,31,0.22)`
+                              : "0 6px 16px rgba(23,17,31,0.2)",
                           }}
-                          disabled={disabled}
-                          size="lg"
-                          className="flex-1 rounded-full text-white"
-                          style={{ background: "linear-gradient(to right, var(--primary-pink), var(--accent-coral))" }}
-                          data-testid="button-connect"
                         >
-                          <UserPlus className="w-5 h-5 mr-2" />
-                          {label}
-                        </Button>
-                      );
-                    })()}
-                    <ReportBlockControls
-                      targetUserId={selectedProfile.userId}
-                      targetType="profile"
-                      targetId={selectedProfile.id}
-                      variant="icons"
-                      onBlocked={() => setSelectedProfile(null)}
-                    />
-                  </div>
-                </div>
-              </InfoWindow>
-            )}
+                          {profile.photoUrls?.[0] ? (
+                            <img src={profile.photoUrls[0]} alt="" className="h-full w-full object-cover" />
+                          ) : (
+                            profile.firstName.charAt(0).toUpperCase()
+                          )}
+                        </div>
+                        {state === "connected" && (
+                          <span className="absolute -bottom-0.5 -right-0.5 flex h-[18px] w-[18px] items-center justify-center rounded-full bg-pink-500 ring-2 ring-white">
+                            <Check className="h-3 w-3 text-white" strokeWidth={3} />
+                          </span>
+                        )}
+                        {state === "pending" && (
+                          <span className="absolute -bottom-0.5 -right-0.5 flex h-[18px] w-[18px] items-center justify-center rounded-full bg-white ring-2 ring-white">
+                            <Clock className="h-3 w-3 text-pink-700" strokeWidth={2.6} />
+                          </span>
+                        )}
+                      </div>
+                      {selected && <span className="glass rounded-full px-2.5 py-1 text-xs font-semibold text-gray-900">{profile.firstName}</span>}
+                    </div>
+                  </AdvancedMarker>
+                );
+              })}
 
             {/* Upcoming events with a pin */}
-            {mapEvents.map((event) => (
-              <AdvancedMarker
-                key={event.id}
-                position={{ lat: parseFloat(event.latitude!), lng: parseFloat(event.longitude!) }}
-                onClick={() => { setSelectedProfile(null); setSelectedLocation(null); setSelectedEvent(event); }}
-                zIndex={60}
-              >
-                <div className="w-9 h-9 rounded-full flex items-center justify-center shadow-lg cursor-pointer hover:scale-110 transition-transform border-2 border-white"
-                  style={{ background: "linear-gradient(135deg, var(--primary-pink), var(--accent-coral))" }}>
-                  <CalendarDays className="w-4 h-4 text-white" />
-                </div>
-              </AdvancedMarker>
-            ))}
-
-            {selectedEvent && (
-              <InfoWindow
-                position={{ lat: parseFloat(selectedEvent.latitude!), lng: parseFloat(selectedEvent.longitude!) }}
-                onCloseClick={() => setSelectedEvent(null)}
-                maxWidth={320}
-              >
-                <div className="p-2 relative">
-                  <button
-                    onClick={() => setSelectedEvent(null)}
-                    className="absolute top-1 right-1 w-6 h-6 bg-white rounded-full shadow-md flex items-center justify-center hover:bg-gray-100 transition-colors z-10"
-                    data-testid="button-close-event-popup"
-                  >
-                    <X className="w-4 h-4 text-gray-600" />
-                  </button>
-                  <Badge className="bg-pink-50 text-pink-700 border-0 mb-2">
-                    <CalendarDays className="w-3 h-3 mr-1" />{t("eventMarker")}
-                  </Badge>
-                  <h3 className="text-lg font-bold text-gray-800 pr-6">{selectedEvent.title}</h3>
-                  <div className="flex items-center gap-1 text-sm text-gray-600 mt-1">
-                    <Clock className="w-4 h-4 shrink-0" />{formatEventDate(selectedEvent.eventDate)}
-                  </div>
-                  <div className="flex items-center gap-1 text-sm text-gray-600 mt-0.5">
-                    <MapPin className="w-4 h-4 shrink-0" /><span className="truncate">{selectedEvent.location}</span>
-                  </div>
-                  <p className="text-xs text-gray-500 mt-2">
-                    {selectedEvent.rsvp.going > 0
-                      ? fill(t("rsvpGoingCount"), { count: selectedEvent.rsvp.going })
-                      : t("rsvpNobodyYet")}
-                    {selectedEvent.creatorName ? ` • ${t("organizedBy")} ${selectedEvent.creatorName}` : ""}
-                  </p>
-                  <div className="flex gap-2 mt-3">
-                    <Button size="sm" variant="outline" className="flex-1" onClick={() => setLocation("/events")} data-testid="button-open-events">
-                      {t("openEvents")}
-                    </Button>
-                    {selectedEvent.rsvp.mine === "going" ? (
-                      <Badge className="flex-1 justify-center bg-green-50 text-green-700 border-0">{t("rsvpYouGoing")}</Badge>
-                    ) : (
-                      <Button
-                        size="sm"
-                        className="flex-1 text-white"
-                        style={{ background: "linear-gradient(to right, var(--primary-pink), var(--accent-coral))" }}
-                        disabled={rsvpMutation.isPending}
-                        onClick={() => rsvpMutation.mutate({ eventId: selectedEvent.id, status: "going" })}
-                        data-testid="button-rsvp-going-map"
-                      >
-                        {t("rsvpGoing")}
-                      </Button>
-                    )}
-                  </div>
-                </div>
-              </InfoWindow>
-            )}
-
-            {/* Database Location Markers */}
-            {locations.map((location) => {
-              const coords = location.coordinates.split(",");
-              const lat = parseFloat(coords[0]);
-              const lng = parseFloat(coords[1]);
-              const { Icon, bgColor, borderColor } = getCategoryStyle(location.category);
-              return (
+            {showEvents &&
+              mapEvents.map((event) => (
                 <AdvancedMarker
-                  key={location.id}
-                  position={{ lat, lng }}
-                  onClick={() => { setSelectedProfile(null); setSelectedEvent(null); setSelectedLocation(location); }}
-                  zIndex={1}
+                  key={event.id}
+                  position={{ lat: parseFloat(event.latitude!), lng: parseFloat(event.longitude!) }}
+                  onClick={() => openEvent(event)}
+                  zIndex={60}
                 >
-                  <div className={`w-7 h-7 ${bgColor} rounded-full flex items-center justify-center shadow-lg cursor-pointer hover:scale-110 transition-transform border-2 ${borderColor}`}>
-                    <Icon className="w-4 h-4 text-white" />
+                  <div className="flex h-11 w-11 items-center justify-center rounded-[14px] border-[3px] border-white bg-purple-600 shadow-[0_6px_16px_rgba(23,17,31,0.2)]">
+                    <CalendarDays className="h-[18px] w-[18px] text-white" />
                   </div>
                 </AdvancedMarker>
-              );
-            })}
+              ))}
 
-            {/* Location Info Window */}
-            {selectedLocation &&
-              (() => {
-                const coords = selectedLocation.coordinates.split(",");
-                const lat = parseFloat(coords[0]);
-                const lng = parseFloat(coords[1]);
-                return (
-                  <InfoWindow position={{ lat, lng }} onCloseClick={() => setSelectedLocation(null)} maxWidth={350}>
-                    <div className="p-2 relative">
-                      <button
-                        onClick={() => setSelectedLocation(null)}
-                        className="absolute top-1 right-1 w-6 h-6 bg-white rounded-full shadow-md flex items-center justify-center hover:bg-gray-100 transition-colors z-10"
-                        data-testid="button-close-location-popup"
+            {/* Family-friendly places */}
+            {showPlaces &&
+              places
+                .filter((p) => placeFilter === "all" || p.kind === placeFilter)
+                .map(({ location, lat, lng, kind }) => {
+                  const Icon = PLACE_ICONS[kind];
+                  const selected = selectedLocation?.id === location.id;
+                  return (
+                    <AdvancedMarker
+                      key={location.id}
+                      position={{ lat, lng }}
+                      onClick={() => {
+                        setSelectedProfile(null);
+                        setSelectedEvent(null);
+                        setSelectedLocation(location);
+                      }}
+                      zIndex={selected ? 50 : 1}
+                    >
+                      <div
+                        className={`flex items-center justify-center rounded-[18px] rounded-bl-md border-[3px] shadow-[0_6px_16px_rgba(23,17,31,0.18)] ${
+                          selected ? "h-11 w-11 border-white bg-purple-600 text-white" : "h-9 w-9 border-purple-600 bg-white text-purple-700"
+                        }`}
                       >
-                        <X className="w-4 h-4 text-gray-600" />
-                      </button>
-                      <h3 className="text-xl font-bold text-gray-800 mb-2">{selectedLocation.name}</h3>
-                      <div className="flex items-center gap-1 text-sm text-gray-600 mb-3">
-                        <MapPin className="w-4 h-4" />{selectedLocation.address}
+                        <Icon className="h-4 w-4" />
                       </div>
-                      {selectedLocation.rating > 0 && (
-                        <div className="flex items-center gap-1 mb-3">
-                          <span className="text-yellow-500">★</span>
-                          <span className="text-sm font-semibold">{selectedLocation.rating}/5</span>
-                        </div>
-                      )}
-                      <div className="space-y-2 mt-4">
-                        <h4 className="font-semibold text-sm">{t("heyMamaReviews")}</h4>
-                        {locationReviews.length > 0 ? (
-                          <div className="space-y-2 max-h-32 overflow-y-auto">
-                            {locationReviews.slice(0, 3).map((review: any) => (
-                              <div key={review.id} className="text-xs border-b pb-2 last:border-0">
-                                <div className="flex items-center gap-1 mb-1">
-                                  <span className="text-yellow-500">★</span>
-                                  <span className="font-semibold">{review.rating}/5</span>
-                                  <span className="text-gray-500">• {review.profile?.name}</span>
-                                </div>
-                                <p className="text-gray-700 line-clamp-2">{review.comment}</p>
-                              </div>
-                            ))}
-                          </div>
-                        ) : (
-                          <p className="text-xs text-gray-500">{t("noReviewsYet")}</p>
-                        )}
-                        <div className="flex gap-2 mt-3">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="flex-1"
-                            onClick={() => {
-                              const mapsUrl = selectedLocation.googleMapsUrl || `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
-                              window.open(mapsUrl, "_blank");
-                            }}
-                            data-testid="button-open-maps"
-                          >
-                            {t("openInMaps")}
-                          </Button>
-                          <Button
-                            size="sm"
-                            className="flex-1"
-                            style={{ background: "linear-gradient(to right, var(--primary-pink), var(--accent-coral))" }}
-                            onClick={() => setShowReviewModal(true)}
-                            data-testid="button-add-review"
-                          >
-                            {t("writeReview")}
-                          </Button>
-                        </div>
-                      </div>
-                    </div>
-                  </InfoWindow>
-                );
-              })()}
+                    </AdvancedMarker>
+                  );
+                })}
           </Map>
         </APIProvider>
-      </main>
 
-      {/* Connection request with an optional note */}
-      <Dialog open={!!connectTarget} onOpenChange={(open) => { if (!open) setConnectTarget(null); }}>
-        <DialogContent className="max-w-md rounded-2xl">
-          <DialogHeader>
-            <DialogTitle>{connectTarget ? `${t("connect")} · ${connectTarget.firstName}` : t("connect")}</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3">
-            <label className="text-sm font-medium text-gray-700">{t("requestMessageLabel")}</label>
-            <Textarea
-              value={connectMessage}
-              onChange={(e) => setConnectMessage(e.target.value.slice(0, 300))}
-              placeholder={t("requestMessagePlaceholder")}
-              rows={3}
-              data-testid="input-request-message"
-            />
-            <p className="text-xs text-gray-400 text-right">{connectMessage.length}/300</p>
-            <Button
-              className="w-full rounded-full text-white"
-              style={{ background: "linear-gradient(to right, var(--primary-pink), var(--accent-coral))" }}
-              disabled={requestMutation.isPending || !connectTarget}
-              onClick={() =>
-                connectTarget &&
-                requestMutation.mutate({ targetUserId: connectTarget.userId, profileId: connectTarget.id, message: connectMessage })
-              }
-              data-testid="button-send-request"
-            >
-              {requestMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : (<><UserPlus className="w-5 h-5 mr-2" />{t("sendRequest")}</>)}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Review Modal */}
-      <Dialog open={showReviewModal} onOpenChange={setShowReviewModal}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>{t("leaveReview")}</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div>
-              <label className="text-sm font-medium mb-2 block">{t("ratingLabel")}</label>
-              <div className="flex gap-2">
-                {[1, 2, 3, 4, 5].map((star) => (
-                  <button key={star} type="button" onClick={() => setReviewRating(star)} className="focus:outline-none" data-testid={`star-${star}`}>
-                    <Star className={`w-8 h-8 ${star <= reviewRating ? "fill-yellow-400 text-yellow-400" : "text-gray-300"}`} />
-                  </button>
-                ))}
+        {/* Top bar: where you are, notifications, and the map layers */}
+        <div className="pointer-events-none absolute inset-x-4 top-[calc(0.875rem_+_env(safe-area-inset-top))] z-30 space-y-2.5">
+          <div className="pointer-events-auto flex items-center gap-2.5">
+            <div className="glass flex h-[54px] min-w-0 flex-1 items-center gap-3 rounded-[20px] px-4">
+              <img src={heyMamaSymbol} alt="" className="h-7 w-7 shrink-0 object-contain" />
+              <div className="min-w-0">
+                <p className="truncate font-display text-[15px] font-semibold leading-tight text-gray-900">{myProvince || "HeyMama"}</p>
+                {community && !isProfessional && (
+                  <p className="truncate text-xs font-medium leading-tight text-gray-600" data-testid="density-chip">
+                    {fill(t("exploreActiveShort"), { count: community.activeMoms14d })}
+                  </p>
+                )}
               </div>
             </div>
-            <div>
-              <label className="text-sm font-medium mb-2 block">{t("yourReview")}</label>
-              <Textarea
-                value={reviewComment}
-                onChange={(e) => setReviewComment(e.target.value)}
-                placeholder={t("parkReviewPlaceholder")}
-                rows={4}
-                data-testid="input-review-comment"
-              />
-            </div>
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                className="flex-1"
-                onClick={() => { setShowReviewModal(false); setReviewRating(0); setReviewComment(""); }}
-                data-testid="button-cancel-review"
-              >
-                {t("cancel")}
-              </Button>
-              <Button
-                className="flex-1"
-                style={{ background: "linear-gradient(to right, var(--primary-pink), var(--accent-coral))" }}
-                onClick={handleSubmitReview}
-                disabled={reviewMutation.isPending}
-                data-testid="button-submit-review"
-              >
-                {reviewMutation.isPending ? t("submitting") : t("submitReview")}
-              </Button>
-            </div>
+            <NotificationIcon variant="glass" />
           </div>
-        </DialogContent>
-      </Dialog>
+
+          <div role="group" aria-label={t("exploreLayers")} className="no-scrollbar pointer-events-auto -mx-4 flex gap-2 overflow-x-auto px-4 pb-1">
+            {layers.map(({ key, label }) => {
+              const active = layer === key;
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => {
+                    clearSelection();
+                    setLayer(key);
+                    setSheetOpen(true);
+                  }}
+                  className={`glass h-10 shrink-0 rounded-full px-4 text-sm font-semibold ${active ? "text-pink-700" : "text-gray-900"}`}
+                  style={
+                    active
+                      ? { background: "rgba(252,232,241,0.82)", boxShadow: "inset 0 0 0 2px var(--magenta), 0 4px 14px rgba(23,17,31,0.1)" }
+                      : undefined
+                  }
+                  data-testid={`layer-${key}`}
+                >
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={recenter}
+              aria-label={t("exploreRecenter")}
+              className="glass pointer-events-auto flex h-12 w-12 items-center justify-center rounded-2xl text-gray-900"
+              data-testid="button-recenter"
+            >
+              <NavigationIcon className="h-5 w-5" strokeWidth={1.9} />
+            </button>
+          </div>
+        </div>
+
+        {/* The list of what the map is showing, in a floating glass panel */}
+        <section
+          className="glass-panel absolute inset-x-2.5 bottom-[calc(5.75rem_+_env(safe-area-inset-bottom))] z-30 flex max-h-[52dvh] flex-col overflow-hidden rounded-[32px]"
+          aria-label={layers.find((l) => l.key === layer)?.label}
+        >
+          <button
+            type="button"
+            onClick={() => setSheetOpen((open) => !open)}
+            aria-label={t("exploreToggleList")}
+            aria-expanded={sheetOpen}
+            className="flex h-6 w-full shrink-0 items-center justify-center"
+            data-testid="button-toggle-list"
+          >
+            <span className="h-[5px] w-10 rounded-full bg-gray-300" />
+          </button>
+
+          {/* Moms */}
+          {layer === "moms" && (
+            <>
+              <div className="flex shrink-0 items-center justify-between gap-3 px-4 pb-2.5">
+                <div className="min-w-0">
+                  <h1 className="text-xl font-semibold leading-tight text-gray-900">{t("exploreNearYou")}</h1>
+                  <p className="mt-0.5 truncate text-[13px] font-medium text-gray-600">
+                    {ageBand === "all" ? momCountLabel : `${t("filterKidsAge")} ${t(activeAgeLabel)} · ${momCountLabel}`}
+                  </p>
+                </div>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      type="button"
+                      className={`inline-flex h-11 shrink-0 items-center gap-2 rounded-full bg-white px-3.5 text-[13px] font-semibold ${
+                        ageBand === "all" ? "text-gray-900 ring-1 ring-inset ring-gray-200" : "text-pink-700 ring-2 ring-inset ring-pink-500"
+                      }`}
+                      data-testid="button-age-filter"
+                    >
+                      <SlidersHorizontal className="h-4 w-4" />
+                      {t("filterKidsAge")}
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="min-w-[11rem]">
+                    <DropdownMenuRadioGroup value={ageBand} onValueChange={(v) => setAgeBand(v as AgeBand)}>
+                      {AGE_BANDS.map((b) => (
+                        <DropdownMenuRadioItem key={b.key} value={b.key} data-testid={`filter-age-${b.key}`}>
+                          {t(b.label)}
+                        </DropdownMenuRadioItem>
+                      ))}
+                    </DropdownMenuRadioGroup>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+
+              {sheetOpen &&
+                (moms.length === 0 ? (
+                  <div className="px-5 pb-5 pt-1 text-center">
+                    <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-pink-50">
+                      <Users className="h-6 w-6 text-pink-500" />
+                    </div>
+                    {allMoms.length === 0 ? (
+                      <>
+                        <h2 className="text-lg font-semibold text-gray-900">
+                          {myProvince ? fill(t("zoneGrowingTitle"), { province: myProvince }) : t("noMomsYetTitle")}
+                        </h2>
+                        <p className="mt-1 text-sm text-gray-600">{t("zoneGrowingHint")}</p>
+                      </>
+                    ) : (
+                      <>
+                        <h2 className="text-lg font-semibold text-gray-900">{t("noMomsWithFilter")}</h2>
+                        <Button variant="link" onClick={() => setAgeBand("all")} data-testid="button-show-all-moms">
+                          {t("showAllMoms")}
+                        </Button>
+                      </>
+                    )}
+                  </div>
+                ) : (
+                  <>
+                    <div className="no-scrollbar flex gap-2.5 overflow-x-auto px-4 pb-4">
+                      {moms.map(({ profile, common }) => {
+                        const state = markerStateOf(profile);
+                        const fresh = profile.isOnline || profile.activityBand === "today";
+                        const selected = selectedProfile?.id === profile.id;
+                        return (
+                          <button
+                            key={profile.id}
+                            type="button"
+                            onClick={() => openMom(profile)}
+                            className={`flex w-[158px] shrink-0 flex-col gap-2.5 rounded-[22px] bg-white/75 p-3 text-left ${
+                              selected ? "ring-2 ring-inset ring-pink-500" : ""
+                            }`}
+                            data-testid={`card-mom-${profile.id}`}
+                          >
+                            <span className="flex items-center gap-2.5">
+                              <span
+                                className={`flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full bg-pink-100 font-display text-base font-semibold text-gray-900 ${
+                                  fresh ? "ring-online" : ""
+                                }`}
+                              >
+                                {profile.photoUrls?.[0] ? (
+                                  <img src={profile.photoUrls[0]} alt="" className="h-full w-full object-cover" />
+                                ) : (
+                                  profile.firstName.charAt(0).toUpperCase()
+                                )}
+                              </span>
+                              <span className="min-w-0">
+                                <span className="block truncate font-display text-[15px] font-semibold leading-tight text-gray-900">
+                                  {profile.firstName}
+                                  {profile.age != null ? `, ${profile.age}` : ""}
+                                </span>
+                                <ActivityBadge isOnline={profile.isOnline} activityBand={profile.activityBand} variant="text" className="mt-1 block" />
+                              </span>
+                            </span>
+                            {profile.kidsAges.length > 0 && (
+                              <span className="truncate text-xs font-medium text-gray-600">
+                                {profile.kidsAges.map((age) => kidAgeLabel(t, age)).join(" · ")}
+                              </span>
+                            )}
+                            {state === "connected" ? (
+                              <span className="tag-neutral self-start">{t("connected")}</span>
+                            ) : state === "pending" ? (
+                              <span className="tag-neutral self-start">{t("requestPending")}</span>
+                            ) : common.length > 0 ? (
+                              <span className="tag-pink self-start">
+                                {common.length === 1 ? t("commonCountOne") : fill(t("commonCount"), { count: common.length })}
+                              </span>
+                            ) : null}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {zoneIsThin && community && (
+                      <p className="px-5 pb-4 text-xs leading-snug text-gray-600">
+                        <span className="font-semibold text-gray-900">{fill(t("zoneGrowingTitle"), { province: community.province })}.</span>{" "}
+                        {t("zoneGrowingHint")}
+                      </p>
+                    )}
+                  </>
+                ))}
+            </>
+          )}
+
+          {/* Places */}
+          {layer === "places" && (
+            <>
+              <div className="flex shrink-0 items-center justify-between gap-3 px-4 pb-2.5">
+                <div className="min-w-0">
+                  <h1 className="text-xl font-semibold leading-tight text-gray-900">{t("explorePlacesTitle")}</h1>
+                  <p className="mt-0.5 truncate text-[13px] font-medium text-gray-600">{t("explorePlacesSubtitle")}</p>
+                </div>
+                <AddLocationDialog
+                  trigger={
+                    <button
+                      type="button"
+                      className="inline-flex h-11 shrink-0 items-center gap-1.5 rounded-full bg-white pl-3 pr-3.5 text-[13px] font-semibold text-gray-900 ring-1 ring-inset ring-gray-200"
+                      data-testid="button-add-location"
+                    >
+                      <Plus className="h-4 w-4" />
+                      {t("exploreSuggestPlace")}
+                    </button>
+                  }
+                />
+              </div>
+              {sheetOpen && (
+                <>
+                  <div className="no-scrollbar flex shrink-0 gap-2 overflow-x-auto px-4 pb-3">
+                    {PLACE_FILTERS.map(({ key, label }) => {
+                      const on = placeFilter === key;
+                      return (
+                        <button
+                          key={key}
+                          type="button"
+                          aria-pressed={on}
+                          onClick={() => setPlaceFilter(key)}
+                          className={`inline-flex h-9 shrink-0 items-center rounded-full px-3.5 text-[13px] ${
+                            on ? "bg-purple-50 font-semibold text-purple-700" : "bg-white/70 font-medium text-gray-900"
+                          }`}
+                          data-testid={`filter-${label.toLowerCase()}`}
+                        >
+                          {t(label)}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-3">
+                    {listedPlaces.length === 0 ? (
+                      <div className="py-6 text-center">
+                        <h2 className="text-lg font-semibold text-gray-900">{t("noLocationsFound")}</h2>
+                        <p className="mt-1 text-sm text-gray-600">{t("tryDifferentCategory")}</p>
+                      </div>
+                    ) : (
+                      listedPlaces.map(({ location, lat, lng, kind, distance }) => (
+                        <button
+                          key={location.id}
+                          type="button"
+                          onClick={() => {
+                            panTo(lat, lng, 14);
+                            setSelectedLocation(location);
+                          }}
+                          className="flex w-full items-center gap-3.5 border-b border-gray-200/70 py-3 text-left last:border-0"
+                          data-testid={`row-place-${location.id}`}
+                        >
+                          <img src={placeImageOf(kind)} alt="" loading="lazy" className="h-[68px] w-[68px] shrink-0 rounded-[20px] object-cover" />
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate font-display text-base font-semibold leading-tight text-gray-900">{location.name}</span>
+                            <span className="mt-1 block truncate text-[13px] text-gray-600">
+                              {location.category}
+                              {Number.isFinite(distance) ? ` · ${distance < 10 ? distance.toFixed(1).replace(".", ",") : Math.round(distance)} km` : ""}
+                            </span>
+                            <span className="mt-0.5 block truncate text-[13px] text-gray-600">{location.address}</span>
+                          </span>
+                          <ChevronRight className="h-[18px] w-[18px] shrink-0 text-gray-500" />
+                        </button>
+                      ))
+                    )}
+                  </div>
+                </>
+              )}
+            </>
+          )}
+
+          {/* Events */}
+          {layer === "events" && (
+            <>
+              <div className="flex shrink-0 items-center justify-between gap-3 px-4 pb-2.5">
+                <h1 className="min-w-0 truncate text-xl font-semibold leading-tight text-gray-900">{t("exploreEventsTitle")}</h1>
+                <button
+                  type="button"
+                  onClick={() => setLocation("/events")}
+                  className="inline-flex h-11 shrink-0 items-center gap-1 rounded-full bg-white pl-3.5 pr-2.5 text-[13px] font-semibold text-gray-900 ring-1 ring-inset ring-gray-200"
+                  data-testid="button-open-events"
+                >
+                  {t("openEvents")}
+                  <ChevronRight className="h-4 w-4" />
+                </button>
+              </div>
+              {sheetOpen && (
+                <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-3">
+                  {upcomingEvents.length === 0 ? (
+                    <div className="py-6 text-center">
+                      <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-purple-50">
+                        <CalendarDays className="h-6 w-6 text-purple-700" />
+                      </div>
+                      <h2 className="text-lg font-semibold text-gray-900">{t("noEventsYet")}</h2>
+                    </div>
+                  ) : (
+                    upcomingEvents.map((event) => {
+                      const when = eventDay(event.eventDate);
+                      return (
+                        <button
+                          key={event.id}
+                          type="button"
+                          onClick={() => openEvent(event)}
+                          className="flex w-full items-center gap-3.5 border-b border-gray-200/70 py-3 text-left last:border-0"
+                          data-testid={`row-event-${event.id}`}
+                        >
+                          <span className="flex h-[68px] w-[56px] shrink-0 flex-col items-center justify-center gap-1 rounded-[18px] bg-white/80">
+                            <span className="text-[11px] font-semibold leading-none text-gray-600">{when.weekday}</span>
+                            <span className="font-display text-2xl font-bold leading-none text-gray-900">{when.day}</span>
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate font-display text-base font-semibold leading-tight text-gray-900">{event.title}</span>
+                            <span className="mt-1 block truncate text-[13px] text-gray-600">
+                              {when.time} · {event.location}
+                            </span>
+                            <span className="mt-0.5 block truncate text-xs font-medium text-gray-600">
+                              {event.rsvp.mine === "going"
+                                ? t("rsvpYouGoing")
+                                : event.rsvp.going > 0
+                                  ? fill(t("rsvpGoingCount"), { count: event.rsvp.going })
+                                  : t("rsvpNobodyYet")}
+                            </span>
+                          </span>
+                          <ChevronRight className="h-[18px] w-[18px] shrink-0 text-gray-500" />
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+              )}
+            </>
+          )}
+
+          {/* Professionals */}
+          {layer === "pros" && (
+            <>
+              <div className="shrink-0 px-4 pb-2.5">
+                <h1 className="text-xl font-semibold leading-tight text-gray-900">{t("exploreProsTitle")}</h1>
+              </div>
+              {sheetOpen && (
+                <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-3">
+                  <ProfessionalsList />
+                </div>
+              )}
+            </>
+          )}
+        </section>
+      </main>
+
+      {/* A mom's profile and the connection request */}
+      <MomSheet
+        profile={selectedProfile}
+        me={myProfile}
+        state={selectedProfile ? markerStateOf(selectedProfile) : "none"}
+        incoming={!!selectedProfile && connectionStatus[selectedProfile.userId] === "pending_received"}
+        isSending={requestMutation.isPending}
+        onClose={() => setSelectedProfile(null)}
+        onSend={(message) =>
+          selectedProfile && requestMutation.mutate({ targetUserId: selectedProfile.userId, profileId: selectedProfile.id, message })
+        }
+      />
+
+      {/* An event picked on the map or in the list */}
+      <Drawer open={!!selectedEvent} onOpenChange={(open) => !open && setSelectedEvent(null)} shouldScaleBackground={false}>
+        <DrawerContent data-testid="event-sheet">
+          {selectedEvent && (
+            <div className="px-5 pb-[calc(1.25rem_+_env(safe-area-inset-bottom))] pt-5">
+              <span className="tag-violet">
+                <CalendarDays className="h-3.5 w-3.5" />
+                {t("eventMarker")}
+              </span>
+              <DrawerTitle className="mt-3 text-2xl leading-tight">{selectedEvent.title}</DrawerTitle>
+              <DrawerDescription asChild>
+                <div className="mt-3 space-y-2 text-sm font-medium text-gray-700">
+                  <p className="flex items-center gap-2">
+                    <Clock className="h-4 w-4 shrink-0 text-gray-500" />
+                    <span className="first-letter:uppercase">{eventDay(selectedEvent.eventDate).full}</span>
+                  </p>
+                  <p className="flex items-center gap-2">
+                    <MapPin className="h-4 w-4 shrink-0 text-gray-500" />
+                    <span className="truncate">{selectedEvent.location}</span>
+                  </p>
+                  <p className="text-[13px] text-gray-600">
+                    {selectedEvent.rsvp.going > 0 ? fill(t("rsvpGoingCount"), { count: selectedEvent.rsvp.going }) : t("rsvpNobodyYet")}
+                    {selectedEvent.creatorName ? ` · ${t("organizedBy")} ${selectedEvent.creatorName}` : ""}
+                  </p>
+                </div>
+              </DrawerDescription>
+              <div className="mt-6 flex gap-2.5">
+                <Button variant="outline" className="h-14 flex-1 rounded-[18px]" onClick={() => setLocation("/events")}>
+                  {t("openEvents")}
+                </Button>
+                {selectedEvent.rsvp.mine === "going" ? (
+                  <span className="flex h-14 flex-1 items-center justify-center gap-2 rounded-[18px] bg-pink-50 text-base font-semibold text-pink-700">
+                    <Check className="h-[18px] w-[18px]" strokeWidth={2.6} />
+                    {t("rsvpYouGoing")}
+                  </span>
+                ) : (
+                  <Button
+                    size="lg"
+                    className="flex-1 px-4"
+                    disabled={rsvpMutation.isPending}
+                    onClick={() => rsvpMutation.mutate({ eventId: selectedEvent.id, status: "going" })}
+                    data-testid="button-rsvp-going-map"
+                  >
+                    {t("rsvpGoing")}
+                  </Button>
+                )}
+              </div>
+            </div>
+          )}
+        </DrawerContent>
+      </Drawer>
+
+      {/* A place: details and reviews */}
+      {selectedLocation && <LocationModal location={selectedLocation} onClose={() => setSelectedLocation(null)} />}
     </>
   );
 }

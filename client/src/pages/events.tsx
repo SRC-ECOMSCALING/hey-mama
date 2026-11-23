@@ -1,27 +1,25 @@
 import { useEffect, useState } from "react";
+import type { ReactNode } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import {
-  CalendarDays, Plus, MapPin, ExternalLink, Trash2,
-  Clock, Globe, Lock, Loader2, Check, HelpCircle, Briefcase,
+  CalendarDays, CalendarCheck, History, Plus, MapPin, ExternalLink, Trash2,
+  Clock, Globe, Lock, Loader2, Check, HelpCircle, Briefcase, ChevronDown,
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent } from "@/components/ui/card";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger,
+  Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { useAuth } from "@/hooks/useAuth";
 import { fill } from "@/lib/format";
 import AppHeader from "@/components/app-header";
-import Fab from "@/components/fab";
 import GooglePlacesAutocomplete from "@/components/google-places-autocomplete";
 import ReportBlockControls from "@/components/report-block";
 
@@ -51,6 +49,8 @@ interface EventItem {
   rsvp: { going: number; maybe: number; mine: "going" | "maybe" | null; attendees: Attendee[] };
 }
 
+type EventFilter = "upcoming" | "mine" | "past";
+
 const EMPTY_FORM = {
   title: "",
   description: "",
@@ -66,9 +66,11 @@ export default function Events() {
   const [, setLocation] = useLocation();
   const { t, language } = useLanguage();
   const { toast } = useToast();
-  const { user } = useAuth();
   const [createOpen, setCreateOpen] = useState(false);
   const [form, setForm] = useState({ ...EMPTY_FORM });
+  const [filter, setFilter] = useState<EventFilter>("upcoming");
+  // One event at a time shows its details (description, link, secondary actions)
+  const [openId, setOpenId] = useState<string | null>(null);
   // "Propose a meetup" from a chat: ?create=1&with=<name>&matchId=<id>
   const [proposalMatchId, setProposalMatchId] = useState<string | null>(null);
 
@@ -98,13 +100,27 @@ export default function Events() {
     queryKey: ["/api/events"],
   });
 
+  const locale = language === "it" ? "it-IT" : "en-GB";
+
   const formatDate = (iso: string) => {
     const d = new Date(iso);
-    return d.toLocaleString(language === "it" ? "it-IT" : "en-GB", {
+    return d.toLocaleString(locale, {
       weekday: "short", day: "numeric", month: "short",
       hour: "2-digit", minute: "2-digit",
     });
   };
+
+  const formatTime = (iso: string) =>
+    new Date(iso).toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" });
+
+  // "Sabato 29 novembre"
+  const formatLongDay = (iso: string) => {
+    const s = new Date(iso).toLocaleDateString(locale, { weekday: "long", day: "numeric", month: "long" });
+    return s.charAt(0).toUpperCase() + s.slice(1);
+  };
+
+  const weekdayShort = (iso: string) =>
+    new Date(iso).toLocaleDateString(locale, { weekday: "short" }).replace(".", "");
 
   const createMutation = useMutation({
     mutationFn: async () => {
@@ -183,26 +199,358 @@ export default function Events() {
   const upcoming = events.filter((e) => new Date(e.eventDate) >= now);
   const past = events.filter((e) => new Date(e.eventDate) < now);
 
-  const statusBadge = (event: EventItem) => {
+  // "I miei": events I organise or answered (going / maybe)
+  const isMine = (e: EventItem) => e.isOwn || (e.rsvp?.mine ?? null) !== null;
+  const mineUpcoming = upcoming.filter(isMine);
+  const minePast = past.filter(isMine);
+
+  // Highlight card: the nearest upcoming event I'm going to or organise
+  const nextMine =
+    upcoming
+      .filter((e) => e.status === "approved" && (e.isOwn || e.rsvp?.mine === "going"))
+      .sort((a, b) => new Date(a.eventDate).getTime() - new Date(b.eventDate).getTime())[0] ?? null;
+  const upcomingList = nextMine ? upcoming.filter((e) => e.id !== nextMine.id) : upcoming;
+
+  const statusTag = (event: EventItem) => {
     if (event.status === "pending") {
-      return <Badge className="bg-amber-100 text-amber-700 hover:bg-amber-100 border-0">{t("statusPending")}</Badge>;
+      return <span className="tag-neutral"><Clock className="h-3 w-3" />{t("statusPending")}</span>;
     }
     if (event.status === "rejected") {
-      return <Badge className="bg-red-100 text-red-700 hover:bg-red-100 border-0">{t("statusRejected")}</Badge>;
+      return (
+        <span className="inline-flex h-7 items-center gap-1 rounded-full bg-red-50 px-2.5 text-[11px] font-semibold text-destructive">
+          {t("statusRejected")}
+        </span>
+      );
     }
-    return <Badge className="bg-green-100 text-green-700 hover:bg-green-100 border-0">{t("statusApproved")}</Badge>;
+    return <span className="tag-pink"><Check className="h-3 w-3" />{t("statusApproved")}</span>;
   };
 
-  const visibilityBadge = (event: EventItem) => (
+  const visibilityTag = (event: EventItem) => (
     event.visibility === "private" ? (
-      <Badge variant="outline" className="border-purple-200 text-purple-600 gap-1">
-        <Lock className="h-3 w-3" />{t("privateEvent")}
-      </Badge>
+      <span className="tag-violet"><Lock className="h-3 w-3" />{t("privateEvent")}</span>
     ) : (
-      <Badge variant="outline" className="border-blue-200 text-blue-600 gap-1">
-        <Globe className="h-3 w-3" />{t("publicEvent")}
-      </Badge>
+      <span className="tag-neutral"><Globe className="h-3 w-3" />{t("publicEvent")}</span>
     )
+  );
+
+  // "4 partecipano · 1 forse" / "Sii la prima a partecipare"
+  const attendanceText = (event: EventItem, isPast: boolean) => {
+    const going = event.rsvp?.going ?? 0;
+    const maybe = event.rsvp?.maybe ?? 0;
+    const parts: string[] = [];
+    if (going > 0) parts.push(fill(t("rsvpGoingCount"), { count: going }));
+    else if (!isPast) parts.push(t("rsvpNobodyYet"));
+    if (maybe > 0) parts.push(fill(t("rsvpMaybeCount"), { count: maybe }));
+    return parts.join(" · ");
+  };
+
+  const isBusy = (event: EventItem) => rsvpMutation.isPending && rsvpMutation.variables?.id === event.id;
+
+  // Main RSVP control: "Partecipo" when not going, "Ci sarò" (tap again to
+  // withdraw) when going.
+  const rsvpPill = (event: EventItem, onTint = false) => {
+    const busy = isBusy(event);
+    if (event.rsvp?.mine === "going") {
+      return (
+        <button
+          type="button"
+          aria-pressed="true"
+          disabled={busy}
+          onClick={() => rsvpMutation.mutate({ id: event.id, status: null })}
+          className="inline-flex h-11 shrink-0 items-center gap-1.5 rounded-full bg-pink-500 pl-3 pr-4 text-[13px] font-semibold text-white disabled:opacity-60"
+          data-testid={`button-rsvp-cancel-${event.id}`}
+        >
+          {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" strokeWidth={2.8} />}
+          {t("rsvpImIn")}
+        </button>
+      );
+    }
+    return (
+      <button
+        type="button"
+        aria-pressed="false"
+        disabled={busy}
+        onClick={() => rsvpMutation.mutate({ id: event.id, status: "going" })}
+        className={`inline-flex h-11 shrink-0 items-center gap-1.5 rounded-full px-3.5 text-[13px] font-semibold text-pink-700 disabled:opacity-60 ${onTint ? "bg-white" : "bg-pink-50"}`}
+        data-testid={`button-rsvp-going-${event.id}`}
+      >
+        {busy && <Loader2 className="h-4 w-4 animate-spin" />}
+        {t("rsvpJoin")}
+      </button>
+    );
+  };
+
+  // Everything beyond the summary row: full date and place, description,
+  // labels, link, who is coming, "maybe", delete / report / block.
+  const eventDetails = (event: EventItem, isPast: boolean, opts: { whenWhere: boolean; organiser: boolean }) => {
+    const mine = event.rsvp?.mine ?? null;
+    const attendees = event.rsvp?.attendees ?? [];
+    const attendance = attendanceText(event, isPast);
+    const busy = isBusy(event);
+    const canRsvp = !isPast && event.status === "approved";
+    const pinned = Boolean(event.latitude && event.longitude);
+    return (
+      <div id={`event-details-${event.id}`} className="space-y-3.5">
+        {(opts.whenWhere || pinned) && (
+          <div className="space-y-1.5 text-[13px] text-gray-600">
+            {opts.whenWhere && (
+              <>
+                <p className="flex items-center gap-2">
+                  <Clock className="h-4 w-4 shrink-0" aria-hidden="true" />
+                  <span>{formatDate(event.eventDate)}</span>
+                </p>
+                <p className="flex items-start gap-2">
+                  <MapPin className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+                  <span className="min-w-0 break-words">{event.location}</span>
+                </p>
+              </>
+            )}
+            {pinned && (
+              <button
+                type="button"
+                className={`inline-flex min-h-11 items-center gap-1.5 text-[13px] font-semibold text-purple-700 ${opts.whenWhere ? "pl-6" : ""}`}
+                onClick={() => setLocation("/")}
+                data-testid={`button-event-on-map-${event.id}`}
+              >
+                {!opts.whenWhere && <MapPin className="h-4 w-4" aria-hidden="true" />}
+                {t("eventPlacePinned")}
+              </button>
+            )}
+          </div>
+        )}
+
+        <p className="whitespace-pre-line text-sm leading-relaxed text-gray-800">{event.description}</p>
+
+        <div className="flex flex-wrap items-center gap-2">
+          {visibilityTag(event)}
+          {event.creatorIsProfessional && (
+            <span className="tag-neutral"><Briefcase className="h-3 w-3" />{t("commercialEvent")}</span>
+          )}
+          {(event.isOwn || event.status !== "approved") && statusTag(event)}
+        </div>
+
+        {event.link && (
+          <a
+            href={event.link}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex min-h-11 items-center gap-1.5 text-sm font-semibold text-pink-700"
+          >
+            <ExternalLink className="h-4 w-4" aria-hidden="true" />{t("openLink")}
+          </a>
+        )}
+
+        {/* Who else is coming */}
+        {(attendees.length > 0 || attendance) && (
+          <div className="flex items-center gap-2.5">
+            {attendees.length > 0 && (
+              <div className="flex shrink-0 -space-x-2">
+                {attendees.slice(0, 5).map((a) => (
+                  a.photoUrl ? (
+                    <img
+                      key={a.userId}
+                      src={a.photoUrl}
+                      alt={a.firstName}
+                      title={a.firstName}
+                      className={`h-8 w-8 rounded-full object-cover ring-2 ring-white ${a.status === "maybe" ? "opacity-60" : ""}`}
+                      loading="lazy"
+                    />
+                  ) : (
+                    <div
+                      key={a.userId}
+                      title={a.firstName}
+                      className={`flex h-8 w-8 items-center justify-center rounded-full bg-pink-100 font-display text-xs font-semibold text-gray-900 ring-2 ring-white ${a.status === "maybe" ? "opacity-60" : ""}`}
+                    >
+                      {a.firstName?.[0] ?? "?"}
+                    </div>
+                  )
+                ))}
+              </div>
+            )}
+            {attendance && <span className="min-w-0 text-xs font-medium text-gray-600">{attendance}</span>}
+          </div>
+        )}
+
+        {canRsvp && (
+          mine === "going" ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="-ml-3.5 h-11 rounded-full text-gray-600"
+              disabled={busy}
+              onClick={() => rsvpMutation.mutate({ id: event.id, status: null })}
+              data-testid={`button-rsvp-cancel-detail-${event.id}`}
+            >
+              {t("rsvpCancel")}
+            </Button>
+          ) : (
+            <Button
+              size="sm"
+              variant={mine === "maybe" ? "secondary" : "outline"}
+              className="h-11 rounded-full px-4"
+              aria-pressed={mine === "maybe"}
+              disabled={busy}
+              onClick={() => rsvpMutation.mutate({ id: event.id, status: mine === "maybe" ? null : "maybe" })}
+              data-testid={`button-rsvp-maybe-${event.id}`}
+            >
+              <HelpCircle />{mine === "maybe" ? t("rsvpYouMaybe") : t("rsvpMaybe")}
+            </Button>
+          )
+        )}
+
+        {opts.organiser && event.creatorName && (
+          <p className="text-xs text-gray-500">
+            {t("organizedBy")} {event.creatorName}
+          </p>
+        )}
+
+        {event.isOwn ? (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="-ml-3.5 h-11 rounded-full text-destructive hover:bg-red-50 hover:text-destructive"
+            onClick={() => {
+              if (window.confirm(t("deleteEventConfirm"))) deleteMutation.mutate(event.id);
+            }}
+            data-testid={`button-delete-event-${event.id}`}
+          >
+            <Trash2 />{t("delete")}
+          </Button>
+        ) : (
+          <ReportBlockControls
+            targetUserId={event.createdByUserId}
+            targetType="event"
+            targetId={event.id}
+            variant="buttons"
+          />
+        )}
+      </div>
+    );
+  };
+
+  const eventCard = (event: EventItem, isPast: boolean) => {
+    const open = openId === event.id;
+    const mine = event.rsvp?.mine ?? null;
+    const canRsvp = !isPast && event.status === "approved";
+    const attendance = attendanceText(event, isPast);
+    const organiser = event.creatorName ? ` · ${fill(t("eventByName"), { name: event.creatorName })}` : "";
+    return (
+      <article key={event.id} className="card-float p-3.5" data-testid={`event-card-${event.id}`}>
+        <div className="flex items-center gap-3.5">
+          <button
+            type="button"
+            className="flex min-w-0 flex-1 items-center gap-3.5 text-left"
+            aria-expanded={open}
+            aria-controls={`event-details-${event.id}`}
+            onClick={() => setOpenId(open ? null : event.id)}
+            data-testid={`button-event-details-${event.id}`}
+          >
+            <span
+              className="flex h-[72px] w-[60px] shrink-0 flex-col items-center justify-center gap-1 rounded-[18px] bg-gray-50"
+              title={formatDate(event.eventDate)}
+            >
+              <span className="text-[11px] font-semibold uppercase leading-none text-gray-600">{weekdayShort(event.eventDate)}</span>
+              <span className="font-display text-2xl font-bold leading-none text-gray-900">{new Date(event.eventDate).getDate()}</span>
+            </span>
+            <span className="flex min-w-0 flex-1 flex-col gap-[5px]">
+              <span className="flex items-start gap-1">
+                <span className="line-clamp-2 min-w-0 flex-1 font-display text-base font-semibold leading-tight text-gray-900">{event.title}</span>
+                <ChevronDown
+                  className={`mt-0.5 h-4 w-4 shrink-0 text-gray-500 transition-transform ${open ? "rotate-180" : ""}`}
+                  aria-hidden="true"
+                />
+              </span>
+              <span className="truncate text-[13px] leading-tight text-gray-600">
+                {formatTime(event.eventDate)} · {event.location}
+              </span>
+              <span className="text-xs font-medium leading-snug text-gray-600">
+                {attendance}
+                {attendance && " · "}
+                {event.visibility === "private" ? (
+                  <span className="font-semibold text-purple-700">{t("eventConnectionsOnly")}{organiser}</span>
+                ) : (
+                  <>{t("eventOpenToAll")}{organiser}</>
+                )}
+                {mine === "maybe" && ` · ${t("rsvpYouMaybe")}`}
+              </span>
+              {event.status !== "approved" && <span className="flex pt-0.5">{statusTag(event)}</span>}
+            </span>
+          </button>
+          {canRsvp && rsvpPill(event)}
+        </div>
+        {open && (
+          <div className="mt-3.5 border-t border-gray-100 pt-3.5">
+            {eventDetails(event, isPast, { whenWhere: true, organiser: false })}
+          </div>
+        )}
+      </article>
+    );
+  };
+
+  const heroCard = (event: EventItem) => {
+    const open = openId === event.id;
+    const attendance = attendanceText(event, false);
+    return (
+      <article className="hero-card flex flex-col gap-4" data-testid={`event-card-${event.id}`}>
+        <svg
+          aria-hidden="true"
+          width="220"
+          height="220"
+          viewBox="0 0 220 220"
+          fill="none"
+          className="pointer-events-none absolute -right-[70px] -top-[70px] text-pink-500"
+        >
+          <circle cx="110" cy="110" r="50" stroke="currentColor" strokeOpacity="0.14" strokeWidth="1.5" />
+          <circle cx="110" cy="110" r="80" stroke="currentColor" strokeOpacity="0.1" strokeWidth="1.5" />
+          <circle cx="110" cy="110" r="108" stroke="currentColor" strokeOpacity="0.06" strokeWidth="1.5" />
+        </svg>
+        <span className="relative inline-flex h-7 items-center self-start rounded-full bg-pink-500 px-3 text-xs font-semibold text-white">
+          {t("eventYourNext")}
+        </span>
+        <div className="relative flex flex-col gap-2.5">
+          <h2 className="font-display text-2xl font-semibold leading-[1.15] tracking-[-0.02em] text-gray-900">{event.title}</h2>
+          <p className="flex items-center gap-2 text-sm font-medium text-gray-700">
+            <Clock className="h-4 w-4 shrink-0" aria-hidden="true" />
+            <span>{formatLongDay(event.eventDate)} · {formatTime(event.eventDate)}</span>
+          </p>
+          <p className="flex items-start gap-2 text-sm font-medium text-gray-700">
+            <MapPin className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+            <span className="min-w-0 break-words">{event.location}</span>
+          </p>
+        </div>
+        <div className="relative flex items-center justify-between gap-3">
+          <span className="min-w-0 text-[13px] font-medium text-gray-700">{attendance}</span>
+          {rsvpPill(event, true)}
+        </div>
+        <button
+          type="button"
+          className="relative -my-2 inline-flex min-h-11 items-center gap-1 self-start text-[13px] font-semibold text-pink-700"
+          aria-expanded={open}
+          aria-controls={`event-details-${event.id}`}
+          onClick={() => setOpenId(open ? null : event.id)}
+          data-testid={`button-event-details-${event.id}`}
+        >
+          {open ? t("eventDetailsHide") : t("eventDetailsShow")}
+          <ChevronDown className={`h-4 w-4 transition-transform ${open ? "rotate-180" : ""}`} aria-hidden="true" />
+        </button>
+        {open && (
+          <div className="relative border-t border-pink-200 pt-4">
+            {eventDetails(event, false, { whenWhere: false, organiser: true })}
+          </div>
+        )}
+      </article>
+    );
+  };
+
+  const emptyState = (Icon: LucideIcon, title: string, hint: string, action?: ReactNode) => (
+    <div className="flex flex-col items-center px-6 py-14 text-center">
+      <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-pink-50">
+        <Icon className="h-7 w-7 text-pink-500" aria-hidden="true" />
+      </div>
+      <h2 className="font-display text-xl font-semibold text-gray-900">{title}</h2>
+      <p className="mt-1.5 max-w-xs text-sm text-gray-600">{hint}</p>
+      {action}
+    </div>
   );
 
   const canSubmit =
@@ -211,179 +559,53 @@ export default function Events() {
     form.eventDate &&
     form.location.trim().length > 0;
 
-  const EventCard = ({ event, isPast }: { event: EventItem; isPast: boolean }) => {
-    const mine = event.rsvp?.mine ?? null;
-    const going = event.rsvp?.going ?? 0;
-    const maybe = event.rsvp?.maybe ?? 0;
-    const attendees = event.rsvp?.attendees ?? [];
-    const busy = rsvpMutation.isPending && rsvpMutation.variables?.id === event.id;
-    return (
-      <Card className="rounded-2xl border-gray-100 shadow-sm overflow-hidden" data-testid={`event-card-${event.id}`}>
-        <CardContent className="p-4">
-          <div className="flex items-start justify-between gap-2">
-            <div className="flex-1 min-w-0">
-              <h3 className="font-semibold text-gray-900 truncate">{event.title}</h3>
-              <div className="flex items-center gap-1.5 text-sm text-gray-500 mt-1">
-                <Clock className="h-3.5 w-3.5 shrink-0" />
-                <span>{formatDate(event.eventDate)}</span>
-              </div>
-              <div className="flex items-center gap-1.5 text-sm text-gray-500 mt-0.5">
-                <MapPin className="h-3.5 w-3.5 shrink-0" />
-                <span className="truncate">{event.location}</span>
-                {event.latitude && event.longitude && (
-                  <button
-                    type="button"
-                    className="text-xs text-pink-600 shrink-0 underline"
-                    onClick={() => setLocation("/")}
-                    data-testid={`button-event-on-map-${event.id}`}
-                  >
-                    {t("eventPlacePinned")}
-                  </button>
-                )}
-              </div>
-            </div>
-            {event.isOwn ? (
-              <Button
-                variant="ghost"
-                size="icon"
-                className="text-gray-400 hover:text-red-500 shrink-0 -mt-1 -mr-1"
-                onClick={() => {
-                  if (window.confirm(t("deleteEventConfirm"))) deleteMutation.mutate(event.id);
-                }}
-                data-testid={`button-delete-event-${event.id}`}
-              >
-                <Trash2 className="h-4 w-4" />
-              </Button>
-            ) : (
-              <ReportBlockControls
-                targetUserId={event.createdByUserId}
-                targetType="event"
-                targetId={event.id}
-                variant="icons"
-                className="-mt-1 -mr-2"
-              />
-            )}
-          </div>
+  const filters: { value: EventFilter; label: string }[] = [
+    { value: "upcoming", label: t("eventsFilterUpcoming") },
+    { value: "mine", label: t("eventsFilterMine") },
+    { value: "past", label: t("eventsFilterPast") },
+  ];
 
-          <p className="text-sm text-gray-600 mt-2 whitespace-pre-line">{event.description}</p>
-
-          <div className="flex flex-wrap items-center gap-2 mt-3">
-            {visibilityBadge(event)}
-            {event.creatorIsProfessional && (
-              <Badge variant="outline" className="border-amber-200 text-amber-700 gap-1">
-                <Briefcase className="h-3 w-3" />{t("commercialEvent")}
-              </Badge>
-            )}
-            {(event.isOwn || event.status !== "approved") && statusBadge(event)}
-            {event.link && (
-              <a
-                href={event.link}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 text-sm font-medium"
-                style={{ color: "var(--primary-pink)" }}
-              >
-                <ExternalLink className="h-3.5 w-3.5" />{t("openLink")}
-              </a>
-            )}
-          </div>
-
-          {/* Who else is coming */}
-          <div className="flex items-center justify-between gap-3 mt-3">
-            <div className="flex items-center gap-2 min-w-0">
-              {attendees.length > 0 && (
-                <div className="flex -space-x-2 shrink-0">
-                  {attendees.slice(0, 5).map((a) => (
-                    a.photoUrl ? (
-                      <img key={a.userId} src={a.photoUrl} alt={a.firstName} title={a.firstName}
-                        className={`w-7 h-7 rounded-full border-2 border-white object-cover ${a.status === "maybe" ? "opacity-60" : ""}`} loading="lazy" />
-                    ) : (
-                      <div key={a.userId} title={a.firstName}
-                        className="w-7 h-7 rounded-full border-2 border-white bg-pink-100 text-pink-600 text-[10px] font-semibold flex items-center justify-center">
-                        {a.firstName?.[0] ?? "?"}
-                      </div>
-                    )
-                  ))}
-                </div>
-              )}
-              <span className="text-xs text-gray-500 truncate">
-                {going > 0 ? fill(t("rsvpGoingCount"), { count: going }) : t("rsvpNobodyYet")}
-                {maybe > 0 ? ` · ${fill(t("rsvpMaybeCount"), { count: maybe })}` : ""}
-              </span>
-            </div>
-          </div>
-
-          {!isPast && event.status === "approved" && (
-            <div className="flex gap-2 mt-3">
-              {mine === "going" ? (
-                <>
-                  <Badge className="bg-green-100 text-green-700 hover:bg-green-100 border-0 gap-1 py-1.5 px-3">
-                    <Check className="h-3.5 w-3.5" />{t("rsvpYouGoing")}
-                  </Badge>
-                  <Button variant="ghost" size="sm" className="text-gray-500" disabled={busy}
-                    onClick={() => rsvpMutation.mutate({ id: event.id, status: null })} data-testid={`button-rsvp-cancel-${event.id}`}>
-                    {t("rsvpCancel")}
-                  </Button>
-                </>
-              ) : (
-                <>
-                  <Button
-                    size="sm"
-                    className="flex-1 rounded-full text-white"
-                    style={{ background: "linear-gradient(to right, var(--primary-pink), var(--accent-coral))" }}
-                    disabled={busy}
-                    onClick={() => rsvpMutation.mutate({ id: event.id, status: "going" })}
-                    data-testid={`button-rsvp-going-${event.id}`}
-                  >
-                    {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : (<><Check className="h-4 w-4 mr-1" />{t("rsvpGoing")}</>)}
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant={mine === "maybe" ? "secondary" : "outline"}
-                    className="flex-1 rounded-full"
-                    disabled={busy}
-                    onClick={() => rsvpMutation.mutate({ id: event.id, status: mine === "maybe" ? null : "maybe" })}
-                    data-testid={`button-rsvp-maybe-${event.id}`}
-                  >
-                    <HelpCircle className="h-4 w-4 mr-1" />{mine === "maybe" ? t("rsvpYouMaybe") : t("rsvpMaybe")}
-                  </Button>
-                </>
-              )}
-            </div>
-          )}
-
-          {event.creatorName && (
-            <p className="text-xs text-gray-400 mt-3">
-              {t("organizedBy")} {event.creatorName}
-            </p>
-          )}
-        </CardContent>
-      </Card>
-    );
-  };
+  const visibilityOption = (value: "public" | "private", Icon: LucideIcon, label: string, hint: string) => (
+    <label
+      className={`flex cursor-pointer items-start gap-3 rounded-2xl p-3.5 transition-colors ${
+        form.visibility === value ? "bg-pink-50 ring-2 ring-inset ring-pink-500" : "bg-gray-50"
+      }`}
+    >
+      <RadioGroupItem value={value} className="mt-0.5" />
+      <span>
+        <span className="flex items-center gap-1.5 text-sm font-semibold text-gray-900">
+          <Icon className="h-4 w-4" aria-hidden="true" />{label}
+        </span>
+        <span className="mt-0.5 block text-xs text-gray-600">{hint}</span>
+      </span>
+    </label>
+  );
 
   return (
     <div className="min-h-screen bg-gray-50 pb-nav">
-      <AppHeader />
-
-      {/* Title */}
-      <div className="px-4 pt-4">
-        <h1 className="text-xl font-bold text-gray-900">{t("events")}</h1>
-        <p className="text-xs text-gray-500">{t("eventsIntro")}</p>
-      </div>
+      <AppHeader
+        title={t("events")}
+        left="none"
+        right={
+          <button
+            type="button"
+            className="glass-btn inline-flex h-12 shrink-0 items-center gap-2 rounded-full pl-3.5 pr-4 text-sm font-semibold text-gray-900"
+            onClick={() => setCreateOpen(true)}
+            data-testid="button-create-event"
+          >
+            <Plus className="h-[18px] w-[18px]" strokeWidth={2.2} aria-hidden="true" />
+            {t("createEvent")}
+          </button>
+        }
+      />
 
       <Dialog open={createOpen} onOpenChange={(open) => { setCreateOpen(open); if (!open) setProposalMatchId(null); }}>
-        <DialogTrigger asChild>
-          <Fab data-testid="button-create-event" aria-label={t("createEvent")}>
-            <Plus className="h-6 w-6" />
-          </Fab>
-        </DialogTrigger>
-        <DialogContent className="max-w-md rounded-2xl max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-h-[85vh] max-w-md overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{t("createEvent")}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
-            <div>
+            <div className="space-y-2">
               <Label>{t("eventTitle")} *</Label>
               <Input
                 value={form.title}
@@ -392,7 +614,7 @@ export default function Events() {
                 data-testid="input-event-title"
               />
             </div>
-            <div>
+            <div className="space-y-2">
               <Label>{t("eventDescription")} *</Label>
               <Textarea
                 rows={3}
@@ -402,7 +624,7 @@ export default function Events() {
                 data-testid="input-event-description"
               />
             </div>
-            <div>
+            <div className="space-y-2">
               <Label>{t("eventDate")} *</Label>
               <Input
                 type="datetime-local"
@@ -426,12 +648,12 @@ export default function Events() {
                 className="w-full"
               />
               {form.latitude && form.longitude && (
-                <div className="text-xs text-green-700 bg-green-50 rounded-lg px-2 py-1 inline-flex items-center gap-1">
-                  <MapPin className="h-3 w-3" />{t("eventPlacePinned")}
-                </div>
+                <span className="tag-violet">
+                  <MapPin className="h-3 w-3" aria-hidden="true" />{t("eventPlacePinned")}
+                </span>
               )}
             </div>
-            <div>
+            <div className="space-y-2">
               <Label>{t("eventLocation")} *</Label>
               <Input
                 value={form.location}
@@ -440,7 +662,7 @@ export default function Events() {
                 data-testid="input-event-location"
               />
             </div>
-            <div>
+            <div className="space-y-2">
               <Label>{t("eventLink")}</Label>
               <Input
                 type="url"
@@ -451,45 +673,29 @@ export default function Events() {
                 data-testid="input-event-link"
               />
             </div>
-            <div>
+            <div className="space-y-2">
               <Label>{t("eventVisibility")}</Label>
               <RadioGroup
                 value={form.visibility}
                 onValueChange={(v) => setForm({ ...form, visibility: v as "public" | "private" })}
-                className="mt-2 space-y-2"
+                className="gap-2"
               >
-                <label className="flex items-start gap-3 rounded-xl border p-3 cursor-pointer has-[input:checked]:border-pink-300 has-[input:checked]:bg-pink-50/50">
-                  <RadioGroupItem value="public" className="mt-0.5" />
-                  <span>
-                    <span className="flex items-center gap-1.5 font-medium text-sm text-gray-900">
-                      <Globe className="h-4 w-4" />{t("publicEvent")}
-                    </span>
-                    <span className="text-xs text-gray-500">{t("publicEventHint")}</span>
-                  </span>
-                </label>
-                <label className="flex items-start gap-3 rounded-xl border p-3 cursor-pointer has-[input:checked]:border-pink-300 has-[input:checked]:bg-pink-50/50">
-                  <RadioGroupItem value="private" className="mt-0.5" />
-                  <span>
-                    <span className="flex items-center gap-1.5 font-medium text-sm text-gray-900">
-                      <Lock className="h-4 w-4" />{t("privateEvent")}
-                    </span>
-                    <span className="text-xs text-gray-500">{t("privateEventHint")}</span>
-                  </span>
-                </label>
+                {visibilityOption("public", Globe, t("publicEvent"), t("publicEventHint"))}
+                {visibilityOption("private", Lock, t("privateEvent"), t("privateEventHint"))}
               </RadioGroup>
             </div>
-            <p className="text-xs text-gray-500">{eventSettings?.autoApprove ? t("eventGoesLiveHint") : t("eventCreatedDesc")}</p>
+            <p className="text-xs text-gray-600">{eventSettings?.autoApprove ? t("eventGoesLiveHint") : t("eventCreatedDesc")}</p>
             <Button
-              className="w-full text-white"
-              style={{ background: "linear-gradient(to right, var(--primary-pink), var(--accent-coral))" }}
+              size="lg"
+              className="w-full"
               disabled={!canSubmit || createMutation.isPending}
               onClick={() => createMutation.mutate()}
               data-testid="button-submit-event"
             >
               {createMutation.isPending ? (
-                <span className="flex items-center gap-2">
-                  <Loader2 className="h-4 w-4 animate-spin" />{t("sending")}
-                </span>
+                <>
+                  <Loader2 className="animate-spin" />{t("sending")}
+                </>
               ) : (
                 t("createEvent")
               )}
@@ -498,51 +704,80 @@ export default function Events() {
         </DialogContent>
       </Dialog>
 
-      {/* Content */}
-      <div className="p-4 space-y-6">
+      <main className="space-y-[18px] px-5 pt-1">
+        <div
+          role="group"
+          aria-label={t("eventsFilterLabel")}
+          className="no-scrollbar -mx-5 flex gap-2 overflow-x-auto px-5 py-0.5"
+        >
+          {filters.map((f) => (
+            <button
+              key={f.value}
+              type="button"
+              aria-pressed={filter === f.value}
+              className={`chip h-10 px-4 text-sm ${filter === f.value ? "chip-on" : ""}`}
+              onClick={() => setFilter(f.value)}
+              data-testid={`filter-events-${f.value}`}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+
         {isLoading ? (
-          <div className="space-y-3">
+          <div className="space-y-2.5">
             {[1, 2, 3].map((i) => (
-              <div key={i} className="h-32 rounded-2xl skeleton-shimmer" />
+              <div key={i} className="h-[100px] rounded-3xl skeleton-shimmer" />
             ))}
           </div>
-        ) : events.length === 0 ? (
-          <div className="text-center py-16">
-            <div
-              className="w-16 h-16 mx-auto rounded-full flex items-center justify-center mb-4"
-              style={{ background: "linear-gradient(135deg, #fce7f3, #fbcfe8)" }}
-            >
-              <CalendarDays className="h-8 w-8" style={{ color: "var(--primary-pink)" }} />
-            </div>
-            <h3 className="font-semibold text-gray-900">{t("noEventsYet")}</h3>
-            <p className="text-sm text-gray-500 mt-1 max-w-xs mx-auto">{t("eventsIntro")}</p>
-          </div>
+        ) : filter === "upcoming" ? (
+          upcoming.length === 0 ? (
+            emptyState(
+              CalendarDays,
+              t("noEventsYet"),
+              t("eventsIntro"),
+              <Button className="mt-5" onClick={() => setCreateOpen(true)}>
+                <Plus />{t("createEvent")}
+              </Button>,
+            )
+          ) : (
+            <>
+              {nextMine && heroCard(nextMine)}
+              {upcomingList.length > 0 && (
+                <section className="space-y-2.5">
+                  {nextMine && <h2 className="section-label">{t("upcomingEvents")}</h2>}
+                  {upcomingList.map((e) => eventCard(e, false))}
+                </section>
+              )}
+            </>
+          )
+        ) : filter === "mine" ? (
+          mineUpcoming.length + minePast.length === 0 ? (
+            emptyState(CalendarCheck, t("eventsMineEmptyTitle"), t("eventsMineEmptyHint"))
+          ) : (
+            <>
+              {mineUpcoming.length > 0 && (
+                <section className="space-y-2.5">
+                  <h2 className="section-label">{t("upcomingEvents")}</h2>
+                  {mineUpcoming.map((e) => eventCard(e, false))}
+                </section>
+              )}
+              {minePast.length > 0 && (
+                <section className="space-y-2.5">
+                  <h2 className="section-label">{t("pastEvents")}</h2>
+                  {minePast.map((e) => eventCard(e, true))}
+                </section>
+              )}
+            </>
+          )
+        ) : past.length === 0 ? (
+          emptyState(History, t("eventsPastEmptyTitle"), t("eventsPastEmptyHint"))
         ) : (
-          <>
-            {upcoming.length > 0 && (
-              <section>
-                <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">
-                  {t("upcomingEvents")}
-                </h2>
-                <div className="space-y-3">
-                  {upcoming.map((e) => <EventCard key={e.id} event={e} isPast={false} />)}
-                </div>
-              </section>
-            )}
-            {past.length > 0 && (
-              <section>
-                <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-3">
-                  {t("pastEvents")}
-                </h2>
-                <div className="space-y-3 opacity-70">
-                  {past.map((e) => <EventCard key={e.id} event={e} isPast />)}
-                </div>
-              </section>
-            )}
-          </>
+          <section className="space-y-2.5">
+            {past.map((e) => eventCard(e, true))}
+          </section>
         )}
-      </div>
-      {user?.accountType === "professional" && null}
+      </main>
     </div>
   );
 }

@@ -13,7 +13,7 @@ export function Sk({ className = "" }: SkProps) {
 // Fake sticky header with title + action circle
 function HeaderSkeleton() {
   return (
-    <div className="bg-white/85 backdrop-blur-xl shadow-sm sticky top-0 z-40 p-4 pt-[calc(1rem_+_env(safe-area-inset-top))] flex items-center gap-3">
+    <div className="sticky top-0 z-40 px-5 pb-3 pt-[calc(0.875rem_+_env(safe-area-inset-top))] flex items-center gap-3">
       <Sk className="h-9 w-9 rounded-full" />
       <div className="flex-1 space-y-2">
         <Sk className="h-4 w-32 rounded-md" />
@@ -26,7 +26,7 @@ function HeaderSkeleton() {
 
 function ListCardSkeleton() {
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 flex items-center gap-3">
+    <div className="card-float p-4 flex items-center gap-3">
       <Sk className="w-14 h-14 rounded-xl shrink-0" />
       <div className="flex-1 space-y-2">
         <Sk className="h-4 w-2/3 rounded-md" />
@@ -44,7 +44,7 @@ export default function PageSkeleton({ variant = "list" }: { variant?: SkeletonV
     return (
       <div className="relative h-[100dvh] overflow-hidden bg-gray-100">
         <div className="absolute inset-0 skeleton-shimmer" />
-        <div className="absolute left-4 right-4 top-[calc(1rem_+_env(safe-area-inset-top))] bg-white shadow-lg rounded-2xl p-4 flex items-center justify-between">
+        <div className="glass absolute left-4 right-4 top-[calc(0.875rem_+_env(safe-area-inset-top))] rounded-[20px] p-3 flex items-center justify-between">
           <Sk className="h-9 w-9 rounded-full" />
           <Sk className="h-8 w-28 rounded-xl" />
           <Sk className="h-9 w-9 rounded-full" />
@@ -56,9 +56,9 @@ export default function PageSkeleton({ variant = "list" }: { variant?: SkeletonV
   if (variant === "chat") {
     return (
       <div className="flex flex-col h-[100dvh] bg-gray-50">
-        <div className="bg-white shadow-sm p-4 flex items-center gap-3 safe-top">
-          <Sk className="h-9 w-9 rounded-full" />
-          <Sk className="w-10 h-10 rounded-full" />
+        <div className="px-4 pb-3 pt-[calc(0.875rem_+_env(safe-area-inset-top))] flex items-center gap-3">
+          <Sk className="h-11 w-11 rounded-full" />
+          <Sk className="w-11 h-11 rounded-full" />
           <div className="flex-1 space-y-2">
             <Sk className="h-4 w-32 rounded-md" />
             <Sk className="h-3 w-40 rounded-md" />
@@ -70,8 +70,8 @@ export default function PageSkeleton({ variant = "list" }: { variant?: SkeletonV
           <Sk className="h-16 w-3/5 rounded-2xl" />
           <Sk className="h-10 w-1/2 rounded-2xl ml-auto" />
         </div>
-        <div className="p-3 bg-white border-t border-gray-100 safe-bottom">
-          <Sk className="h-11 w-full rounded-full" />
+        <div className="px-4 pt-2 pb-[calc(1rem_+_env(safe-area-inset-bottom))]">
+          <Sk className="h-[54px] w-full rounded-full" />
         </div>
       </div>
     );

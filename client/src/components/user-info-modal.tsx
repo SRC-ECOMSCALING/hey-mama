@@ -1,7 +1,6 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { MapPin, Users, Heart, ExternalLink, ShoppingBag } from "lucide-react";
+import { MapPin, ExternalLink } from "lucide-react";
 import type { Profile } from "@shared/schema";
 import { useLanguage } from "@/contexts/LanguageContext";
 import ReportBlockControls from "@/components/report-block";
@@ -19,98 +18,102 @@ export default function UserInfoModal({ open, onOpenChange, profile }: UserInfoM
   const { t } = useLanguage();
   if (!profile) return null;
 
+  const fresh = !!profile.isOnline || profile.activityBand === "today";
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md max-h-[80vh] overflow-y-auto">
+      <DialogContent className="max-h-[80vh] max-w-md overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-3">
-            <img
-              src={profile.photoUrls?.[0] || "https://via.placeholder.com/100"}
-              alt={`${profile.firstName} ${profile.lastName}`}
-              className="w-16 h-16 rounded-full object-cover"
-            />
-            <div>
-              <div className="text-xl font-bold">{profile.firstName} {profile.lastName}</div>
-              {profile.age != null && <div className="text-sm text-muted-foreground font-normal">{profile.age} {t("yearsOld")}</div>}
+          <DialogTitle className="flex items-center gap-3.5 pr-6 text-left">
+            <span
+              className={`flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-full bg-pink-100 text-2xl font-semibold text-gray-900 ${
+                fresh ? "ring-online" : ""
+              }`}
+            >
+              {profile.photoUrls?.[0] ? (
+                <img
+                  src={profile.photoUrls[0]}
+                  alt={`${profile.firstName} ${profile.lastName}`}
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                profile.firstName?.charAt(0).toUpperCase()
+              )}
+            </span>
+            <div className="min-w-0">
+              <div className="truncate text-xl font-semibold leading-tight">{profile.firstName} {profile.lastName}</div>
+              {profile.age != null && (
+                <div className="mt-1 font-sans text-sm font-normal tracking-normal text-gray-600">{profile.age} {t("yearsOld")}</div>
+              )}
             </div>
           </DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-4 mt-4">
+        <div className="space-y-5">
           {/* Every photo, not just the first */}
           {(profile.photoUrls?.length ?? 0) > 1 && (
-            <PhotoCarousel photos={profile.photoUrls} alt={profile.firstName} className="h-56" rounded="rounded-xl" />
+            <PhotoCarousel photos={profile.photoUrls} alt={profile.firstName} className="h-56" rounded="rounded-3xl" />
           )}
 
           {/* Location + activity */}
           <div className="flex items-center justify-between gap-2 text-sm">
-            <div className="flex items-center gap-2 min-w-0">
-              <MapPin className="h-4 w-4 text-gray-500 shrink-0" />
-              <span className="text-gray-600 truncate">{profile.location}</span>
+            <div className="flex min-w-0 items-center gap-1.5 font-medium text-gray-600">
+              <MapPin className="h-[15px] w-[15px] shrink-0" />
+              <span className="truncate">{profile.location}</span>
             </div>
             <ActivityBadge isOnline={profile.isOnline} activityBand={profile.activityBand} />
           </div>
 
           {/* Kids Info */}
-          <div>
-            <h3 className="font-semibold text-gray-800 mb-2 flex items-center gap-2">
-              <Users className="h-4 w-4" />
-              {t("kids")}
-            </h3>
-            <div className="flex gap-2 flex-wrap">
-              {profile.kidsAges?.map((age, index) => (
-                <Badge
-                  key={index}
-                  variant="secondary"
-                  className="px-3 py-1"
-                  style={{ 
-                    backgroundColor: index % 2 === 0 ? "rgba(244, 166, 205, 0.2)" : "rgba(135, 206, 235, 0.2)",
-                    color: index % 2 === 0 ? "var(--primary-pink)" : "var(--primary-blue)"
-                  }}
-                >
-                  {t("age")} {age} {profile.kidsGenders?.[index] ? `(${profile.kidsGenders[index]})` : ''}
-                </Badge>
-              ))}
+          {(profile.kidsAges?.length ?? 0) > 0 && (
+            <div>
+              <h3 className="section-label font-sans tracking-normal">{t("kids")}</h3>
+              <div className="mt-2.5 flex flex-wrap gap-2">
+                {profile.kidsAges?.map((age, index) => (
+                  <span
+                    key={index}
+                    className="inline-flex h-8 items-center rounded-full bg-purple-50 px-3 text-[13px] font-semibold text-purple-700"
+                  >
+                    {t("age")} {age} {profile.kidsGenders?.[index] ? `(${profile.kidsGenders[index]})` : ""}
+                  </span>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Hobbies */}
-          <div>
-            <h3 className="font-semibold text-gray-800 mb-2 flex items-center gap-2">
-              <Heart className="h-4 w-4" />
-              {t("interests")}
-            </h3>
-            <div className="flex flex-wrap gap-2">
-              {profile.hobbies?.map((hobby, index) => (
-                <Badge
-                  key={index}
-                  variant="outline"
-                  className="text-sm"
-                >
-                  {hobby}
-                </Badge>
-              ))}
+          {(profile.hobbies?.length ?? 0) > 0 && (
+            <div>
+              <h3 className="section-label font-sans tracking-normal">{t("interests")}</h3>
+              <div className="mt-2.5 flex flex-wrap gap-2">
+                {profile.hobbies?.map((hobby, index) => (
+                  <span
+                    key={index}
+                    className="inline-flex h-8 items-center rounded-full bg-gray-100 px-3 text-[13px] font-medium text-gray-900"
+                  >
+                    {hobby}
+                  </span>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Bio */}
-          <div>
-            <h3 className="font-semibold text-gray-800 mb-2">{t("about")}</h3>
-            <p className="text-gray-600 text-sm leading-relaxed">{profile.bio}</p>
-          </div>
+          {profile.bio && (
+            <div>
+              <h3 className="section-label font-sans tracking-normal">{t("about")}</h3>
+              <p className="mt-2 text-[15px] leading-relaxed text-gray-800">{profile.bio}</p>
+            </div>
+          )}
 
           {/* Vinted Account */}
           {profile.vintedUrl && (
             <div>
-              <h3 className="font-semibold text-gray-800 mb-2 flex items-center gap-2">
-                <ShoppingBag className="h-4 w-4" />
-                {t("vintedAccount")}
-              </h3>
+              <h3 className="section-label font-sans tracking-normal">{t("vintedAccount")}</h3>
               <Button
                 variant="outline"
-                size="sm"
                 onClick={() => window.open(profile.vintedUrl || '', '_blank')}
-                className="w-full justify-between"
+                className="mt-2.5 w-full justify-between"
                 data-testid="button-vinted-link"
               >
                 <span>{t("viewVintedProfile")}</span>
@@ -125,7 +128,7 @@ export default function UserInfoModal({ open, onOpenChange, profile }: UserInfoM
             targetType="profile"
             targetId={profile.id}
             onBlocked={() => onOpenChange(false)}
-            className="pt-2 border-t"
+            className="border-t border-gray-100 pt-4"
           />
         </div>
       </DialogContent>

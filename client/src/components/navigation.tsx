@@ -1,75 +1,63 @@
-import { Search, Users, MessageCircle, MapPin, ShoppingBag, CalendarDays } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Compass, CalendarDays, MessageCircle, ShoppingBag, User } from "lucide-react";
 import { useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { useLanguage } from "@/contexts/LanguageContext";
 
-interface NavigationProps {
-  includeMarketplace?: boolean;
-}
-
-// Icon-only bottom navigation. Labels are exposed via aria-label only.
-export default function Navigation({ includeMarketplace: _includeMarketplace }: NavigationProps = {}) {
+// Bottom navigation: five labelled destinations in a floating glass bar.
+// "Chat" gathers connection requests and conversations, so its badge counts
+// both; places and professionals live inside Esplora, settings inside Profilo.
+export default function Navigation() {
   const [location, setLocation] = useLocation();
   const { t } = useLanguage();
 
-  // Badge on "Connessioni": incoming pending connection requests
   const { data: requests } = useQuery<{ incoming: any[]; outgoing: any[] }>({
     queryKey: ["/api/connections/requests"],
     refetchInterval: 30000,
   });
   const incomingCount = requests?.incoming?.length || 0;
 
-  // Profile is reachable from Impostazioni (gear on the home header). Events
-  // sit in the bar because a meetup is the action that turns a request into
-  // a real friendship.
   const navItems = [
-    { path: "/", icon: Search, label: t("discover") },
-    { path: "/locations", icon: MapPin, label: t("aroundYou") },
+    { path: "/", icon: Compass, label: t("navExplore") },
     { path: "/events", icon: CalendarDays, label: t("events") },
-    { path: "/matches", icon: Users, label: t("connections"), badge: incomingCount },
-    { path: "/messages", icon: MessageCircle, label: t("messages") },
+    { path: "/messages", icon: MessageCircle, label: t("navChat"), badge: incomingCount },
     { path: "/marketplace", icon: ShoppingBag, label: t("marketplace") },
+    { path: "/profile", icon: User, label: t("profile") },
   ];
 
   return (
-    <nav className="fixed left-4 right-4 mx-auto max-w-[26rem] z-50 bg-white/85 backdrop-blur-xl border border-white/60 rounded-3xl shadow-[0_8px_30px_rgba(236,72,153,0.12)] bottom-[calc(1rem_+_env(safe-area-inset-bottom))]">
-      <div className="flex items-center justify-between px-2 py-1.5">
-        {navItems.map(({ path, icon: Icon, label, badge }) => {
-          const isActive = location === path;
-          return (
-            <Button
-              key={path}
-              variant="ghost"
-              aria-label={label}
-              title={label}
-              className={`relative flex items-center justify-center p-0 h-11 w-10 min-w-0 flex-1 rounded-2xl transition-all duration-200 ${
-                isActive ? "bg-pink-50 hover:bg-pink-100/80 scale-105" : "hover:bg-gray-50"
+    <nav
+      aria-label={t("navMain")}
+      className="glass fixed left-3 right-3 z-50 mx-auto flex h-[68px] max-w-[26.5rem] items-center rounded-[34px] px-1.5 bottom-[calc(0.875rem_+_env(safe-area-inset-bottom))]"
+    >
+      {navItems.map(({ path, icon: Icon, label, badge }) => {
+        const isActive = location === path;
+        return (
+          <button
+            key={path}
+            type="button"
+            aria-current={isActive ? "page" : undefined}
+            onClick={() => setLocation(path)}
+            className={`flex h-14 min-w-0 flex-1 flex-col items-center justify-center gap-[5px] text-[11px] leading-none ${
+              isActive ? "font-semibold text-pink-700" : "font-semibold text-gray-700"
+            }`}
+            data-testid={`nav-${path === "/" ? "explore" : path.slice(1)}`}
+          >
+            <span
+              className={`relative flex h-7 w-[46px] items-center justify-center rounded-full transition-colors duration-200 ${
+                isActive ? "bg-pink-50" : ""
               }`}
-              onClick={() => setLocation(path)}
             >
-              <Icon
-                className={`h-[22px] w-[22px] transition-colors ${isActive ? "stroke-[2.4]" : ""}`}
-                style={{ color: isActive ? "var(--primary-pink)" : "#9CA3AF" }}
-              />
+              <Icon className={isActive ? "h-[18px] w-[18px] text-pink-500" : "h-5 w-5 text-gray-700"} strokeWidth={isActive ? 2.2 : 1.9} />
               {!!badge && badge > 0 && (
-                <span
-                  className="absolute top-1 right-1.5 min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-semibold flex items-center justify-center text-white"
-                  style={{ backgroundColor: "var(--primary-pink)" }}
-                >
+                <span className="absolute -top-0.5 right-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-pink-500 px-1 text-[10px] font-semibold text-white">
                   {badge > 99 ? "99+" : badge}
                 </span>
               )}
-              {isActive && (
-                <span
-                  className="absolute -bottom-0.5 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full"
-                  style={{ backgroundColor: "var(--primary-pink)" }}
-                />
-              )}
-            </Button>
-          );
-        })}
-      </div>
+            </span>
+            <span className="max-w-full truncate px-0.5">{label}</span>
+          </button>
+        );
+      })}
     </nav>
   );
 }

@@ -1,0 +1,100 @@
+// Redesign (Nov 2026) strings for the app shell and Esplora (map, places,
+// mom profile sheet, connection request). Keep `en` and `it` in sync: `it` is
+// typed from `en`, so a missing key is a compile error.
+export const en = {
+  navMain: "Main navigation",
+  navExplore: "Explore",
+  navChat: "Chat",
+
+  // Esplora: layers and the list panel
+  exploreLayers: "What to show on the map",
+  exploreLayerMoms: "Moms",
+  exploreNearYou: "Near you",
+  exploreMomsCountOne: "1 mom",
+  exploreMomsCount: "{count} moms",
+  exploreActiveShort: "{count} active in the last 2 weeks",
+  exploreToggleList: "Show or hide the list",
+  exploreRecenter: "Centre the map on your area",
+  explorePlacesTitle: "Family-friendly places",
+  explorePlacesSubtitle: "Recommended by moms",
+  exploreSuggestPlace: "Suggest",
+  exploreEventsTitle: "Upcoming events",
+  exploreProsTitle: "Professionals",
+
+  // Mom profile sheet
+  commonTitle: "In common with you",
+  commonKidsBaby: "Babies under one",
+  commonKidsAgeOne: "1-year-olds",
+  commonKidsAge: "Kids aged {age}",
+  commonCountOne: "1 thing in common",
+  commonCount: "{count} things in common",
+  momKidsAndInterests: "Her kids and interests",
+  momKidAge: "{age} yrs",
+  momKidBaby: "Under 1",
+  momOfOne: "mom of 1",
+  momOfMany: "mom of {count}",
+  askToConnect: "Ask to connect",
+
+  // Connection request sheet
+  requestTitle: "Write a few words to {name}",
+  requestSubtitle: "It's optional, but it helps break the ice.",
+  requestPromptsLabel: "Start from a prompt",
+  requestPromptKids: "Our kids are the same age!",
+  requestPromptCoffee: "Fancy a coffee at the park?",
+  requestPromptNear: "We live close by!",
+  requestYourMessage: "Your message",
+  requestPrivacyNote: "{name} sees your profile and this message. If she accepts, it becomes the first message of your chat.",
+  requestSendWithout: "Send without a message",
+
+  // Place sheet
+  placeAgesLabel: "Ages {age}",
+  placeVisitedWith: "Visited with {who}",
+  placeReviewerFallback: "A mom",
+};
+
+export const it: typeof en = {
+  navMain: "Navigazione principale",
+  navExplore: "Esplora",
+  navChat: "Chat",
+
+  exploreLayers: "Cosa mostrare sulla mappa",
+  exploreLayerMoms: "Mamme",
+  exploreNearYou: "Vicino a te",
+  exploreMomsCountOne: "1 mamma",
+  exploreMomsCount: "{count} mamme",
+  exploreActiveShort: "{count} attive nelle ultime 2 settimane",
+  exploreToggleList: "Mostra o nascondi l'elenco",
+  exploreRecenter: "Centra la mappa sulla tua zona",
+  explorePlacesTitle: "Luoghi per famiglie",
+  explorePlacesSubtitle: "Consigliati dalle mamme",
+  exploreSuggestPlace: "Suggerisci",
+  exploreEventsTitle: "Prossimi eventi",
+  exploreProsTitle: "Professionisti",
+
+  commonTitle: "In comune con te",
+  commonKidsBaby: "Bimbi sotto l'anno",
+  commonKidsAgeOne: "Bimbi di 1 anno",
+  commonKidsAge: "Bimbi di {age} anni",
+  commonCountOne: "1 cosa in comune",
+  commonCount: "{count} cose in comune",
+  momKidsAndInterests: "I suoi bambini e interessi",
+  momKidAge: "{age} anni",
+  momKidBaby: "Meno di 1 anno",
+  momOfOne: "mamma di 1 bimbo",
+  momOfMany: "mamma di {count} bimbi",
+  askToConnect: "Chiedi di conoscervi",
+
+  requestTitle: "Scrivi due righe a {name}",
+  requestSubtitle: "È facoltativo, ma aiuta a rompere il ghiaccio.",
+  requestPromptsLabel: "Parti da uno spunto",
+  requestPromptKids: "I nostri bimbi hanno la stessa età!",
+  requestPromptCoffee: "Ti va un caffè al parco?",
+  requestPromptNear: "Abitiamo vicine!",
+  requestYourMessage: "Il tuo messaggio",
+  requestPrivacyNote: "{name} vede il tuo profilo e questo messaggio. Se accetta, diventa il primo messaggio della vostra chat.",
+  requestSendWithout: "Invia senza messaggio",
+
+  placeAgesLabel: "Età {age}",
+  placeVisitedWith: "Visita con {who}",
+  placeReviewerFallback: "Una mamma",
+};

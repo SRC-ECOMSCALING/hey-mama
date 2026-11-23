@@ -73,7 +73,7 @@ export function pushTargetPath(data: Record<string, string>): string {
     case "match":
       return data.relatedId ? `/chat/${data.relatedId}` : "/messages";
     case "connection_request":
-      return "/matches";
+      return "/messages"; // requests live in the Chat tab
     case "event_approved":
     case "event_rsvp":
       return "/events";

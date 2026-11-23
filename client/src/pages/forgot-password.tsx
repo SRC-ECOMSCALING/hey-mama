@@ -6,9 +6,8 @@ import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Eye, EyeOff, ArrowLeft } from "lucide-react";
-import heyMamaLogo from "@assets/logo_gradient_text-min_1757514869714.png";
+import heyMamaSymbol from "@assets/heymama-symbol.png";
 import { useLanguage } from "@/contexts/LanguageContext";
 import type { TranslationKey } from "@/lib/translations";
 
@@ -115,141 +114,137 @@ export default function ForgotPassword() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-pink-50 to-purple-50 px-4 safe-page">
-      <Card className="w-full max-w-md">
-        <CardHeader className="text-center">
-          <img src={heyMamaLogo} alt="HeyMama" className="h-12 mx-auto mb-4 object-contain" />
-          <CardTitle>{t("forgotPasswordTitle")}</CardTitle>
-          <CardDescription>
+    <div className="safe-page min-h-screen bg-gray-50 px-5">
+      <div className="mx-auto flex w-full max-w-md flex-col gap-7">
+        <Link href="/login" className="icon-btn" aria-label={t("backToLogin")} data-testid="link-back-to-login">
+          <ArrowLeft className="h-5 w-5" />
+        </Link>
+
+        <div className="flex flex-col gap-2.5">
+          <img src={heyMamaSymbol} alt="HeyMama" className="mb-2 h-14 w-14 object-contain" />
+          <h1 className="font-display text-[32px] font-semibold leading-[1.1] tracking-[-0.03em] text-gray-900">
+            {t("forgotPasswordTitle")}
+          </h1>
+          <p className="text-pretty text-base leading-normal text-gray-600">
             {step === "email" ? t("forgotPasswordSubtitle") : t("codeSentSubtitle")}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {step === "email" ? (
-            <form onSubmit={submitEmail} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="reset-email">{t("email")}</Label>
-                <Input
-                  id="reset-email"
-                  type="email"
-                  autoComplete="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder={t("enterYourEmail")}
-                  data-testid="input-reset-email"
-                />
-              </div>
+          </p>
+        </div>
+
+        {step === "email" ? (
+          <form onSubmit={submitEmail} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="reset-email">{t("email")}</Label>
+              <Input
+                id="reset-email"
+                type="email"
+                autoComplete="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder={t("enterYourEmail")}
+                data-testid="input-reset-email"
+              />
+            </div>
+            <div className="pt-2">
               <Button
                 type="submit"
-                className="w-full bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-600 hover:to-purple-700"
+                size="lg"
+                className="w-full"
                 disabled={requestCode.isPending}
                 data-testid="button-send-code"
               >
                 {requestCode.isPending ? t("sendingCode") : t("sendCode")}
               </Button>
-              {/* For someone who already has the code and reopened the app */}
-              <Button
-                type="button"
-                variant="link"
-                className="w-full text-sm text-pink-600 hover:text-pink-700"
-                onClick={() => {
-                  if (!email.trim()) {
-                    toast({ title: t("enterYourEmail"), variant: "destructive" });
-                    return;
-                  }
-                  setStep("code");
-                }}
-                data-testid="button-have-code"
-              >
-                {t("alreadyHaveCode")}
-              </Button>
-            </form>
-          ) : (
-            <form onSubmit={submitReset} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="reset-code">{t("resetCode")}</Label>
+            </div>
+            {/* For someone who already has the code and reopened the app */}
+            <button
+              type="button"
+              className="mx-auto flex min-h-11 items-center text-sm font-semibold text-pink-700"
+              onClick={() => {
+                if (!email.trim()) {
+                  toast({ title: t("enterYourEmail"), variant: "destructive" });
+                  return;
+                }
+                setStep("code");
+              }}
+              data-testid="button-have-code"
+            >
+              {t("alreadyHaveCode")}
+            </button>
+          </form>
+        ) : (
+          <form onSubmit={submitReset} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="reset-code">{t("resetCode")}</Label>
+              <Input
+                id="reset-code"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                maxLength={6}
+                value={code}
+                onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
+                placeholder="123456"
+                className="h-14 text-center font-display text-2xl tracking-[0.5em]"
+                data-testid="input-reset-code"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="new-password">{t("newPassword")}</Label>
+              <div className="relative">
                 <Input
-                  id="reset-code"
-                  inputMode="numeric"
-                  autoComplete="one-time-code"
-                  maxLength={6}
-                  value={code}
-                  onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
-                  placeholder="123456"
-                  className="text-center text-2xl tracking-[0.5em]"
-                  data-testid="input-reset-code"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="new-password">{t("newPassword")}</Label>
-                <div className="relative">
-                  <Input
-                    id="new-password"
-                    type={showPassword ? "text" : "password"}
-                    autoComplete="new-password"
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                    data-testid="input-new-password"
-                  />
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
-                    onClick={() => setShowPassword((v) => !v)}
-                    data-testid="button-toggle-new-password"
-                  >
-                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </Button>
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="confirm-new-password">{t("confirmNewPassword")}</Label>
-                <Input
-                  id="confirm-new-password"
+                  id="new-password"
                   type={showPassword ? "text" : "password"}
                   autoComplete="new-password"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  data-testid="input-confirm-new-password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  className="pr-12"
+                  data-testid="input-new-password"
                 />
+                <button
+                  type="button"
+                  className="absolute right-0.5 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full text-gray-600"
+                  onClick={() => setShowPassword((v) => !v)}
+                  aria-label={showPassword ? t("hidePassword") : t("showPassword")}
+                  aria-pressed={showPassword}
+                  data-testid="button-toggle-new-password"
+                >
+                  {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                </button>
               </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="confirm-new-password">{t("confirmNewPassword")}</Label>
+              <Input
+                id="confirm-new-password"
+                type={showPassword ? "text" : "password"}
+                autoComplete="new-password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                data-testid="input-confirm-new-password"
+              />
+            </div>
+            <div className="pt-2">
               <Button
                 type="submit"
-                className="w-full bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-600 hover:to-purple-700"
+                size="lg"
+                className="w-full"
                 disabled={resetPassword.isPending}
                 data-testid="button-reset-password"
               >
                 {resetPassword.isPending ? t("resettingPassword") : t("resetPasswordAction")}
               </Button>
-              <Button
-                type="button"
-                variant="link"
-                className="w-full text-sm text-pink-600 hover:text-pink-700"
-                onClick={() => requestCode.mutate(email)}
-                disabled={requestCode.isPending}
-                data-testid="button-resend-code"
-              >
-                {t("resendCode")}
-              </Button>
-            </form>
-          )}
-
-          <div className="mt-6 text-center">
-            <Link href="/login">
-              <Button
-                type="button"
-                variant="link"
-                className="p-0 h-auto text-sm font-medium text-pink-600 hover:text-pink-700"
-                data-testid="link-back-to-login"
-              >
-                <ArrowLeft className="h-4 w-4 mr-1" />
-                {t("backToLogin")}
-              </Button>
-            </Link>
-          </div>
-        </CardContent>
-      </Card>
+            </div>
+            <button
+              type="button"
+              className="mx-auto flex min-h-11 items-center text-sm font-semibold text-pink-700 disabled:opacity-50"
+              onClick={() => requestCode.mutate(email)}
+              disabled={requestCode.isPending}
+              data-testid="button-resend-code"
+            >
+              {t("resendCode")}
+            </button>
+          </form>
+        )}
+      </div>
     </div>
   );
 }

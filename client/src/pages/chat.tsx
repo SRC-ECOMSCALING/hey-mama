@@ -1,11 +1,11 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useParams, useLocation } from "wouter";
-import { ArrowLeft, Send, CalendarPlus } from "lucide-react";
+import { ArrowLeft, CalendarPlus, Check, CheckCheck, Loader2, MessageCircle, MoreHorizontal, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Drawer, DrawerContent, DrawerDescription, DrawerTitle } from "@/components/ui/drawer";
 import { useToast } from "@/hooks/use-toast";
-import { formatDistanceToNow } from "date-fns";
+import { format, formatDistanceToNow } from "date-fns";
 import { it as itLocale } from "date-fns/locale";
 import type { Message, Profile, PublicProfile } from "@shared/schema";
 import { useLanguage } from "@/contexts/LanguageContext";
@@ -25,6 +25,7 @@ export default function Chat() {
   const { matchId } = useParams<{ matchId: string }>();
   const [, setLocation] = useLocation();
   const [message, setMessage] = useState("");
+  const [moreOpen, setMoreOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -65,6 +66,7 @@ export default function Chat() {
     profile: PublicProfile;
     matchedUserId: string;
     userId: string;
+    acceptedAt?: string | null;
   }
 
   const { data: allMatches = [] } = useQuery<MatchWithProfile[]>({
@@ -160,9 +162,9 @@ export default function Chat() {
 
   if (!matchId) {
     return (
-      <div className="flex items-center justify-center h-screen">
+      <div className="flex h-screen items-center justify-center bg-gray-50 px-6">
         <div className="text-center">
-          <h2 className="text-2xl font-bold text-gray-800 mb-2">{t("invalidChat")}</h2>
+          <h2 className="mb-4 font-display text-xl font-semibold text-gray-900">{t("invalidChat")}</h2>
           <Button onClick={() => setLocation("/messages")}>
             {t("backToMessages")}
           </Button>
@@ -185,80 +187,98 @@ export default function Chat() {
   })();
   const otherLastReadAt = readState?.otherLastReadAt ? new Date(readState.otherLastReadAt).getTime() : 0;
 
+  const other = conversation?.profile;
+  const otherName = other?.firstName ?? "";
+  const fresh = !!other?.isOnline || other?.activityBand === "today";
+
+  // "You connected on Thursday, November 20": only when the date is known
+  const connectedLabel = (() => {
+    if (!currentMatch?.acceptedAt) return null;
+    const date = new Date(currentMatch.acceptedAt);
+    if (Number.isNaN(date.getTime())) return null;
+    const sameYear = date.getFullYear() === new Date().getFullYear();
+    const text =
+      language === "en"
+        ? format(date, sameYear ? "EEEE, MMMM d" : "MMMM d, yyyy")
+        : format(date, sameYear ? "EEEE d MMMM" : "'il' d MMMM yyyy", { locale: itLocale });
+    return fill(t("chatConnectedOn"), { date: text });
+  })();
+
   return (
-    <div className="flex flex-col h-screen bg-white">
+    <div className="flex h-[100dvh] flex-col bg-gray-50">
       {/* Header */}
-      <header className="bg-white shadow-sm sticky top-0 z-50 border-b">
-        <div className="flex items-center p-4">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="rounded-full mr-3"
-            onClick={() => setLocation("/messages")}
-            data-testid="button-back"
+      <header
+        className="z-40 flex items-center gap-3 bg-gray-50/85 px-4 pb-3 backdrop-blur-xl"
+        style={{ paddingTop: "calc(0.875rem + env(safe-area-inset-top))" }}
+      >
+        <button
+          type="button"
+          className="icon-btn"
+          aria-label={t("back")}
+          onClick={() => setLocation("/messages")}
+          data-testid="button-back"
+        >
+          <ArrowLeft className="h-5 w-5" />
+        </button>
+
+        <div className="flex min-w-0 flex-1 items-center gap-3">
+          <span
+            aria-hidden="true"
+            className={`flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full bg-pink-100 font-display text-base font-semibold text-gray-900 ${
+              fresh ? "ring-online" : ""
+            }`}
           >
-            <ArrowLeft className="h-5 w-5 text-gray-600" />
-          </Button>
-
-          <div className="flex items-center gap-3 flex-1 min-w-0">
-            <img
-              src={conversation?.profile?.photoUrls[0]}
-              alt={`${conversation?.profile?.firstName} ${conversation?.profile?.lastName}`}
-              className="w-10 h-10 rounded-full object-cover"
-            />
-            <div className="min-w-0">
-              <h3 className="font-semibold text-gray-800 truncate" data-testid="text-chat-name">
-                {conversation?.profile?.firstName} {conversation?.profile?.lastName}
-              </h3>
-              <ActivityBadge isOnline={conversation?.profile?.isOnline} activityBand={conversation?.profile?.activityBand} />
-            </div>
+            {other?.photoUrls?.[0] ? (
+              <img src={other.photoUrls[0]} alt="" className="h-full w-full object-cover" />
+            ) : (
+              otherName.charAt(0).toUpperCase()
+            )}
+          </span>
+          <div className="flex min-w-0 flex-col gap-1">
+            <h1 className="truncate font-display text-[17px] font-semibold leading-tight tracking-normal text-gray-900" data-testid="text-chat-name">
+              {other?.firstName} {other?.lastName}
+            </h1>
+            <ActivityBadge isOnline={other?.isOnline} activityBand={other?.activityBand} variant="text" />
           </div>
-
-          {conversation?.otherUserId && (
-            <>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="rounded-full text-pink-600"
-                title={t("proposeMeetup")}
-                aria-label={t("proposeMeetup")}
-                onClick={() =>
-                  setLocation(
-                    `/events?create=1&with=${encodeURIComponent(conversation.profile?.firstName ?? "")}&matchId=${matchId}`,
-                  )
-                }
-                data-testid="button-propose-meetup"
-              >
-                <CalendarPlus className="h-5 w-5" />
-              </Button>
-              <ReportBlockControls
-                targetUserId={conversation.otherUserId}
-                targetType="message"
-                targetId={matchId}
-                onBlocked={() => setLocation("/messages")}
-                variant="icons"
-              />
-            </>
-          )}
         </div>
+
+        {conversation?.otherUserId && (
+          <button
+            type="button"
+            className="icon-btn"
+            aria-label={t("chatMoreActions")}
+            aria-haspopup="dialog"
+            onClick={() => setMoreOpen(true)}
+            data-testid="button-more"
+          >
+            <MoreHorizontal className="h-5 w-5" strokeWidth={2.4} />
+          </button>
+        )}
       </header>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div className="flex-1 overflow-y-auto px-4 pb-2 pt-1">
+        {connectedLabel && (
+          <p className="mx-auto mb-4 mt-1 flex h-7 w-fit max-w-full items-center rounded-full bg-purple-50 px-3 text-xs font-semibold text-purple-700" data-testid="chip-connected-on">
+            <span className="truncate">{connectedLabel}</span>
+          </p>
+        )}
         {messages.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-center py-12 px-2">
-            <div className="text-6xl mb-4">💬</div>
-            <h3 className="text-xl font-semibold text-gray-800 mb-2">{t("startConversation")}</h3>
-            <p className="text-gray-600 mb-6">{t("sayHello")}</p>
+          <div className="flex flex-col items-center px-2 py-10 text-center">
+            <span className="flex h-16 w-16 items-center justify-center rounded-full bg-pink-50">
+              <MessageCircle className="h-7 w-7 text-pink-500" strokeWidth={1.9} />
+            </span>
+            <h2 className="mt-4 font-display text-xl font-semibold text-gray-900">{t("startConversation")}</h2>
+            <p className="mt-1.5 text-sm text-gray-600">{t("sayHello")}</p>
             {icebreakers.length > 0 && (
-              <div className="w-full space-y-2">
-                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">{t("icebreakersTitle")}</p>
+              <div className="mt-7 w-full space-y-2.5 text-left">
+                <p className="section-label px-1">{t("icebreakersTitle")}</p>
                 {icebreakers.map((text, i) => (
                   <button
                     key={i}
                     type="button"
                     onClick={() => setMessage(text)}
-                    className="w-full text-left text-sm rounded-2xl border border-pink-100 bg-pink-50/60 px-4 py-3 text-gray-700 hover:bg-pink-50 transition-colors"
+                    className="card-float w-full rounded-[20px] px-4 py-3.5 text-left text-[15px] leading-snug text-gray-900"
                     data-testid={`icebreaker-${i}`}
                   >
                     {text}
@@ -278,27 +298,23 @@ export default function Chat() {
             return (
               <div key={msg.id} data-testid={`message-${msg.id}`}>
                 {showTime && (
-                  <div className="text-center text-xs text-gray-400 mb-2">
+                  <div className="mb-2.5 mt-3 text-center text-xs font-medium text-gray-500">
                     {formatDistanceToNow(new Date(msg.createdAt), { addSuffix: true, locale: language === "en" ? undefined : itLocale })}
                   </div>
                 )}
-                <div className={`flex ${isCurrentUser ? 'justify-end' : 'justify-start'} mb-2`}>
-                  <div className={`max-w-[70%] ${isCurrentUser ? "text-right" : ""}`}>
+                <div className={`mb-2.5 flex ${isCurrentUser ? "justify-end" : "justify-start"}`}>
+                  <div className={`max-w-[78%] ${isCurrentUser ? "text-right" : ""}`}>
                     <div
-                      className={`px-4 py-2 rounded-2xl text-left ${
-                        isCurrentUser
-                          ? 'text-white'
-                          : 'bg-gray-100 text-gray-800'
+                      className={`inline-block rounded-[22px] px-4 py-3 text-left align-top text-gray-900 ${
+                        isCurrentUser ? "rounded-br-md bg-pink-50" : "rounded-bl-md bg-white"
                       }`}
-                      style={isCurrentUser ? {
-                        background: "linear-gradient(to right, var(--primary-pink), var(--accent-coral))"
-                      } : {}}
                     >
-                      <p className="text-sm break-words">{msg.content}</p>
+                      <p className="break-words text-[15px] leading-[1.45]">{msg.content}</p>
                     </div>
                     {isLastOwn && (
-                      <p className="text-[10px] text-gray-400 mt-0.5 pr-1" data-testid="read-receipt">
-                        {read ? `✓✓ ${t("readReceipt")}` : `✓ ${t("sentReceipt")}`}
+                      <p className="mt-1.5 flex items-center justify-end gap-1 pr-1 text-xs font-medium leading-none text-gray-600" data-testid="read-receipt">
+                        {read ? <CheckCheck className="h-3.5 w-3.5" /> : <Check className="h-3.5 w-3.5" />}
+                        {read ? t("readReceipt") : t("sentReceipt")}
                       </p>
                     )}
                   </div>
@@ -311,37 +327,66 @@ export default function Chat() {
       </div>
 
       {/* Input */}
-      <div className="p-4 bg-white border-t">
-        <div className="flex items-center gap-2">
-          <Input
-            value={message}
-            onChange={(e) => setMessage(e.target.value)}
-            onKeyPress={handleKeyPress}
-            placeholder={t("typeMessage")}
-            className="flex-1 rounded-full border-gray-200 focus:border-pink-300"
-            disabled={sendMessageMutation.isPending}
-            data-testid="input-message"
-          />
-          <Button
-            onClick={handleSendMessage}
-            disabled={!message.trim() || sendMessageMutation.isPending}
-            size="icon"
-            className="rounded-full"
-            style={{
-              background: message.trim()
-                ? "linear-gradient(to right, var(--primary-pink), var(--accent-coral))"
-                : "var(--gray-300)"
-            }}
-            data-testid="button-send"
-          >
-            {sendMessageMutation.isPending ? (
-              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-            ) : (
-              <Send className="h-4 w-4 text-white" />
-            )}
-          </Button>
-        </div>
+      <div className="flex items-center gap-2.5 px-4 pt-2 pb-[calc(0.75rem_+_env(safe-area-inset-bottom))]">
+        <input
+          type="text"
+          value={message}
+          onChange={(e) => setMessage(e.target.value)}
+          onKeyPress={handleKeyPress}
+          placeholder={t("typeMessage")}
+          aria-label={otherName ? fill(t("chatMessageFor"), { name: otherName }) : t("typeMessage")}
+          className="glass-btn h-[54px] min-w-0 flex-1 rounded-full border-0 px-5 text-base text-gray-900 outline-none placeholder:text-gray-500 focus-visible:ring-2 focus-visible:ring-pink-500/40 disabled:opacity-60"
+          disabled={sendMessageMutation.isPending}
+          data-testid="input-message"
+        />
+        <Button
+          onClick={handleSendMessage}
+          disabled={!message.trim() || sendMessageMutation.isPending}
+          size="icon"
+          aria-label={t("send")}
+          className="h-[54px] w-[54px] shadow-[0_8px_20px_rgba(216,27,114,0.30)] [&_svg]:size-5"
+          data-testid="button-send"
+        >
+          {sendMessageMutation.isPending ? <Loader2 className="animate-spin" /> : <Send />}
+        </Button>
       </div>
+
+      {/* More: propose a meetup, report, block */}
+      {conversation?.otherUserId && (
+        <Drawer open={moreOpen} onOpenChange={setMoreOpen} shouldScaleBackground={false}>
+          <DrawerContent data-testid="sheet-chat-actions">
+            <div className="space-y-4 px-5 pb-[calc(1.25rem_+_env(safe-area-inset-bottom))] pt-5">
+              <div>
+                <DrawerTitle>
+                  {other?.firstName} {other?.lastName}
+                </DrawerTitle>
+                <DrawerDescription className="mt-1 text-sm text-gray-600">{t("chatMoreActions")}</DrawerDescription>
+              </div>
+              <button
+                type="button"
+                className="flex h-14 w-full items-center gap-3 rounded-2xl bg-gray-50 px-3.5 text-left text-[15px] font-semibold text-gray-900"
+                onClick={() =>
+                  setLocation(
+                    `/events?create=1&with=${encodeURIComponent(conversation.profile?.firstName ?? "")}&matchId=${matchId}`,
+                  )
+                }
+                data-testid="button-propose-meetup"
+              >
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-purple-50 text-purple-700">
+                  <CalendarPlus className="h-[18px] w-[18px]" strokeWidth={2} />
+                </span>
+                {t("proposeMeetup")}
+              </button>
+              <ReportBlockControls
+                targetUserId={conversation.otherUserId}
+                targetType="message"
+                targetId={matchId}
+                onBlocked={() => setLocation("/messages")}
+              />
+            </div>
+          </DrawerContent>
+        </Drawer>
+      )}
     </div>
   );
 }

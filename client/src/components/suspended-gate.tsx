@@ -14,24 +14,24 @@ export default function SuspendedGate() {
   if (!user?.suspended) return null;
 
   return (
-    <div className="fixed inset-0 z-[100] bg-white flex items-center justify-center p-6">
-      <div className="max-w-sm text-center space-y-4">
-        <div className="w-16 h-16 mx-auto rounded-full bg-red-50 flex items-center justify-center">
-          <Ban className="h-8 w-8 text-red-500" />
+    <div className="safe-page fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto bg-gray-50 px-6" role="alertdialog" aria-modal="true" aria-labelledby="suspended-title">
+      <div className="flex w-full max-w-sm flex-col items-center gap-4 text-center">
+        <div className="flex h-16 w-16 items-center justify-center rounded-full bg-white text-destructive shadow-[0_8px_24px_rgba(23,17,31,0.05)]" aria-hidden="true">
+          <Ban className="h-7 w-7" />
         </div>
-        <h1 className="text-2xl font-bold text-gray-900">{t("suspendedTitle")}</h1>
-        <p className="text-gray-600">{t("suspendedDescription")}</p>
+        <h1 id="suspended-title" className="font-display text-2xl font-semibold tracking-[-0.02em] text-gray-900">{t("suspendedTitle")}</h1>
+        <p className="text-pretty text-gray-600">{t("suspendedDescription")}</p>
         {user.suspendedReason && (
-          <p className="text-sm text-gray-700 bg-gray-50 rounded-xl p-3">
+          <p className="card-float w-full p-4 text-left text-sm leading-relaxed text-gray-800">
             <span className="font-semibold">{t("suspendedReasonLabel")}:</span> {user.suspendedReason}
           </p>
         )}
-        <p className="text-sm text-gray-500">
+        <p className="text-sm leading-relaxed text-gray-600">
           {fill(t("suspendedAppeal"), { email: "" })}
-          <a href={`mailto:${SUPPORT_EMAIL}`} className="text-pink-600 underline">{SUPPORT_EMAIL}</a>
+          <a href={`mailto:${SUPPORT_EMAIL}`} className="font-semibold text-pink-700 underline">{SUPPORT_EMAIL}</a>
         </p>
-        <Button variant="outline" onClick={logout} disabled={isLoggingOut} data-testid="button-suspended-logout">
-          <LogOut className="h-4 w-4 mr-2" />
+        <Button variant="outline" className="mt-2" onClick={logout} disabled={isLoggingOut} data-testid="button-suspended-logout">
+          <LogOut />
           {t("logout")}
         </Button>
       </div>

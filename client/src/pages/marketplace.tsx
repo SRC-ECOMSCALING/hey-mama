@@ -1,19 +1,24 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { getMarketPrefs, setMarketPrefs, type MarketPrefs } from "@/lib/marketPrefs";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useAuth } from "@/hooks/useAuth";
-import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Drawer, DrawerContent, DrawerTitle } from "@/components/ui/drawer";
+import { Switch } from "@/components/ui/switch";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { Heart, Search, Filter, Euro, MapPin, ExternalLink, Plus, Clock, ChevronLeft, ChevronRight, X, Edit, Trash2, Loader2, Info, SlidersHorizontal, ShoppingBag, Wrench, Tag, HandCoins } from "lucide-react";
+import {
+  Heart, Search, MapPin, ExternalLink, Plus, Clock, ChevronLeft, ChevronRight, Pencil, Trash2, Loader2, Info,
+  SlidersHorizontal, ShoppingBag, Wrench, Tag, HandCoins, ArrowUpDown, ImageOff, MessageCircle, ClipboardList,
+  type LucideIcon,
+} from "lucide-react";
+import type { ReactNode } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -28,7 +33,6 @@ import { translations, type TranslationKey } from "@/lib/translations";
 import CityPicker from "@/components/city-picker";
 import PageSkeleton from "@/components/page-skeleton";
 import AppHeader from "@/components/app-header";
-import Fab from "@/components/fab";
 
 // Category keys for translation
 const categoryKeys = [
@@ -43,13 +47,31 @@ const categoryKeys = [
 ] as const;
 
 const conditions = [
-  { value: "new-with-tags", color: "bg-green-100 text-green-800" },
-  { value: "new-without-tags", color: "bg-green-100 text-green-800" },
-  { value: "excellent", color: "bg-blue-100 text-blue-800" },
-  { value: "good", color: "bg-blue-100 text-blue-800" },
-  { value: "fair", color: "bg-yellow-100 text-yellow-800" },
-  { value: "damaged", color: "bg-red-100 text-red-800" }
+  { value: "new-with-tags" },
+  { value: "new-without-tags" },
+  { value: "excellent" },
+  { value: "good" },
+  { value: "fair" },
+  { value: "damaged" }
 ];
+
+// Shown when a listing photo fails to load
+const IMAGE_FALLBACK =
+  'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="400" height="400" viewBox="0 0 24 24" fill="none" stroke="%23ccc" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"%3E%3Crect x="3" y="3" width="18" height="18" rx="2" ry="2"/%3E%3Ccircle cx="8.5" cy="8.5" r="1.5"/%3E%3Cpolyline points="21,15 16,10 5,21"/%3E%3C/svg%3E';
+
+// Empty state per DESIGN.md: round pink tile, Sora title, one grey sentence
+function EmptyState({ icon: Icon, title, text, action, testId }: { icon: LucideIcon; title: string; text: string; action?: ReactNode; testId?: string }) {
+  return (
+    <div className="flex flex-col items-center px-6 py-12 text-center" data-testid={testId}>
+      <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-pink-50">
+        <Icon className="h-7 w-7 text-pink-500" />
+      </div>
+      <h2 className="font-display text-xl font-semibold text-gray-900">{title}</h2>
+      <p className="mt-1.5 text-sm leading-relaxed text-gray-600">{text}</p>
+      {action && <div className="mt-5">{action}</div>}
+    </div>
+  );
+}
 
 // Edit form schema
 const buildEditProductSchema = (t: (key: TranslationKey) => string) => insertMarketplaceItemSchema.pick({
@@ -70,18 +92,16 @@ type EditProductFormData = z.infer<ReturnType<typeof buildEditProductSchema>>;
 
 type MarketplaceItemWithSeller = MarketplaceItem & { sellerProfile?: Profile | null };
 
-const urgencyColors = {
-  urgent: "bg-red-100 text-red-800 border-red-300",
-  normal: "bg-blue-100 text-blue-800 border-blue-300",
-  flexible: "bg-green-100 text-green-800 border-green-300",
-};
-
 export default function Marketplace() {
   const [, setLocation] = useLocation();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("categoryAll");
   const [sortBy, setSortBy] = useState("newest");
-  const [selectedItem, setSelectedItem] = useState<MarketplaceItem | null>(null);
+  const [selectedItem, setSelectedItem] = useState<MarketplaceItemWithSeller | null>(null);
+  // The detail sheet keeps showing the last item while it slides out
+  const lastSelectedItem = useRef<MarketplaceItemWithSeller | null>(null);
+  if (selectedItem) lastSelectedItem.current = selectedItem;
+  const sheetItem = selectedItem ?? lastSelectedItem.current;
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [editingItem, setEditingItem] = useState<MarketplaceItem | null>(null);
   const [showChoiceDialog, setShowChoiceDialog] = useState(false);
@@ -110,14 +130,15 @@ export default function Marketplace() {
 
   // Only drop the city: going through applyPrefs would also reset the tabs
   // and bounce someone browsing services back to items.
-  const clearCityFilter = () => {
+  const setCityFilter = (city: string) => {
     if (!prefs) return;
-    const next = { ...prefs, city: "" };
+    const next = { ...prefs, city };
     setMarketPrefs(next);
     setPrefs(next);
   };
+  const clearCityFilter = () => setCityFilter("");
   const { toast } = useToast();
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -320,15 +341,13 @@ export default function Marketplace() {
   // Filter user's service requests
   const userServiceRequests = serviceLookingForPosts.filter(post => post.userId === user?.id);
 
-  // Saved items are already loaded from the database
-  const savedItemsList = savedItems;
-
-  const formatPrice = (priceInCents: number) => {
-    return `€${(priceInCents / 100).toFixed(0)}`;
-  };
-
-  const getConditionStyle = (condition: string) => {
-    return conditions.find(c => c.value === condition)?.color || "bg-gray-100 text-gray-800";
+  // "45 €"; cents are shown only when the price is not a whole amount
+  const formatEuro = (priceInCents: number) => {
+    const euros = priceInCents / 100;
+    const amount = priceInCents % 100 === 0
+      ? euros.toFixed(0)
+      : euros.toFixed(2).replace(".", language === "it" ? "," : ".");
+    return `${amount} €`;
   };
 
   const toggleSaved = (itemId: string) => {
@@ -396,97 +415,227 @@ export default function Marketplace() {
     const diffTime = Math.abs(now.getTime() - date.getTime());
     const diffHours = Math.floor(diffTime / (1000 * 60 * 60));
     const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-    
+
     if (diffHours < 1) return t("justNow");
     if (diffHours < 24) return `${diffHours}${t("hoursAgo")}`;
     if (diffDays === 1) return t("yesterday");
     return `${diffDays} ${t("daysAgo")}`;
   };
 
+  const openItem = (item: MarketplaceItemWithSeller) => {
+    setSelectedItem(item);
+    setSelectedImageIndex(0);
+  };
+
+  const openSetup = () => {
+    setDraftCity(prefs?.city ?? "");
+    setDraftInterest(prefs?.interest ?? null);
+    setDraftMode(prefs?.mode ?? null);
+    setShowSetup(true);
+  };
+
+  // Choice tiles of the preferences screen: white card, pink tint + magenta ring when picked
+  const choiceTile = (selected: boolean) =>
+    `rounded-3xl p-4 text-left transition-colors ${
+      selected ? "bg-pink-50 text-pink-700 ring-2 ring-inset ring-pink-500" : "bg-white text-gray-900"
+    }`;
+  const choiceIcon = (selected: boolean) => `mb-3 h-6 w-6 ${selected ? "text-pink-500" : "text-gray-900"}`;
+
+  // Second-level switch (for sale / mine, available / mine / requests)
+  const scopeTrigger = "h-9 min-w-0 px-1.5 text-[13px]";
+
+  // One tile of the 2-column grid. `mine` swaps the save heart for the edit shortcut.
+  const renderListing = (item: MarketplaceItemWithSeller, mine: boolean) => {
+    const saved = isItemSaved(item.id);
+    const badge = item.isAvailable === false ? t("unavailable") : item.negotiable ? t("negotiable") : null;
+    return (
+      <div key={item.id} className="relative">
+        <button
+          type="button"
+          onClick={() => openItem(item)}
+          className="flex w-full flex-col gap-2 text-left"
+          data-testid={mine ? `card-my-product-${item.id}` : `card-product-${item.id}`}
+        >
+          <span className="relative block w-full">
+            {item.imageUrls && item.imageUrls.length > 0 ? (
+              <img
+                src={item.imageUrls[0]}
+                loading="lazy"
+                decoding="async"
+                alt={item.title}
+                className="aspect-square w-full rounded-[22px] bg-gray-100 object-cover"
+                onError={(e) => {
+                  e.currentTarget.src = IMAGE_FALLBACK;
+                }}
+              />
+            ) : (
+              <span className="flex aspect-square w-full items-center justify-center rounded-[22px] bg-gray-100">
+                <ImageOff className="h-7 w-7 text-gray-500" aria-hidden="true" />
+                <span className="sr-only">{t("noImage")}</span>
+              </span>
+            )}
+            {badge && (
+              <span className="absolute left-2.5 top-2.5 inline-flex h-[26px] items-center rounded-full bg-white px-2.5 text-[11px] font-semibold text-gray-900">
+                {badge}
+              </span>
+            )}
+          </span>
+          <span className="flex flex-col gap-1 px-1">
+            <span className="font-display text-lg font-bold leading-[1.1] text-gray-900">{formatEuro(item.price)}</span>
+            <span className="line-clamp-2 text-sm font-medium leading-tight text-gray-900">{item.title}</span>
+            <span className="truncate text-xs text-gray-600">
+              {[optionLabel(t, item.condition), item.location].filter(Boolean).join(" · ")}
+            </span>
+          </span>
+        </button>
+        {mine ? (
+          <button
+            type="button"
+            onClick={() => handleEditItem(item)}
+            className="glass absolute right-2 top-2 flex h-9 w-9 items-center justify-center rounded-full text-gray-900"
+            aria-label={t("edit")}
+            data-testid={`button-edit-${item.id}`}
+          >
+            <Pencil className="h-4 w-4" />
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={() => toggleSaved(item.id)}
+            className="glass absolute right-2 top-2 flex h-9 w-9 items-center justify-center rounded-full"
+            aria-label={saved ? t("marketUnsaveAria") : t("marketSaveAria")}
+            aria-pressed={saved}
+            data-testid={`button-save-${item.id}`}
+          >
+            <Heart className={`h-[18px] w-[18px] ${saved ? "fill-pink-500 text-pink-500" : "text-gray-900"}`} />
+          </button>
+        )}
+      </div>
+    );
+  };
+
+  // Price of a service: "15 €/h"
+  const renderRate = (cents: number, prefix?: string) => (
+    <p className="shrink-0 font-display text-lg font-bold leading-tight text-gray-900">
+      {prefix && <span className="mr-1 font-sans text-xs font-medium text-gray-600">{prefix}</span>}
+      {formatEuro(cents)}
+      <span className="font-sans text-xs font-medium text-gray-600">{t("perHour")}</span>
+    </p>
+  );
+
+  // Tags shared by service cards: type in violet, age groups in grey
+  const renderServiceTags = (serviceType: string, ageGroups: string | null, lead?: ReactNode) => (
+    <div className="mt-2.5 flex flex-wrap gap-1.5">
+      {lead}
+      <span className="tag-violet">{optionLabel(t, serviceType)}</span>
+      {(ageGroups ?? "")
+        .split(",")
+        .map((group) => group.trim())
+        .filter(Boolean)
+        .map((group) => (
+          <span key={group} className="tag-neutral">{optionLabel(t, group)}</span>
+        ))}
+    </div>
+  );
+
+  const selectedIsMine = !!sheetItem && sheetItem.sellerId === user?.id;
+  const selectedSeller = sheetItem?.sellerProfile ?? null;
+  const selectedSaved = !!sheetItem && isItemSaved(sheetItem.id);
+  const selectedDetails: { label: string; value: string; testId: string }[] = sheetItem
+    ? [
+        { label: t("brandLabel"), value: sheetItem.brand, testId: "text-product-brand" },
+        { label: t("sizeLabel"), value: optionLabel(t, sheetItem.size), testId: "text-product-size" },
+        { label: t("colorLabel"), value: optionLabel(t, sheetItem.color), testId: "text-product-color" },
+        { label: t("materialLabel"), value: optionLabel(t, sheetItem.material), testId: "text-product-material" },
+        { label: t("ageRangeLabel"), value: sheetItem.ageRange ?? "", testId: "text-product-age" },
+        { label: t("seasonLabel"), value: optionLabel(t, sheetItem.season), testId: "text-product-season" },
+      ].filter((detail) => !!detail.value)
+    : [];
+
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 pb-nav">
       {/* First-access setup: choose city / interest / buy-or-sell */}
       {showSetup && (
-        <div className="fixed inset-0 z-[60] bg-gradient-to-br from-pink-50 via-white to-purple-50 overflow-y-auto safe-top">
-          <div className="max-w-md mx-auto px-6 py-10 pb-16">
-            <div className="text-center mb-8">
-              <div className="w-16 h-16 mx-auto mb-4 rounded-2xl flex items-center justify-center shadow-lg" style={{ background: "linear-gradient(to right, var(--primary-pink), var(--accent-coral))" }}>
-                <ShoppingBag className="w-8 h-8 text-white" />
+        <div className="fixed inset-0 z-[60] overflow-y-auto bg-gray-50 safe-top">
+          <div className="mx-auto max-w-md px-5 pb-16 pt-10">
+            <div className="mb-8">
+              <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-pink-50">
+                <ShoppingBag className="h-7 w-7 text-pink-500" />
               </div>
-              <h2 className="text-2xl font-bold text-gray-900 mb-1">{t("marketWelcome")}</h2>
-              <p className="text-sm text-gray-500">
-                {t("marketWelcomeSubtitle")}
-              </p>
+              <h2 className="font-display text-[28px] font-semibold leading-tight tracking-[-0.03em] text-gray-900">
+                {t("marketWelcome")}
+              </h2>
+              <p className="mt-2.5 text-base leading-relaxed text-gray-600">{t("marketWelcomeSubtitle")}</p>
             </div>
 
             {/* Posizione */}
             <div className="mb-6">
-              <p className="text-sm font-semibold text-gray-900 mb-2">{t("whereAreYou")}</p>
+              <p className="section-label mb-2.5">{t("marketWhereAreYou")}</p>
               <CityPicker value={draftCity} onChange={setDraftCity} allowAll testId="input-setup-city" />
-              <p className="text-xs text-gray-400 mt-1.5">{t("cityHint")}</p>
+              <p className="mt-2 text-xs leading-relaxed text-gray-600">{t("cityHint")}</p>
             </div>
 
             {/* Interesse */}
             <div className="mb-6">
-              <p className="text-sm font-semibold text-gray-900 mb-2">{t("whatInterestsYou")}</p>
+              <p className="section-label mb-2.5">{t("whatInterestsYou")}</p>
               <div className="grid grid-cols-2 gap-3">
                 <button
+                  type="button"
                   onClick={() => setDraftInterest("items")}
-                  className={`rounded-2xl border-2 p-4 text-left transition-all ${
-                    draftInterest === "items" ? "border-pink-400 bg-pink-50 shadow-sm" : "border-gray-200 bg-white hover:border-gray-300"
-                  }`}
+                  aria-pressed={draftInterest === "items"}
+                  className={choiceTile(draftInterest === "items")}
                   data-testid="setup-interest-items"
                 >
-                  <Tag className={`w-6 h-6 mb-2 ${draftInterest === "items" ? "text-pink-500" : "text-gray-400"}`} />
-                  <p className="font-semibold text-sm text-gray-900">{t("itemsOption")}</p>
-                  <p className="text-xs text-gray-500">{t("itemsOptionHint")}</p>
+                  <Tag className={choiceIcon(draftInterest === "items")} />
+                  <p className="text-[15px] font-semibold">{t("itemsOption")}</p>
+                  <p className="mt-0.5 text-xs text-gray-600">{t("itemsOptionHint")}</p>
                 </button>
                 <button
+                  type="button"
                   onClick={() => setDraftInterest("services")}
-                  className={`rounded-2xl border-2 p-4 text-left transition-all ${
-                    draftInterest === "services" ? "border-pink-400 bg-pink-50 shadow-sm" : "border-gray-200 bg-white hover:border-gray-300"
-                  }`}
+                  aria-pressed={draftInterest === "services"}
+                  className={choiceTile(draftInterest === "services")}
                   data-testid="setup-interest-services"
                 >
-                  <Wrench className={`w-6 h-6 mb-2 ${draftInterest === "services" ? "text-pink-500" : "text-gray-400"}`} />
-                  <p className="font-semibold text-sm text-gray-900">{t("servicesOption")}</p>
-                  <p className="text-xs text-gray-500">{t("servicesOptionHint")}</p>
+                  <Wrench className={choiceIcon(draftInterest === "services")} />
+                  <p className="text-[15px] font-semibold">{t("servicesOption")}</p>
+                  <p className="mt-0.5 text-xs text-gray-600">{t("servicesOptionHint")}</p>
                 </button>
               </div>
             </div>
 
             {/* Compra o vendi */}
             <div className="mb-8">
-              <p className="text-sm font-semibold text-gray-900 mb-2">{t("buyOrSell")}</p>
+              <p className="section-label mb-2.5">{t("buyOrSell")}</p>
               <div className="grid grid-cols-2 gap-3">
                 <button
+                  type="button"
                   onClick={() => setDraftMode("buy")}
-                  className={`rounded-2xl border-2 p-4 text-left transition-all ${
-                    draftMode === "buy" ? "border-pink-400 bg-pink-50 shadow-sm" : "border-gray-200 bg-white hover:border-gray-300"
-                  }`}
+                  aria-pressed={draftMode === "buy"}
+                  className={choiceTile(draftMode === "buy")}
                   data-testid="setup-mode-buy"
                 >
-                  <ShoppingBag className={`w-6 h-6 mb-2 ${draftMode === "buy" ? "text-pink-500" : "text-gray-400"}`} />
-                  <p className="font-semibold text-sm text-gray-900">{t("buyOption")}</p>
-                  <p className="text-xs text-gray-500">{t("buyOptionHint")}</p>
+                  <ShoppingBag className={choiceIcon(draftMode === "buy")} />
+                  <p className="text-[15px] font-semibold">{t("buyOption")}</p>
+                  <p className="mt-0.5 text-xs text-gray-600">{t("buyOptionHint")}</p>
                 </button>
                 <button
+                  type="button"
                   onClick={() => setDraftMode("sell")}
-                  className={`rounded-2xl border-2 p-4 text-left transition-all ${
-                    draftMode === "sell" ? "border-pink-400 bg-pink-50 shadow-sm" : "border-gray-200 bg-white hover:border-gray-300"
-                  }`}
+                  aria-pressed={draftMode === "sell"}
+                  className={choiceTile(draftMode === "sell")}
                   data-testid="setup-mode-sell"
                 >
-                  <HandCoins className={`w-6 h-6 mb-2 ${draftMode === "sell" ? "text-pink-500" : "text-gray-400"}`} />
-                  <p className="font-semibold text-sm text-gray-900">{t("sellOption")}</p>
-                  <p className="text-xs text-gray-500">{t("sellOptionHint")}</p>
+                  <HandCoins className={choiceIcon(draftMode === "sell")} />
+                  <p className="text-[15px] font-semibold">{t("sellOption")}</p>
+                  <p className="mt-0.5 text-xs text-gray-600">{t("sellOptionHint")}</p>
                 </button>
               </div>
             </div>
 
             <Button
-              className="w-full h-12 rounded-2xl text-base font-semibold text-white"
-              style={{ background: "linear-gradient(to right, var(--primary-pink), var(--accent-coral))" }}
+              size="lg"
+              className="w-full"
               disabled={!draftInterest || !draftMode}
               onClick={() =>
                 draftInterest && draftMode &&
@@ -494,12 +643,12 @@ export default function Marketplace() {
               }
               data-testid="button-setup-start"
             >
-              {t("getStarted")}
+              {t("marketStart")}
             </Button>
             {prefs && (
               <Button
                 variant="ghost"
-                className="w-full mt-2 text-gray-500"
+                className="mt-2 w-full text-gray-600"
                 onClick={() => setShowSetup(false)}
                 data-testid="button-setup-cancel"
               >
@@ -510,710 +659,376 @@ export default function Marketplace() {
         </div>
       )}
 
-      {/* Header */}
-      <AppHeader />
-      <div className="bg-white border-b border-gray-100">
-        <div className="px-4 pt-4 pb-3">
-          <div className="flex items-center gap-2 mb-3">
-            <h1 className="text-xl font-bold text-gray-900 flex-1">{t("marketplace")}</h1>
-            {prefs?.city && (
-              <button
-                onClick={clearCityFilter}
-                className="flex items-center gap-1 text-xs font-medium bg-pink-50 text-pink-600 rounded-full pl-2.5 pr-1.5 py-1.5 hover:bg-pink-100 transition-colors"
-                title={t("removeCityFilter")}
-                data-testid="chip-city-filter"
-              >
-                <MapPin className="h-3 w-3" />
-                {prefs.city}
-                <X className="h-3 w-3 ml-0.5" />
-              </button>
-            )}
-            <button
-              onClick={() => {
-                setDraftCity(prefs?.city ?? "");
-                setDraftInterest(prefs?.interest ?? null);
-                setDraftMode(prefs?.mode ?? null);
-                setShowSetup(true);
-              }}
-              className="p-2 rounded-full bg-gray-100 hover:bg-gray-200 transition-colors"
-              title={t("marketPreferences")}
-              data-testid="button-market-prefs"
-            >
-              <SlidersHorizontal className="h-4 w-4 text-gray-600" />
-            </button>
-          </div>
+      {/* Header: big title + "Sell" pill (product or service) */}
+      <AppHeader
+        title={t("marketplace")}
+        left="none"
+        right={
+          <button
+            type="button"
+            onClick={() => setShowChoiceDialog(true)}
+            className="glass-btn inline-flex h-12 shrink-0 items-center gap-2 rounded-full pl-3.5 pr-4 text-sm font-semibold text-gray-900"
+            data-testid="button-open-add-choice"
+          >
+            <Plus className="h-[18px] w-[18px]" strokeWidth={2.2} />
+            {t("marketSell")}
+          </button>
+        }
+      />
 
-          {/* Search Bar */}
-          <div className="relative mb-3">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-            <Input
-              placeholder={t("searchItems")}
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-11 h-11 rounded-full bg-gray-100 border-0 text-gray-900 placeholder-gray-400 focus-visible:ring-pink-300"
-              data-testid="input-market-search"
+      <Tabs value={mainTab} onValueChange={setMainTab}>
+        <main className="space-y-3.5 px-5">
+          {/* Search + city */}
+          <div className="flex gap-2.5">
+            <div className="relative min-w-0 flex-1">
+              <Search className="pointer-events-none absolute left-[18px] top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-gray-900" />
+              <Input
+                placeholder={t("marketSearchPlaceholder")}
+                aria-label={t("search")}
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="h-[52px] rounded-full border-0 pl-[46px] pr-4 text-sm font-medium placeholder:text-gray-600"
+                data-testid="input-market-search"
+              />
+            </div>
+            <CityPicker
+              value={prefs?.city ?? ""}
+              onChange={setCityFilter}
+              allowAll
+              variant="pill"
+              testId="chip-city-filter"
             />
           </div>
 
-          {/* Category chips + sort */}
-          <div className="flex gap-2 overflow-x-auto pb-1 -mx-4 px-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            {categoryKeys.map(categoryKey => {
-              const active = selectedCategory === categoryKey;
-              return (
-                <button
-                  key={categoryKey}
-                  onClick={() => setSelectedCategory(categoryKey)}
-                  className={`shrink-0 px-3.5 py-1.5 rounded-full text-xs font-medium transition-colors ${
-                    active
-                      ? "text-white shadow-sm"
-                      : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                  }`}
-                  style={active ? { background: "linear-gradient(to right, var(--primary-pink), var(--accent-coral))" } : undefined}
-                  data-testid={`chip-category-${categoryKey}`}
-                >
-                  {t(categoryKey)}
-                </button>
-              );
-            })}
-            <div className="shrink-0">
-              <Select value={sortBy} onValueChange={setSortBy}>
-                <SelectTrigger className="h-[30px] rounded-full bg-gray-100 border-0 text-xs text-gray-600 px-3.5 w-auto gap-1">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="newest">{t("newest")}</SelectItem>
-                  <SelectItem value="oldest">{t("oldest")}</SelectItem>
-                  <SelectItem value="price-low">{t("priceLowest")}</SelectItem>
-                  <SelectItem value="price-high">{t("priceHighest")}</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+          {/* Items / services + preferences */}
+          <div className="flex items-center gap-2.5">
+            <TabsList className="grid h-12 min-w-0 flex-1 grid-cols-2 gap-1" aria-label={t("marketListingType")}>
+              <TabsTrigger value="marketplace" data-testid="tab-main-items">{t("itemsOption")}</TabsTrigger>
+              <TabsTrigger value="services" data-testid="tab-main-services">{t("servicesOption")}</TabsTrigger>
+            </TabsList>
+            <button
+              type="button"
+              onClick={openSetup}
+              className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-white text-gray-900"
+              aria-label={t("marketPreferences")}
+              title={t("marketPreferences")}
+              data-testid="button-market-prefs"
+            >
+              <SlidersHorizontal className="h-[18px] w-[18px]" />
+            </button>
           </div>
-        </div>
-      </div>
-
-      {/* Tabs Content */}
-      <div className="p-4">
-        <Tabs value={mainTab} onValueChange={setMainTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-2 mb-4 h-11 rounded-full bg-gray-100 p-1">
-            <TabsTrigger value="marketplace" className="rounded-full">{t("marketplace")}</TabsTrigger>
-            <TabsTrigger value="services" className="rounded-full">{t("services")}</TabsTrigger>
-          </TabsList>
 
           <TabsContent value="marketplace" className="mt-0">
-            <Tabs value={marketSubTab} onValueChange={setMarketSubTab} className="w-full">
-              <TabsList className="grid w-full grid-cols-2 mb-4 h-10 rounded-full bg-gray-100 p-1">
-                <TabsTrigger value="items" className="rounded-full">{t("forSale")}</TabsTrigger>
-                <TabsTrigger value="my-products" className="rounded-full">{t("myProducts")}</TabsTrigger>
+            <Tabs value={marketSubTab} onValueChange={setMarketSubTab} className="space-y-3.5">
+              <TabsList className="grid h-11 w-full grid-cols-2 gap-1">
+                <TabsTrigger value="items" className={scopeTrigger} data-testid="tab-items-for-sale">
+                  <span className="truncate">{t("marketScopeForSale")}</span>
+                </TabsTrigger>
+                <TabsTrigger value="my-products" className={scopeTrigger} data-testid="tab-my-products">
+                  <span className="truncate">{t("marketScopeMine")}</span>
+                </TabsTrigger>
               </TabsList>
 
-              <TabsContent value="items" className="mt-0">
-            {filteredItems.length === 0 ? (
-              <div className="text-center py-14 px-6">
-                <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-pink-50 flex items-center justify-center">
-                  <ShoppingBag className="w-7 h-7 text-pink-400" />
-                </div>
-                <div className="text-gray-700 font-semibold mb-1">{t("noItemsFound")}</div>
-                <div className="text-gray-500 text-sm mb-4">
-                  {cityFilter
-                    ? t("noItemsInCity").replace("{city}", prefs?.city ?? "")
-                    : t("tryDifferentCategory")}
-                </div>
-                {cityFilter && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="rounded-full"
-                    onClick={clearCityFilter}
-                    data-testid="button-clear-city-empty"
-                  >
-                    <X className="w-3.5 h-3.5 mr-1.5" />
-                    {t("showAllCities")}
-                  </Button>
-                )}
-              </div>
-            ) : (
-              <div className="space-y-4 mb-nav">
-                {filteredItems.map((item) => (
-              <Card key={item.id} className="bg-white rounded-2xl border-0 shadow-sm overflow-hidden cursor-pointer hover:shadow-lg transition-shadow" onClick={() => {
-                setSelectedItem(item);
-                setSelectedImageIndex(0);
-              }} data-testid={`card-product-${item.id}`}>
-                <div className="flex">
-                  {/* Image Section */}
-                  <div className="relative w-24 sm:w-32 h-24 sm:h-32 flex-shrink-0 flex items-center justify-center p-2">
-                    {item.imageUrls && item.imageUrls.length > 0 ? (
-                      <img
-                        src={item.imageUrls[0]}
-                    loading="lazy"
-                    decoding="async"
-                        alt={item.title}
-                        className="w-full h-full object-cover rounded-lg"
-                        onError={(e) => {
-                          e.currentTarget.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 24 24" fill="none" stroke="%23ccc" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"%3E%3Crect x="3" y="3" width="18" height="18" rx="2" ry="2"/%3E%3Ccircle cx="8.5" cy="8.5" r="1.5"/%3E%3Cpolyline points="21,15 16,10 5,21"/%3E%3C/svg%3E';
-                        }}
-                      />
-                    ) : (
-                      <div className="w-full h-full bg-gray-100 rounded-lg flex items-center justify-center">
-                        <div className="text-gray-400 text-xs text-center">
-                          <div className="w-8 h-8 mx-auto mb-1 opacity-50">
-                            📷
-                          </div>
-                          {t("noImage")}
-                        </div>
-                      </div>
-                    )}
+              {/* Category chips + sort */}
+              <div
+                role="group"
+                aria-label={t("marketCategories")}
+                className="no-scrollbar -mx-5 flex items-center gap-2 overflow-x-auto px-5"
+              >
+                {categoryKeys.map(categoryKey => {
+                  const active = selectedCategory === categoryKey;
+                  return (
                     <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        toggleSaved(item.id);
-                      }}
-                      className="absolute top-2 right-2 p-1.5 rounded-full bg-white/80 hover:bg-white transition-colors"
+                      key={categoryKey}
+                      type="button"
+                      onClick={() => setSelectedCategory(categoryKey)}
+                      aria-pressed={active}
+                      className={active ? "chip chip-on" : "chip"}
+                      data-testid={`chip-category-${categoryKey}`}
                     >
-                      <Heart
-                        className={`h-4 w-4 ${
-                          isItemSaved(item.id)
-                            ? "fill-pink-500 text-pink-500"
-                            : "text-gray-600"
-                        }`}
-                      />
+                      {t(categoryKey)}
                     </button>
-                    <div className="absolute bottom-2 left-2">
-                      <Badge className={getConditionStyle(item.condition)}>
-                        {optionLabel(t, item.condition)}
-                      </Badge>
-                    </div>
-                  </div>
-                  
-                  {/* Content Section */}
-                  <div className="flex-1 p-2 sm:p-4 flex flex-col justify-between min-w-0">
-                    <div>
-                      <div className="flex items-center justify-between mb-1 sm:mb-2">
-                        <div className="flex items-center gap-1 min-w-0 flex-1">
-                          <span className="text-xs sm:text-sm text-gray-600 font-medium truncate">
-                            {item.sellerProfile ? `${item.sellerProfile.firstName} ${item.sellerProfile.lastName}` : t("unknownSeller")}
-                          </span>
-                          {item.sellerProfile && (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                if (item.sellerProfile) {
-                                  setSelectedUserProfile(item.sellerProfile);
-                                  setShowUserInfoModal(true);
-                                }
-                              }}
-                              className="p-0.5 hover:bg-gray-100 rounded-full transition-colors"
-                              data-testid={`button-info-seller-${item.id}`}
-                            >
-                              <Info className="h-4 w-4" style={{ color: "#d91c5c" }} />
-                            </button>
-                          )}
-                        </div>
-                        <div className="flex items-center font-bold text-lg sm:text-xl shrink-0" style={{ color: "#d91c5c" }}>
-                          <Euro className="h-4 w-4 sm:h-5 sm:w-5 mr-0.5 sm:mr-1" />
-                          {(item.price / 100).toFixed(0)}
-                        </div>
-                      </div>
-                      
-                      <h3 className="font-semibold text-gray-900 text-base sm:text-lg leading-tight mb-1">
-                        {item.title}
-                      </h3>
-                      
-                      <p className="text-gray-600 text-xs sm:text-sm mb-2 sm:mb-3 line-clamp-2">
-                        {item.description}
-                      </p>
-                      
-                      <div className="flex items-center justify-between text-xs sm:text-sm text-gray-500 mb-2 sm:mb-4">
-                        <div className="flex items-center min-w-0 flex-1">
-                          <MapPin className="h-3 w-3 sm:h-4 sm:w-4 mr-1 shrink-0" />
-                          <span className="truncate">{item.location}</span>
-                        </div>
-                        <span className="shrink-0 ml-2">{getTimeSince(item.createdAt)}</span>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="h-10 px-2 sm:px-3 bg-gray-200 rounded-lg flex items-center justify-center text-xs font-bold text-gray-700 border border-gray-300 border-gray-600 shrink-0">
-                        {optionLabel(t, item.size) || 'N/A'}
-                      </div>
-                      <div className="flex items-center gap-2 sm:gap-3 flex-1 justify-end">
-                        {item.vintedUrl && (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              window.open(item.vintedUrl!, '_blank');
-                            }}
-                            className="w-10 h-10 bg-teal-500 hover:bg-teal-600 rounded-lg flex items-center justify-center transition-colors shrink-0"
-                            title={t("viewOnVinted")}
-                          >
-                            <span className="text-white font-bold text-base">V</span>
-                          </button>
-                        )}
-                        <Button
-                          size="default"
-                          className="text-white px-3 sm:px-6 h-10 rounded-lg text-xs sm:text-sm shrink-0"
-                          style={{
-                            background: "linear-gradient(to right, var(--primary-pink), var(--accent-coral))"
-                          }}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setLocation(`/market-chat/${item.id}/${item.sellerId}`);
-                          }}
-                          data-testid={`button-message-seller-${item.id}`}
-                        >
-                          {t("message")}
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </Card>
-                ))}
+                  );
+                })}
+                <Select value={sortBy} onValueChange={setSortBy}>
+                  <SelectTrigger
+                    aria-label={t("sortBy")}
+                    className="h-9 w-auto shrink-0 gap-1.5 whitespace-nowrap rounded-full border-0 px-3.5 py-0 text-[13px] font-medium text-gray-900"
+                    data-testid="select-market-sort"
+                  >
+                    <ArrowUpDown className="h-3.5 w-3.5 shrink-0" />
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="newest">{t("newest")}</SelectItem>
+                    <SelectItem value="oldest">{t("oldest")}</SelectItem>
+                    <SelectItem value="price-low">{t("priceLowest")}</SelectItem>
+                    <SelectItem value="price-high">{t("priceHighest")}</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
-            )}
+
+              <TabsContent value="items" className="mt-0 pt-1">
+                {filteredItems.length === 0 ? (
+                  <EmptyState
+                    icon={ShoppingBag}
+                    title={t("noItemsFound")}
+                    text={cityFilter
+                      ? t("noItemsInCity").replace("{city}", prefs?.city ?? "")
+                      : t("tryDifferentCategory")}
+                    action={cityFilter ? (
+                      <Button variant="outline" onClick={clearCityFilter} data-testid="button-clear-city-empty">
+                        {t("showAllCities")}
+                      </Button>
+                    ) : undefined}
+                  />
+                ) : (
+                  <div className="grid grid-cols-2 gap-x-3 gap-y-4">
+                    {filteredItems.map((item) => renderListing(item, false))}
+                  </div>
+                )}
               </TabsContent>
 
-              <TabsContent value="my-products" className="mt-0">
-            {userItems.length === 0 ? (
-              <div className="text-center py-12">
-                <div className="text-gray-400 text-lg mb-2">{t("noProductsYet")}</div>
-                <div className="text-gray-500 text-sm">{t("clickAddProduct")}</div>
-              </div>
-            ) : (
-              <div className="space-y-4 mb-nav">
-                {userItems.map((item) => (
-                  <Card key={item.id} className="bg-white rounded-2xl border-0 shadow-sm overflow-hidden cursor-pointer hover:shadow-lg transition-shadow" onClick={() => {
-                    setSelectedItem(item);
-                    setSelectedImageIndex(0);
-                  }} data-testid={`card-my-product-${item.id}`}>
-                    <div className="flex">
-                      {/* Image Section */}
-                      <div className="relative w-32 h-32 flex-shrink-0 flex items-center justify-center p-2">
-                        {item.imageUrls && item.imageUrls.length > 0 ? (
-                          <img
-                            src={item.imageUrls[0]}
-                    loading="lazy"
-                    decoding="async"
-                            alt={item.title}
-                            className="w-full h-full object-cover rounded-lg"
-                            onError={(e) => {
-                              e.currentTarget.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 24 24" fill="none" stroke="%23ccc" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"%3E%3Crect x="3" y="3" width="18" height="18" rx="2" ry="2"/%3E%3Ccircle cx="8.5" cy="8.5" r="1.5"/%3E%3Cpolyline points="21,15 16,10 5,21"/%3E%3C/svg%3E';
-                            }}
-                          />
-                        ) : (
-                          <div className="w-full h-full bg-gray-100 rounded-lg flex items-center justify-center">
-                            <div className="text-gray-400 text-xs text-center">
-                              <div className="w-8 h-8 mx-auto mb-1 opacity-50">
-                                📷
-                              </div>
-                              {t("noImage")}
-                            </div>
-                          </div>
-                        )}
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleEditItem(item);
-                          }}
-                          className="absolute top-2 right-2 p-1.5 rounded-full bg-white/80 hover:bg-white transition-colors"
-                          data-testid={`button-edit-${item.id}`}
-                        >
-                          <Edit className="h-4 w-4 text-gray-600" />
-                        </button>
-                        <div className="absolute bottom-2 left-2">
-                          <Badge className={getConditionStyle(item.condition)}>
-                            {optionLabel(t, item.condition)}
-                          </Badge>
-                        </div>
-                      </div>
-                      
-                      {/* Content Section */}
-                      <div className="flex-1 p-4 flex flex-col justify-between">
-                        <div>
-                          <div className="flex items-start justify-between mb-1">
-                            <h3 className="font-semibold text-gray-900 text-lg leading-tight">
-                              {item.title}
-                            </h3>
-                            <div className="flex items-center font-bold text-xl ml-4" style={{ color: "#d91c5c" }}>
-                              <Euro className="h-5 w-5 mr-1" />
-                              {(item.price / 100).toFixed(0)}
-                            </div>
-                          </div>
-                          
-                          <p className="text-gray-600 text-sm mb-3 line-clamp-2">
-                            {item.description}
-                          </p>
-                          
-                          <div className="flex items-center justify-between text-sm text-gray-500 mb-4">
-                            <div className="flex items-center">
-                              <MapPin className="h-4 w-4 mr-1" />
-                              {item.location}
-                            </div>
-                            <span>{getTimeSince(item.createdAt)}</span>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center justify-between">
-                          <div className="h-10 px-3 bg-gray-200 rounded-lg flex items-center justify-center text-xs font-bold text-gray-700 border border-gray-300">
-                            {optionLabel(t, item.size) || 'N/A'}
-                          </div>
-                          <div className="flex items-center gap-3">
-                            {item.vintedUrl && (
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  window.open(item.vintedUrl!, '_blank');
-                                }}
-                                className="w-10 h-10 bg-teal-500 hover:bg-teal-600 rounded-lg flex items-center justify-center transition-colors"
-                                title={t("viewOnVinted")}
-                              >
-                                <span className="text-white font-bold text-base">V</span>
-                              </button>
-                            )}
-                            <Button 
-                              size="default" 
-                              className="text-white px-6 h-10 rounded-lg"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleEditItem(item);
-                              }}
-                              data-testid={`button-edit-product-main-${item.id}`}
-                              style={{ 
-                                background: "linear-gradient(to right, var(--primary-pink), var(--accent-coral))"
-                              }}
-                            >
-                              <Edit className="h-4 w-4 mr-2" />
-                              {t("edit")}
-                            </Button>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </Card>
-                ))}
-              </div>
-            )}
+              <TabsContent value="my-products" className="mt-0 pt-1">
+                {userItems.length === 0 ? (
+                  <EmptyState
+                    icon={Tag}
+                    title={t("noProductsYet")}
+                    text={t("marketNoProductsHint")}
+                    action={
+                      <Button onClick={() => setLocation("/marketplace/add")} data-testid="button-empty-add-product">
+                        <Plus />
+                        {t("addProduct")}
+                      </Button>
+                    }
+                  />
+                ) : (
+                  <div className="grid grid-cols-2 gap-x-3 gap-y-4">
+                    {userItems.map((item) => renderListing(item, true))}
+                  </div>
+                )}
               </TabsContent>
             </Tabs>
           </TabsContent>
 
           <TabsContent value="services" className="mt-0">
-            <Tabs value={servicesSubTab} onValueChange={setServicesSubTab} className="w-full">
-              <TabsList className="grid w-full grid-cols-3 mb-4 h-10 rounded-full bg-gray-100 p-1">
-                <TabsTrigger value="available" className="rounded-full" data-testid="tab-available-services">{t("availableServices")}</TabsTrigger>
-                <TabsTrigger value="my-services" className="rounded-full">{t("myServices")}</TabsTrigger>
-                <TabsTrigger value="my-requests" className="rounded-full">{t("myRequests")}</TabsTrigger>
+            <Tabs value={servicesSubTab} onValueChange={setServicesSubTab} className="space-y-3.5">
+              <TabsList className="grid h-11 w-full grid-cols-3 gap-1">
+                <TabsTrigger value="available" className={scopeTrigger} data-testid="tab-available-services">
+                  <span className="truncate">{t("availableServices")}</span>
+                </TabsTrigger>
+                <TabsTrigger value="my-services" className={scopeTrigger} data-testid="tab-my-services">
+                  <span className="truncate">{t("marketScopeMyServices")}</span>
+                </TabsTrigger>
+                <TabsTrigger value="my-requests" className={scopeTrigger} data-testid="tab-my-requests">
+                  <span className="truncate">{t("marketScopeMyRequests")}</span>
+                </TabsTrigger>
               </TabsList>
 
-              <TabsContent value="available" className="mt-0">
+              <TabsContent value="available" className="mt-0 pt-1">
                 {availableServices.length === 0 ? (
-                  <div className="text-center py-12" data-testid="empty-available-services">
-                    <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-blue-50 flex items-center justify-center">
-                      <Wrench className="w-7 h-7 text-blue-400" />
-                    </div>
-                    <div className="text-gray-700 font-semibold mb-1">{t("noServicesAvailable")}</div>
-                    <div className="text-gray-500 text-sm mb-4">
-                      {cityFilter
-                        ? t("noServicesInCity").replace("{city}", prefs?.city ?? "")
-                        : t("noServicesAvailableHint")}
-                    </div>
-                    {cityFilter && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="rounded-full"
-                        onClick={clearCityFilter}
-                        data-testid="button-clear-city-services"
-                      >
-                        <X className="w-3.5 h-3.5 mr-1.5" />
+                  <EmptyState
+                    icon={Wrench}
+                    title={t("noServicesAvailable")}
+                    text={cityFilter
+                      ? t("noServicesInCity").replace("{city}", prefs?.city ?? "")
+                      : t("noServicesAvailableHint")}
+                    action={cityFilter ? (
+                      <Button variant="outline" onClick={clearCityFilter} data-testid="button-clear-city-services">
                         {t("showAllCities")}
                       </Button>
-                    )}
-                  </div>
+                    ) : undefined}
+                    testId="empty-available-services"
+                  />
                 ) : (
-                  <div className="space-y-4 mb-nav">
+                  <div className="space-y-3">
                     {availableServices.map((service) => (
-                      <Card key={service.id} className="bg-white rounded-2xl border-0 shadow-sm overflow-hidden" data-testid={`card-service-${service.id}`}>
-                        <div className="flex">
-                          <div className="w-28 flex-shrink-0 flex items-center justify-center p-3 bg-blue-50">
-                            <div className="text-center">
-                              <div className="w-12 h-12 mx-auto mb-2 bg-blue-100 rounded-full flex items-center justify-center">
-                                <span className="text-2xl">🛠️</span>
-                              </div>
-                              <Badge className="bg-blue-100 text-blue-800 text-xs">
-                                {optionLabel(t, service.serviceType)}
-                              </Badge>
-                            </div>
-                          </div>
-                          <div className="flex-1 p-4 flex flex-col justify-between min-w-0">
-                            <div>
-                              <div className="flex items-start justify-between gap-2 mb-1">
-                                <h3 className="font-semibold text-gray-900 leading-tight">{service.title}</h3>
-                                {service.hourlyRate && (
-                                  <div className="flex items-center font-bold shrink-0" style={{ color: "#d91c5c" }}>
-                                    <Euro className="h-4 w-4 mr-0.5" />
-                                    {(service.hourlyRate / 100).toFixed(0)}{t("perHour")}
-                                  </div>
-                                )}
-                              </div>
-                              <div className="flex items-center text-sm text-gray-500 mb-2">
-                                <MapPin className="h-4 w-4 mr-1 shrink-0" />
-                                <span className="truncate">{service.location}</span>
-                              </div>
-                              <p className="text-gray-600 text-sm mb-2 line-clamp-2">{service.description}</p>
-                              {service.ageGroups && (
-                                <div className="text-xs text-gray-500 mb-2">{optionLabels(t, service.ageGroups)}</div>
-                              )}
-                            </div>
-                            <div className="flex items-center justify-between">
-                              <div className="text-xs text-gray-400">
-                                {service.createdAt ? getTimeSince(service.createdAt) : t("recently")}
-                              </div>
-                              <Button
-                                size="sm"
-                                className="rounded-full text-white"
-                                style={{ background: "linear-gradient(to right, var(--primary-pink), var(--accent-coral))" }}
-                                onClick={() => setLocation(`/market-chat/service:${service.id}/${service.providerId}`)}
-                                data-testid={`button-contact-service-${service.id}`}
-                              >
-                                {t("contact")}
-                              </Button>
-                            </div>
-                          </div>
+                      <article key={service.id} className="card-float p-4" data-testid={`card-service-${service.id}`}>
+                        <div className="flex items-start justify-between gap-3">
+                          <h3 className="min-w-0 font-display text-[17px] font-semibold leading-snug text-gray-900">{service.title}</h3>
+                          {service.hourlyRate ? renderRate(service.hourlyRate) : null}
                         </div>
-                      </Card>
-                    ))}
-                  </div>
-                )}
-              </TabsContent>
-
-              <TabsContent value="my-services" className="mt-0">
-                {userServices.length === 0 ? (
-                  <div className="text-center py-12">
-                    <div className="text-gray-400 text-lg mb-2">{t("noServicesYet")}</div>
-                    <div className="text-gray-500 text-sm">{t("clickAddService")}</div>
-                  </div>
-                ) : (
-                  <div className="space-y-4 mb-nav">
-                    {userServices.map((service) => (
-                      <Card key={service.id} className="bg-white rounded-2xl border-0 shadow-sm overflow-hidden">
-                        <div className="flex">
-                          {/* Icon Section for Services */}
-                          <div className="w-32 h-32 flex-shrink-0 flex items-center justify-center p-4 bg-blue-50">
-                            <div className="text-center">
-                              <div className="w-12 h-12 mx-auto mb-2 bg-blue-100 rounded-full flex items-center justify-center">
-                                <span className="text-2xl">🛠️</span>
-                              </div>
-                              <Badge className="bg-blue-100 text-blue-800 text-xs">
-                                {optionLabel(t, service.serviceType)}
-                              </Badge>
-                            </div>
-                          </div>
-                          
-                          {/* Content Section */}
-                          <div className="flex-1 p-4 flex flex-col justify-between">
-                            <div>
-                              <div className="flex items-start justify-between mb-1">
-                                <h3 className="font-semibold text-gray-900 text-lg leading-tight">
-                                  {service.title}
-                                </h3>
-                                {service.hourlyRate && (
-                                  <div className="flex items-center font-bold text-lg ml-4" style={{ color: "#d91c5c" }}>
-                                    <Euro className="h-4 w-4 mr-1" />
-                                    {(service.hourlyRate / 100).toFixed(0)}{t("perHour")}
-                                  </div>
-                                )}
-                              </div>
-                          
-                              <div className="flex items-center gap-2 mb-2">
-                                <div className="flex items-center text-sm text-gray-500">
-                                  <MapPin className="h-4 w-4 mr-1" />
-                                  {service.location}
-                                </div>
-                              </div>
-                              
-                              <p className="text-gray-600 text-sm mb-3 line-clamp-2">
-                                {service.description}
-                              </p>
-                              
-                              {service.experience && (
-                                <div className="flex items-center text-xs text-gray-500 mb-2">
-                                  <span className="font-medium">{t("experience")}</span> {service.experience}
-                                </div>
-                              )}
-                            </div>
-                            
-                            {/* Bottom Section */}
-                            <div className="flex items-center justify-between">
-                              <div className="text-xs text-gray-400">
-                                {service.createdAt ? getTimeSince(service.createdAt) : t("recently")}
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <Badge className={service.isAvailable ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-800"}>
-                                  {service.isAvailable ? t("available") : t("unavailable")}
-                                </Badge>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      </Card>
-                    ))}
-                  </div>
-                )}
-              </TabsContent>
-
-              <TabsContent value="my-requests" className="mt-0">
-                {userServiceRequests.length === 0 ? (
-                  <div className="text-center py-12">
-                    <div className="text-gray-400 text-lg mb-2">{t("noServiceRequestsFound")}</div>
-                    <div className="text-gray-500 text-sm">{t("beFirstToRequest")}</div>
-                  </div>
-                ) : (
-                  <div className="space-y-4 mb-nav">
-                    {userServiceRequests.map((post) => (
-                      <Card key={post.id} className="bg-white border-gray-200 overflow-hidden">
-                        <CardContent className="p-4">
-                          <div className="flex items-start justify-between mb-2">
-                            <h3 className="font-semibold text-gray-900 text-lg leading-tight">
-                              {post.title}
-                            </h3>
-                            <div className="flex items-center gap-2">
-                              {post.maxHourlyRate && (
-                                <div className="flex items-center font-bold" style={{ color: "#d91c5c" }}>
-                                  <span className="text-sm mr-1">{t("upTo")}</span>
-                                  <Euro className="h-4 w-4 mr-1" />
-                                  {(post.maxHourlyRate / 100).toFixed(0)}
-                                  <span className="text-sm ml-1">{t("perHourFull")}</span>
-                                </div>
-                              )}
-                              {post.urgency === "urgent" && (
-                                <Badge className="bg-red-100  text-red-800  border-red-300 ">
-                                  {t("urgent")}
-                                </Badge>
-                              )}
-                            </div>
-                          </div>
-                          
-                          <div className="flex items-center gap-2 mb-2">
-                            <Badge className="bg-purple-100 bg-purple-900 text-purple-800 text-purple-200 border-purple-300 border-purple-700">
-                              {optionLabel(t, post.serviceType)}
-                            </Badge>
-                            {post.ageGroups && (
-                              <Badge className="bg-gray-100 bg-gray-700 text-gray-800 text-gray-200">
-                                {optionLabels(t, post.ageGroups)}
-                              </Badge>
-                            )}
-                          </div>
-                          
-                          <p className="text-gray-600 text-sm mb-3 line-clamp-2">
-                            {post.description}
+                        {renderServiceTags(service.serviceType, service.ageGroups)}
+                        <p className="mt-3 line-clamp-2 text-sm leading-relaxed text-gray-600">{service.description}</p>
+                        <div className="mt-3.5 flex items-center justify-between gap-3">
+                          <p className="flex min-w-0 items-center gap-1.5 text-xs text-gray-600">
+                            <MapPin className="h-3.5 w-3.5 shrink-0" />
+                            <span className="truncate">
+                              {service.location} · {service.createdAt ? getTimeSince(service.createdAt) : t("recently")}
+                            </span>
                           </p>
-                          
-                          <div className="text-sm text-gray-500 mb-3 space-y-1">
-                            <div className="flex items-center">
-                              <MapPin className="h-4 w-4 mr-2" />
-                              {post.location}
-                            </div>
-                            <div className="flex items-start">
-                              <Clock className="h-4 w-4 mr-2 mt-0.5 flex-shrink-0" />
-                              <span className="line-clamp-1">{post.schedule}</span>
-                            </div>
-                          </div>
+                          <Button
+                            className="h-10 shrink-0 rounded-full px-5"
+                            onClick={() => setLocation(`/market-chat/service:${service.id}/${service.providerId}`)}
+                            data-testid={`button-contact-service-${service.id}`}
+                          >
+                            {t("contact")}
+                          </Button>
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                )}
+              </TabsContent>
 
-                          <div className="flex items-center justify-between">
-                            <div className="text-xs text-gray-400">
-                              {getTimeSince(post.createdAt!)}
-                            </div>
-                            <Button
-                              size="default"
-                              variant="outline"
-                              className="px-6 h-10 rounded-lg text-red-600 border-red-200 hover:bg-red-50"
-                              onClick={() => handleDeleteServiceRequest(post.id)}
-                              data-testid={`button-delete-service-request-${post.id}`}
-                            >
-                              {t("delete")}
-                            </Button>
-                          </div>
-                        </CardContent>
-                      </Card>
+              <TabsContent value="my-services" className="mt-0 pt-1">
+                {userServices.length === 0 ? (
+                  <EmptyState
+                    icon={Wrench}
+                    title={t("noServicesYet")}
+                    text={t("marketNoServicesHint")}
+                    action={
+                      <Button onClick={() => setLocation("/services/add")} data-testid="button-empty-add-service">
+                        <Plus />
+                        {t("addService")}
+                      </Button>
+                    }
+                  />
+                ) : (
+                  <div className="space-y-3">
+                    {userServices.map((service) => (
+                      <article key={service.id} className="card-float p-4" data-testid={`card-my-service-${service.id}`}>
+                        <div className="flex items-start justify-between gap-3">
+                          <h3 className="min-w-0 font-display text-[17px] font-semibold leading-snug text-gray-900">{service.title}</h3>
+                          {service.hourlyRate ? renderRate(service.hourlyRate) : null}
+                        </div>
+                        {renderServiceTags(
+                          service.serviceType,
+                          service.ageGroups,
+                          <span className={service.isAvailable ? "tag-pink" : "tag-neutral"}>
+                            {service.isAvailable ? t("available") : t("unavailable")}
+                          </span>
+                        )}
+                        <p className="mt-3 line-clamp-2 text-sm leading-relaxed text-gray-600">{service.description}</p>
+                        {service.experience && (
+                          <p className="mt-2 text-xs text-gray-600">
+                            <span className="font-semibold text-gray-900">{t("experience")}</span> {service.experience}
+                          </p>
+                        )}
+                        <p className="mt-3 flex items-center gap-1.5 text-xs text-gray-600">
+                          <MapPin className="h-3.5 w-3.5 shrink-0" />
+                          <span className="truncate">
+                            {service.location} · {service.createdAt ? getTimeSince(service.createdAt) : t("recently")}
+                          </span>
+                        </p>
+                      </article>
+                    ))}
+                  </div>
+                )}
+              </TabsContent>
+
+              <TabsContent value="my-requests" className="mt-0 pt-1">
+                {userServiceRequests.length === 0 ? (
+                  <EmptyState
+                    icon={ClipboardList}
+                    title={t("noServiceRequestsFound")}
+                    text={t("beFirstToRequest")}
+                  />
+                ) : (
+                  <div className="space-y-3">
+                    {userServiceRequests.map((post) => (
+                      <article key={post.id} className="card-float p-4" data-testid={`card-service-request-${post.id}`}>
+                        <div className="flex items-start justify-between gap-3">
+                          <h3 className="min-w-0 font-display text-[17px] font-semibold leading-snug text-gray-900">{post.title}</h3>
+                          {post.maxHourlyRate ? renderRate(post.maxHourlyRate, t("upTo")) : null}
+                        </div>
+                        {renderServiceTags(
+                          post.serviceType,
+                          post.ageGroups,
+                          post.urgency === "urgent" ? <span className="tag-pink">{t("urgent")}</span> : undefined
+                        )}
+                        <p className="mt-3 line-clamp-2 text-sm leading-relaxed text-gray-600">{post.description}</p>
+                        <div className="mt-3 space-y-1.5 text-xs text-gray-600">
+                          <p className="flex items-center gap-1.5">
+                            <MapPin className="h-3.5 w-3.5 shrink-0" />
+                            <span className="truncate">{post.location}</span>
+                          </p>
+                          <p className="flex items-center gap-1.5">
+                            <Clock className="h-3.5 w-3.5 shrink-0" />
+                            <span className="line-clamp-1">{post.schedule}</span>
+                          </p>
+                        </div>
+                        <div className="mt-3.5 flex items-center justify-between gap-3">
+                          <p className="text-xs text-gray-600">{getTimeSince(post.createdAt!)}</p>
+                          <Button
+                            variant="outline"
+                            className="h-10 shrink-0 rounded-full px-5 text-destructive"
+                            onClick={() => handleDeleteServiceRequest(post.id)}
+                            data-testid={`button-delete-service-request-${post.id}`}
+                          >
+                            <Trash2 />
+                            {t("delete")}
+                          </Button>
+                        </div>
+                      </article>
                     ))}
                   </div>
                 )}
               </TabsContent>
             </Tabs>
           </TabsContent>
-        </Tabs>
+        </main>
+      </Tabs>
 
-        {/* Add Button */}
-        <Fab onClick={() => setShowChoiceDialog(true)} data-testid="button-open-add-choice">
-          <Plus className="h-6 w-6" />
-        </Fab>
-      </div>
-
-      {/* Product Detail Modal */}
-      <Dialog open={!!selectedItem} onOpenChange={() => setSelectedItem(null)}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" data-testid="dialog-product-detail">
-          {selectedItem && (
-            <div>
-              <DialogHeader>
-                <DialogTitle className="text-xl font-bold text-gray-900" data-testid="text-product-title">
-                  {selectedItem.title}
-                </DialogTitle>
-              </DialogHeader>
-              
-              <div className="mt-4 space-y-6">
-                {/* Image Carousel */}
-                {selectedItem.imageUrls && selectedItem.imageUrls.length > 0 && (
-                  <div className="relative">
-                    <div className="aspect-square w-full overflow-hidden rounded-lg bg-gray-100">
+      {/* Product detail sheet */}
+      <Drawer open={!!selectedItem} onOpenChange={() => setSelectedItem(null)}>
+        <DrawerContent aria-describedby={undefined} data-testid="dialog-product-detail">
+          {sheetItem && (
+            <>
+              <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-5 pt-4">
+                {/* Photos */}
+                {sheetItem.imageUrls && sheetItem.imageUrls.length > 0 && (
+                  <div className="relative mb-4">
+                    <div className="aspect-square w-full overflow-hidden rounded-3xl bg-gray-100">
                       <img
-                        src={selectedItem.imageUrls[selectedImageIndex]}
-                        alt={`${selectedItem.title} - Image ${selectedImageIndex + 1}`}
-                        className="w-full h-full object-cover"
+                        src={sheetItem.imageUrls[selectedImageIndex]}
+                        alt={`${sheetItem.title} · ${t("marketPhotoN").replace("{n}", String(selectedImageIndex + 1))}`}
+                        className="h-full w-full object-cover"
                         onError={(e) => {
-                          e.currentTarget.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="400" height="400" viewBox="0 0 24 24" fill="none" stroke="%23ccc" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"%3E%3Crect x="3" y="3" width="18" height="18" rx="2" ry="2"/%3E%3Ccircle cx="8.5" cy="8.5" r="1.5"/%3E%3Cpolyline points="21,15 16,10 5,21"/%3E%3C/svg%3E';
+                          e.currentTarget.src = IMAGE_FALLBACK;
                         }}
                         data-testid={`img-product-${selectedImageIndex}`}
                       />
                     </div>
-                    
+
                     {/* Navigation arrows for multiple images */}
-                    {selectedItem.imageUrls.length > 1 && (
+                    {sheetItem.imageUrls.length > 1 && (
                       <>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="absolute left-2 top-1/2 -translate-y-1/2 bg-white/80 hover:bg-white/90 rounded-full"
+                        <button
+                          type="button"
+                          className="glass absolute left-2.5 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full text-gray-900"
+                          aria-label={t("marketPrevPhoto")}
                           onClick={(e) => {
                             e.stopPropagation();
-                            setSelectedImageIndex(prev => prev > 0 ? prev - 1 : selectedItem.imageUrls!.length - 1);
+                            setSelectedImageIndex(prev => prev > 0 ? prev - 1 : sheetItem.imageUrls!.length - 1);
                           }}
                           data-testid="button-prev-image"
                         >
-                          <ChevronLeft className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="absolute right-2 top-1/2 -translate-y-1/2 bg-white/80 hover:bg-white/90 rounded-full"
+                          <ChevronLeft className="h-5 w-5" />
+                        </button>
+                        <button
+                          type="button"
+                          className="glass absolute right-2.5 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full text-gray-900"
+                          aria-label={t("marketNextPhoto")}
                           onClick={(e) => {
                             e.stopPropagation();
-                            setSelectedImageIndex(prev => prev < selectedItem.imageUrls!.length - 1 ? prev + 1 : 0);
+                            setSelectedImageIndex(prev => prev < sheetItem.imageUrls!.length - 1 ? prev + 1 : 0);
                           }}
                           data-testid="button-next-image"
                         >
-                          <ChevronRight className="h-4 w-4" />
-                        </Button>
-                        
+                          <ChevronRight className="h-5 w-5" />
+                        </button>
+
                         {/* Image dots */}
-                        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2">
-                          {selectedItem.imageUrls.map((_, index) => (
+                        <div className="glass absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-full px-2.5 py-2">
+                          {sheetItem.imageUrls.map((_, index) => (
                             <button
                               key={index}
-                              className={`w-2 h-2 rounded-full transition-all ${
-                                index === selectedImageIndex
-                                  ? 'bg-white'
-                                  : 'bg-white/50 hover:bg-white/70'
+                              type="button"
+                              aria-label={t("marketPhotoN").replace("{n}", String(index + 1))}
+                              aria-current={index === selectedImageIndex}
+                              className={`h-2 rounded-full transition-all ${
+                                index === selectedImageIndex ? "w-4 bg-pink-500" : "w-2 bg-gray-900/30"
                               }`}
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -1227,160 +1042,184 @@ export default function Marketplace() {
                     )}
                   </div>
                 )}
-                
-                {/* Product Details */}
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center font-bold text-3xl" style={{ color: "#d91c5c" }}>
-                      <Euro className="h-7 w-7 mr-2" />
-                      <span data-testid="text-product-price">{(selectedItem.price / 100).toFixed(0)}</span>
-                    </div>
-                    <Badge className={getConditionStyle(selectedItem.condition)} data-testid="badge-product-condition">
-                      {optionLabel(t, selectedItem.condition)}
-                    </Badge>
-                  </div>
-                  
-                  <div className="grid grid-cols-2 gap-4 text-sm">
-                    {selectedItem.brand && (
-                      <div>
-                        <span className="font-medium text-gray-900">{t("brandLabel")}:</span>
-                        <span className="ml-2 text-gray-600" data-testid="text-product-brand">{selectedItem.brand}</span>
-                      </div>
-                    )}
-                    {selectedItem.size && (
-                      <div>
-                        <span className="font-medium text-gray-900">{t("sizeLabel")}:</span>
-                        <span className="ml-2 text-gray-600" data-testid="text-product-size">{optionLabel(t, selectedItem.size)}</span>
-                      </div>
-                    )}
-                    {selectedItem.color && (
-                      <div>
-                        <span className="font-medium text-gray-900">{t("colorLabel")}:</span>
-                        <span className="ml-2 text-gray-600" data-testid="text-product-color">{optionLabel(t, selectedItem.color)}</span>
-                      </div>
-                    )}
-                    {selectedItem.material && (
-                      <div>
-                        <span className="font-medium text-gray-900">{t("materialLabel")}:</span>
-                        <span className="ml-2 text-gray-600" data-testid="text-product-material">{optionLabel(t, selectedItem.material)}</span>
-                      </div>
-                    )}
-                    {selectedItem.ageRange && (
-                      <div>
-                        <span className="font-medium text-gray-900">{t("ageRangeLabel")}:</span>
-                        <span className="ml-2 text-gray-600" data-testid="text-product-age">{selectedItem.ageRange}</span>
-                      </div>
-                    )}
-                    {selectedItem.season && (
-                      <div>
-                        <span className="font-medium text-gray-900">{t("seasonLabel")}:</span>
-                        <span className="ml-2 text-gray-600" data-testid="text-product-season">{optionLabel(t, selectedItem.season)}</span>
-                      </div>
-                    )}
-                  </div>
-                  
-                  <div>
-                    <span className="font-medium text-gray-900">{t("description")}:</span>
-                    <p className="mt-1 text-gray-600 text-sm leading-relaxed" data-testid="text-product-description">
-                      {selectedItem.description}
+
+                {/* Title + price */}
+                <DrawerTitle className="text-[22px]" data-testid="text-product-title">
+                  {sheetItem.title}
+                </DrawerTitle>
+                <div className="mt-2 flex flex-wrap items-center gap-2.5">
+                  <p className="font-display text-[28px] font-bold leading-none tracking-tight text-gray-900" data-testid="text-product-price">
+                    {formatEuro(sheetItem.price)}
+                  </p>
+                  {sheetItem.negotiable && <span className="tag-pink">{t("negotiable")}</span>}
+                  {sheetItem.isAvailable === false && <span className="tag-neutral">{t("unavailable")}</span>}
+                </div>
+
+                {/* Details as chips */}
+                <div className="mt-4 flex flex-wrap gap-1.5">
+                  <span className="tag-neutral" data-testid="badge-product-condition">
+                    {optionLabel(t, sheetItem.condition)}
+                  </span>
+                  {selectedDetails.map((detail) => (
+                    <span key={detail.testId} className="tag-neutral">
+                      <span className="text-gray-600">{detail.label}</span>
+                      <span data-testid={detail.testId}>{detail.value}</span>
+                    </span>
+                  ))}
+                </div>
+
+                <p className="mt-3.5 flex items-center gap-1.5 text-[13px] text-gray-600">
+                  <MapPin className="h-4 w-4 shrink-0 text-pink-500" />
+                  <span className="min-w-0 truncate" data-testid="text-product-location">{sheetItem.location}</span>
+                  <span aria-hidden="true">·</span>
+                  <span className="shrink-0" data-testid="text-product-date">{getTimeSince(sheetItem.createdAt)}</span>
+                </p>
+
+                <div className="mt-5">
+                  <h3 className="section-label">{t("description")}</h3>
+                  <p className="mt-2 whitespace-pre-line text-[15px] leading-relaxed text-gray-900" data-testid="text-product-description">
+                    {sheetItem.description}
+                  </p>
+                </div>
+
+                {sheetItem.measurements && (
+                  <div className="mt-5">
+                    <h3 className="section-label">{t("measurementsLabel")}</h3>
+                    <p className="mt-2 text-[15px] leading-relaxed text-gray-900" data-testid="text-product-measurements">
+                      {sheetItem.measurements}
                     </p>
                   </div>
-                  
-                  {selectedItem.measurements && (
-                    <div>
-                      <span className="font-medium text-gray-900">{t("measurementsLabel")}:</span>
-                      <p className="mt-1 text-gray-600 text-sm" data-testid="text-product-measurements">
-                        {selectedItem.measurements}
+                )}
+
+                {/* Seller */}
+                {!selectedIsMine && (
+                  <div className="mt-5 flex items-center gap-3 rounded-3xl bg-gray-50 p-3">
+                    {selectedSeller?.photoUrls?.[0] ? (
+                      <img
+                        src={selectedSeller.photoUrls[0]}
+                        alt=""
+                        className="h-11 w-11 shrink-0 rounded-full object-cover"
+                      />
+                    ) : (
+                      <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-pink-100 font-display text-base font-semibold text-pink-700">
+                        {(selectedSeller?.firstName ?? t("seller")).charAt(0).toUpperCase()}
+                      </span>
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs text-gray-600">{t("seller")}</p>
+                      <p className="truncate font-display text-[15px] font-semibold text-gray-900">
+                        {selectedSeller ? `${selectedSeller.firstName} ${selectedSeller.lastName}` : t("unknownSeller")}
                       </p>
                     </div>
-                  )}
-                  
-                  <div className="flex items-center justify-between text-sm text-gray-500">
-                    <div className="flex items-center">
-                      <MapPin className="h-4 w-4 mr-1" />
-                      <span data-testid="text-product-location">{selectedItem.location}</span>
-                    </div>
-                    <span data-testid="text-product-date">{getTimeSince(selectedItem.createdAt)}</span>
+                    {selectedSeller && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedUserProfile(selectedSeller);
+                          setShowUserInfoModal(true);
+                        }}
+                        className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white text-gray-900"
+                        aria-label={t("marketSellerProfile")}
+                        data-testid={`button-info-seller-${sheetItem.id}`}
+                      >
+                        <Info className="h-5 w-5" />
+                      </button>
+                    )}
                   </div>
-                  
-                  {/* Action Buttons */}
-                  <div className="flex gap-3 pt-4">
+                )}
+
+                {/* Secondary actions */}
+                <div className="mt-4 flex gap-2.5">
+                  <Button
+                    onClick={() => toggleSaved(sheetItem.id)}
+                    variant="outline"
+                    className="flex-1"
+                    aria-pressed={selectedSaved}
+                    data-testid="button-save-product"
+                  >
+                    <Heart className={selectedSaved ? "fill-pink-500 text-pink-500" : "text-gray-900"} />
+                    {selectedSaved ? t("saved") : t("save")}
+                  </Button>
+
+                  {sheetItem.vintedUrl && (
                     <Button
-                      onClick={() => toggleSaved(selectedItem.id)}
+                      onClick={() => window.open(sheetItem.vintedUrl!, '_blank')}
                       variant="outline"
                       className="flex-1"
-                      data-testid="button-save-product"
+                      data-testid="button-view-vinted"
                     >
-                      <Heart
-                        className={`h-4 w-4 mr-2 ${
-                          isItemSaved(selectedItem.id)
-                            ? "fill-pink-500 text-pink-500"
-                            : "text-gray-600"
-                        }`}
-                      />
-                      {isItemSaved(selectedItem.id) ? t("saved") : t("save")}
+                      <ExternalLink />
+                      {t("viewOnVinted")}
                     </Button>
-                    
-                    {selectedItem.vintedUrl && (
-                      <Button
-                        onClick={() => window.open(selectedItem.vintedUrl!, '_blank')}
-                        variant="outline"
-                        className="px-4"
-                        data-testid="button-view-vinted"
-                      >
-                        <span className="font-bold text-base">V</span>
-                      </Button>
-                    )}
-                    
-                    <Button
-                      className="flex-1 text-white"
-                      data-testid="button-message-seller"
-                      style={{
-                        background: "linear-gradient(to right, var(--primary-pink), var(--accent-coral))"
-                      }}
-                      onClick={() => {
-                        const sellerId = selectedItem.sellerId;
-                        const itemId = selectedItem.id;
-                        setSelectedItem(null);
-                        setLocation(`/market-chat/${itemId}/${sellerId}`);
-                      }}
-                    >
-                      {t("message")}
-                    </Button>
-                  </div>
-
-                  {/* Report / block seller (App Store 1.2) */}
-                  {user?.id !== selectedItem.sellerId && (
-                    <ReportBlockControls
-                      targetUserId={selectedItem.sellerId}
-                      targetType="marketplace_item"
-                      targetId={selectedItem.id}
-                      onBlocked={() => setSelectedItem(null)}
-                      className="pt-3 border-t"
-                    />
                   )}
                 </div>
+
+                {/* Report / block seller (App Store 1.2) */}
+                {!selectedIsMine && (
+                  <ReportBlockControls
+                    targetUserId={sheetItem.sellerId}
+                    targetType="marketplace_item"
+                    targetId={sheetItem.id}
+                    onBlocked={() => setSelectedItem(null)}
+                    className="mt-4 border-t border-gray-100 pt-4"
+                  />
+                )}
               </div>
-            </div>
+
+              {/* Main action */}
+              <div
+                className="shrink-0 border-t border-gray-100 px-5 pt-3"
+                style={{ paddingBottom: "calc(1rem + env(safe-area-inset-bottom))" }}
+              >
+                {selectedIsMine ? (
+                  <Button
+                    size="lg"
+                    className="w-full"
+                    onClick={() => {
+                      const item = sheetItem;
+                      setSelectedItem(null);
+                      handleEditItem(item);
+                    }}
+                    data-testid={`button-edit-product-main-${sheetItem.id}`}
+                  >
+                    <Pencil />
+                    {t("edit")}
+                  </Button>
+                ) : (
+                  <Button
+                    size="lg"
+                    className="w-full"
+                    data-testid="button-message-seller"
+                    onClick={() => {
+                      const sellerId = sheetItem.sellerId;
+                      const itemId = sheetItem.id;
+                      setSelectedItem(null);
+                      setLocation(`/market-chat/${itemId}/${sellerId}`);
+                    }}
+                  >
+                    <MessageCircle />
+                    {t("marketWriteSeller")}
+                  </Button>
+                )}
+              </div>
+            </>
           )}
-        </DialogContent>
-      </Dialog>
+        </DrawerContent>
+      </Drawer>
 
       {/* Edit Product Modal */}
       <Dialog open={!!editingItem} onOpenChange={() => {
         setEditingItem(null);
         editForm.reset();
       }}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto" data-testid="dialog-edit-product">
+        <DialogContent className="max-h-[90vh] overflow-y-auto" aria-describedby={undefined} data-testid="dialog-edit-product">
           {editingItem && (
             <div>
               <DialogHeader>
-                <DialogTitle className="text-xl font-bold text-gray-900">
-                  {t("editProduct")}
-                </DialogTitle>
+                <DialogTitle>{t("editProduct")}</DialogTitle>
               </DialogHeader>
-              
-              <div className="mt-4">
+
+              <div className="mt-5">
                 <Form {...editForm}>
                   <form onSubmit={editForm.handleSubmit(handleEditSubmit)} className="space-y-4">
                     <FormField
@@ -1390,7 +1229,7 @@ export default function Marketplace() {
                         <FormItem>
                           <FormLabel>{t("titleLabel")}</FormLabel>
                           <FormControl>
-                            <Input 
+                            <Input
                               {...field}
                               placeholder={t("productTitlePlaceholder")}
                               data-testid="input-edit-title"
@@ -1408,10 +1247,9 @@ export default function Marketplace() {
                         <FormItem>
                           <FormLabel>{t("description")}</FormLabel>
                           <FormControl>
-                            <Textarea 
+                            <Textarea
                               {...field}
                               placeholder={t("productDescriptionShortPlaceholder")}
-                              className="min-h-[100px]"
                               data-testid="textarea-edit-description"
                             />
                           </FormControl>
@@ -1427,7 +1265,7 @@ export default function Marketplace() {
                         <FormItem>
                           <FormLabel>{t("priceEuro")}</FormLabel>
                           <FormControl>
-                            <Input 
+                            <Input
                               {...field}
                               type="number"
                               step="0.01"
@@ -1485,21 +1323,19 @@ export default function Marketplace() {
                       control={editForm.control}
                       name="negotiable"
                       render={({ field }) => (
-                        <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm">
-                          <div className="space-y-0.5">
-                            <FormLabel className="text-base">
+                        <FormItem className="flex items-center justify-between gap-4 space-y-0 rounded-2xl bg-gray-50 p-4">
+                          <div className="space-y-1.5">
+                            <FormLabel className="text-[15px] font-semibold">
                               {t("negotiablePrice")}
                             </FormLabel>
-                            <div className="text-sm text-muted-foreground">
+                            <p className="text-[13px] leading-snug text-gray-600">
                               {t("allowNegotiation")}
-                            </div>
+                            </p>
                           </div>
                           <FormControl>
-                            <input
-                              type="checkbox"
+                            <Switch
                               checked={field.value}
-                              onChange={field.onChange}
-                              className="h-4 w-4"
+                              onCheckedChange={field.onChange}
                               data-testid="checkbox-edit-negotiable"
                             />
                           </FormControl>
@@ -1507,51 +1343,47 @@ export default function Marketplace() {
                       )}
                     />
 
-                    <div className="flex flex-col gap-3 pt-4">
-                      <div className="flex gap-3">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          onClick={() => {
-                            setEditingItem(null);
-                            editForm.reset();
-                          }}
-                          className="flex-1"
-                          data-testid="button-cancel-edit"
-                        >
-                          {t("cancel")}
-                        </Button>
-                        <Button
-                          type="submit"
-                          disabled={updateProductMutation.isPending}
-                          className="flex-1 text-white"
-                          data-testid="button-save-edit"
-                          style={{ 
-                            background: "linear-gradient(to right, var(--primary-pink), var(--accent-coral))"
-                          }}
-                        >
-                          {updateProductMutation.isPending ? (
-                            <>
-                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                              {t("updating")}
-                            </>
-                          ) : (
-                            t("saveChanges")
-                          )}
-                        </Button>
-                      </div>
+                    <div className="flex flex-col gap-2.5 pt-3">
+                      <Button
+                        type="submit"
+                        size="lg"
+                        disabled={updateProductMutation.isPending}
+                        className="w-full"
+                        data-testid="button-save-edit"
+                      >
+                        {updateProductMutation.isPending ? (
+                          <>
+                            <Loader2 className="animate-spin" />
+                            {t("updating")}
+                          </>
+                        ) : (
+                          t("saveChanges")
+                        )}
+                      </Button>
                       <Button
                         type="button"
-                        variant="destructive"
+                        variant="outline"
+                        onClick={() => {
+                          setEditingItem(null);
+                          editForm.reset();
+                        }}
+                        className="w-full"
+                        data-testid="button-cancel-edit"
+                      >
+                        {t("cancel")}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
                         onClick={() => {
                           setEditingItem(null);
                           editForm.reset();
                           handleDeleteItem(editingItem.id);
                         }}
-                        className="w-full"
+                        className="w-full text-destructive hover:text-destructive"
                         data-testid="button-delete-edit"
                       >
-                        <Trash2 className="mr-2 h-4 w-4" />
+                        <Trash2 />
                         {t("deleteProduct")}
                       </Button>
                     </div>
@@ -1563,48 +1395,54 @@ export default function Marketplace() {
         </DialogContent>
       </Dialog>
 
-      {/* Choice Dialog for Product/Service */}
-      <Dialog open={showChoiceDialog} onOpenChange={setShowChoiceDialog}>
-        <DialogContent className="max-w-sm" data-testid="dialog-add-choice">
-          <DialogHeader>
-            <DialogTitle className="text-xl font-bold text-gray-900 text-center">
-              {t("whatToAdd")}
-            </DialogTitle>
-          </DialogHeader>
-          
-          <div className="flex flex-col gap-4 mt-4">
-            <Button 
-              onClick={() => {
-                setShowChoiceDialog(false);
-                setLocation("/marketplace/add");
-              }}
-              className="h-16 text-white text-lg font-semibold"
-              data-testid="button-add-product-confirm"
-              style={{ 
-                background: "linear-gradient(to right, var(--primary-pink), var(--accent-coral))"
-              }}
-            >
-              <Plus className="h-5 w-5 mr-2" />
-              {t("addProduct")}
-            </Button>
-            
-            <Button 
-              onClick={() => {
-                setShowChoiceDialog(false);
-                setLocation("/services/add");
-              }}
-              className="h-16 text-white text-lg font-semibold"
-              data-testid="button-add-service"
-              style={{ 
-                background: "linear-gradient(to right, var(--primary-pink), var(--accent-coral))"
-              }}
-            >
-              <Plus className="h-5 w-5 mr-2" />
-              {t("addService")}
-            </Button>
+      {/* Sell: product or service */}
+      <Drawer open={showChoiceDialog} onOpenChange={setShowChoiceDialog}>
+        <DrawerContent aria-describedby={undefined} data-testid="dialog-add-choice">
+          <div className="px-5 pt-5" style={{ paddingBottom: "calc(1.5rem + env(safe-area-inset-bottom))" }}>
+            <DrawerTitle>{t("whatToAdd")}</DrawerTitle>
+
+            <div className="mt-4 space-y-2.5">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowChoiceDialog(false);
+                  setLocation("/marketplace/add");
+                }}
+                className="flex w-full items-center gap-3.5 rounded-3xl bg-gray-50 p-4 text-left"
+                data-testid="button-add-product-confirm"
+              >
+                <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-pink-50">
+                  <Tag className="h-5 w-5 text-pink-500" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block font-display text-base font-semibold text-gray-900">{t("addProduct")}</span>
+                  <span className="mt-0.5 block text-[13px] text-gray-600">{t("itemsOptionHint")}</span>
+                </span>
+                <ChevronRight className="h-5 w-5 shrink-0 text-gray-500" />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setShowChoiceDialog(false);
+                  setLocation("/services/add");
+                }}
+                className="flex w-full items-center gap-3.5 rounded-3xl bg-gray-50 p-4 text-left"
+                data-testid="button-add-service"
+              >
+                <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-pink-50">
+                  <Wrench className="h-5 w-5 text-pink-500" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block font-display text-base font-semibold text-gray-900">{t("addService")}</span>
+                  <span className="mt-0.5 block text-[13px] text-gray-600">{t("servicesOptionHint")}</span>
+                </span>
+                <ChevronRight className="h-5 w-5 shrink-0 text-gray-500" />
+              </button>
+            </div>
           </div>
-        </DialogContent>
-      </Dialog>
+        </DrawerContent>
+      </Drawer>
 
       {/* User Info Modal */}
       <UserInfoModal

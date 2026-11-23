@@ -10,7 +10,7 @@ interface PhotoCarouselProps {
 
 // Swipeable/tappable gallery for a profile's photos. Profiles can hold up to
 // five pictures but every surface used to show only the first one.
-export default function PhotoCarousel({ photos, alt, className = "h-48", rounded = "rounded-lg" }: PhotoCarouselProps) {
+export default function PhotoCarousel({ photos, alt, className = "h-48", rounded = "rounded-3xl" }: PhotoCarouselProps) {
   const [index, setIndex] = useState(0);
   const [touchStartX, setTouchStartX] = useState<number | null>(null);
   const list = (photos || []).filter(Boolean);
@@ -38,7 +38,7 @@ export default function PhotoCarousel({ photos, alt, className = "h-48", rounded
           <button
             type="button"
             onClick={(e) => { e.stopPropagation(); go(-1); }}
-            className="absolute left-1 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-white/80 shadow flex items-center justify-center"
+            className="glass absolute left-2 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full"
             aria-label="previous"
             data-testid="button-photo-prev"
           >
@@ -47,18 +47,15 @@ export default function PhotoCarousel({ photos, alt, className = "h-48", rounded
           <button
             type="button"
             onClick={(e) => { e.stopPropagation(); go(1); }}
-            className="absolute right-1 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-white/80 shadow flex items-center justify-center"
+            className="glass absolute right-2 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full"
             aria-label="next"
             data-testid="button-photo-next"
           >
             <ChevronRight className="w-4 h-4 text-gray-700" />
           </button>
-          <div className="absolute bottom-2 left-0 right-0 flex justify-center gap-1">
+          <div className="absolute left-4 right-4 top-3 flex gap-1.5" aria-hidden="true">
             {list.map((_, i) => (
-              <span
-                key={i}
-                className={`w-1.5 h-1.5 rounded-full ${i === current ? "bg-white" : "bg-white/50"}`}
-              />
+              <span key={i} className={`h-1 flex-1 rounded-full ${i === current ? "bg-white" : "bg-white/50"}`} />
             ))}
           </div>
         </>

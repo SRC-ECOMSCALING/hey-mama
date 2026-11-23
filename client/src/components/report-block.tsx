@@ -98,45 +98,45 @@ export default function ReportBlockControls({
           <Button
             variant="ghost"
             size="icon"
-            className="rounded-full text-gray-500"
+            className="text-gray-600 [&_svg]:size-5"
             onClick={() => setReportOpen(true)}
             title={t("reportContentAction")}
+            aria-label={t("reportContentAction")}
             data-testid="button-report"
           >
-            <Flag className="h-5 w-5" />
+            <Flag strokeWidth={1.9} />
           </Button>
           <Button
             variant="ghost"
             size="icon"
-            className="rounded-full text-red-500"
+            className="text-destructive [&_svg]:size-5"
             onClick={() => setBlockOpen(true)}
             title={t("blockUserAction")}
+            aria-label={t("blockUserAction")}
             data-testid="button-block"
           >
-            <Ban className="h-5 w-5" />
+            <Ban strokeWidth={1.9} />
           </Button>
         </div>
       ) : (
-        <div className={`flex gap-2 ${className}`}>
+        <div className={`flex gap-2.5 ${className}`}>
           <Button
             variant="outline"
-            size="sm"
-            className="flex-1 text-gray-600"
+            className="min-w-0 flex-1 px-3 text-gray-900"
             onClick={() => setReportOpen(true)}
             data-testid="button-report"
           >
-            <Flag className="h-4 w-4 mr-2" />
-            {t("reportContentAction")}
+            <Flag strokeWidth={1.9} />
+            <span className="truncate">{t("reportContentAction")}</span>
           </Button>
           <Button
             variant="outline"
-            size="sm"
-            className="flex-1 text-red-600 border-red-200 hover:bg-red-50"
+            className="min-w-0 flex-1 px-3 text-destructive"
             onClick={() => setBlockOpen(true)}
             data-testid="button-block"
           >
-            <Ban className="h-4 w-4 mr-2" />
-            {t("blockUserAction")}
+            <Ban strokeWidth={1.9} />
+            <span className="truncate">{t("blockUserAction")}</span>
           </Button>
         </div>
       )}
@@ -178,8 +178,6 @@ export default function ReportBlockControls({
               {t("cancel")}
             </Button>
             <Button
-              className="text-white"
-              style={{ background: "linear-gradient(to right, var(--primary-pink), var(--accent-coral))" }}
               onClick={() => reportMutation.mutate()}
               disabled={reportMutation.isPending}
               data-testid="button-submit-report"
@@ -202,7 +200,7 @@ export default function ReportBlockControls({
               {t("cancel")}
             </Button>
             <Button
-              className="bg-red-600 hover:bg-red-700 text-white"
+              variant="destructive"
               onClick={() => blockMutation.mutate()}
               disabled={blockMutation.isPending}
               data-testid="button-confirm-block"

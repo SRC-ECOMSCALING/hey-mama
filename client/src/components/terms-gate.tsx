@@ -37,49 +37,55 @@ export default function TermsGate() {
   }
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-      <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl p-6">
-        <div className="w-14 h-14 mx-auto mb-4 rounded-2xl flex items-center justify-center" style={{ background: "linear-gradient(to right, var(--primary-pink), var(--accent-coral))" }}>
-          <ShieldCheck className="w-7 h-7 text-white" />
+    <div
+      className="fixed inset-0 z-[100] flex items-end justify-center bg-[#17111F]/45 px-4 pb-[calc(1rem_+_env(safe-area-inset-bottom))] pt-4 backdrop-blur-[3px] sm:items-center"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="terms-gate-title"
+    >
+      <div className="w-full max-w-md rounded-[28px] bg-white p-6 shadow-[0_24px_60px_rgba(23,17,31,0.25)]">
+        <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-pink-50 text-pink-500" aria-hidden="true">
+          <ShieldCheck className="h-7 w-7" />
         </div>
-        <h2 className="text-xl font-bold text-center text-gray-900 mb-2" data-testid="text-terms-gate-title">
+        <h2 id="terms-gate-title" className="mb-2 text-center font-display text-xl font-semibold text-gray-900" data-testid="text-terms-gate-title">
           {t("termsGateTitle")}
         </h2>
-        <p className="text-sm text-gray-600 text-center mb-5">
+        <p className="mb-4 text-pretty text-center text-sm leading-relaxed text-gray-600">
           {t("termsGateBody")}
         </p>
 
-        <div className="flex items-center justify-center gap-4 mb-5 text-sm">
+        <div className="mb-4 flex items-center justify-center gap-5 text-sm">
           <button
+            type="button"
             onClick={() => setLocation("/terms")}
-            className="font-medium text-pink-600 hover:text-pink-700 underline"
+            className="min-h-11 font-semibold text-pink-700 underline"
             data-testid="link-view-terms"
           >
             {t("termsOfUse")}
           </button>
-          <span className="text-gray-300">·</span>
           <button
+            type="button"
             onClick={() => setLocation("/privacy")}
-            className="font-medium text-pink-600 hover:text-pink-700 underline"
+            className="min-h-11 font-semibold text-pink-700 underline"
             data-testid="link-view-privacy"
           >
             {t("privacyPolicy")}
           </button>
         </div>
 
-        <label className="flex items-start gap-3 mb-5 cursor-pointer">
+        <label className="mb-5 flex cursor-pointer items-start gap-3 rounded-2xl bg-gray-50 p-4">
           <Checkbox
             checked={checked}
             onCheckedChange={(v) => setChecked(v === true)}
-            className="mt-0.5"
+            className="mt-0.5 bg-white"
             data-testid="checkbox-accept-terms"
           />
-          <span className="text-sm text-gray-700">{t("acceptTermsLabel")}</span>
+          <span className="text-sm leading-relaxed text-gray-800">{t("acceptTermsLabel")}</span>
         </label>
 
         <Button
-          className="w-full h-12 rounded-2xl text-base font-semibold text-white"
-          style={{ background: "linear-gradient(to right, var(--primary-pink), var(--accent-coral))" }}
+          size="lg"
+          className="w-full"
           disabled={!checked || acceptMutation.isPending}
           onClick={() => acceptMutation.mutate()}
           data-testid="button-accept-terms"

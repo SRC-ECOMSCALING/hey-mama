@@ -1,4 +1,4 @@
-import { ArrowLeft } from "lucide-react";
+import AppHeader from "@/components/app-header";
 import { useLanguage } from "@/contexts/LanguageContext";
 
 // Bilingual Terms of Use. Kept inline (not in translations.ts) because it's
@@ -221,46 +221,39 @@ const CONTENT: Record<"it" | "en", Content> = {
 };
 
 export default function Terms() {
-  const { language, t } = useLanguage();
+  const { language } = useLanguage();
   const c = CONTENT[language === "en" ? "en" : "it"];
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-pink-50 to-white pb-20">
-      {/* Header */}
-      <header className="bg-white shadow-sm sticky top-0 z-50">
-        <div className="max-w-4xl mx-auto px-4 py-4 flex items-center gap-4">
-          <button
-            onClick={() => window.history.back()}
-            className="p-2 hover:bg-gray-100 rounded-full transition-colors"
-            aria-label={t("back")}
-            data-testid="button-back"
+    <div className="min-h-screen bg-gray-50 pb-10">
+      {/* The document title is long: it lives in the page, where it can wrap */}
+      <AppHeader right={null} />
+
+      <main className="mx-auto max-w-2xl space-y-4 px-5">
+        <div className="space-y-3 px-1 pb-1">
+          <h1
+            className="font-display text-[28px] font-semibold leading-[1.1] tracking-[-0.03em] text-gray-900"
+            data-testid="text-terms-title"
           >
-            <ArrowLeft className="h-6 w-6" />
-          </button>
-          <h1 className="text-xl font-bold" data-testid="text-terms-title">
             {c.title}
           </h1>
+          <p className="text-xs font-medium text-gray-600" data-testid="text-last-updated">
+            {c.updatedLabel}: {LAST_UPDATED}
+          </p>
+          <p className="text-[15px] leading-relaxed text-gray-700">{c.intro}</p>
         </div>
-      </header>
-
-      {/* Content */}
-      <div className="max-w-4xl mx-auto px-4 py-6 space-y-6">
-        <p className="text-xs text-muted-foreground" data-testid="text-last-updated">
-          {c.updatedLabel}: {LAST_UPDATED}
-        </p>
-        <p className="text-sm text-gray-700 leading-relaxed">{c.intro}</p>
 
         {c.sections.map((section) => (
-          <section key={section.heading} className="space-y-2">
-            <h2 className="text-base font-semibold text-gray-900">{section.heading}</h2>
+          <section key={section.heading} className="card-float space-y-2.5 p-5">
+            <h2 className="font-display text-[17px] font-semibold leading-snug text-gray-900">{section.heading}</h2>
             {section.body.map((paragraph, i) => (
-              <p key={i} className="text-sm text-gray-700 leading-relaxed">
+              <p key={i} className="text-sm leading-relaxed text-gray-700">
                 {paragraph}
               </p>
             ))}
           </section>
         ))}
-      </div>
+      </main>
     </div>
   );
 }

@@ -1,4 +1,6 @@
-import { ArrowLeft } from "lucide-react";
+import { Mail } from "lucide-react";
+import { Link } from "wouter";
+import AppHeader from "@/components/app-header";
 import { useLanguage } from "@/contexts/LanguageContext";
 
 // Public support page (App Store requires a functional Support URL).
@@ -17,7 +19,7 @@ const CONTENT: Record<"it" | "en", Content> = {
     faqTitle: "Domande frequenti",
     faq: [
       { q: "Come funziona HeyMama!?", a: "HeyMama! è una community per mamme: puoi conoscere altre mamme vicine, organizzare playdate, scoprire luoghi a misura di bambino e comprare o vendere articoli per l'infanzia." },
-      { q: "Come mi connetto con un'altra mamma?", a: "Dalla mappa, tocca una mamma e poi \"Connetti\": puoi allegare un messaggio. Lei riceve la richiesta e, quando la accetta, potete scrivervi nella sezione Messaggi. Ogni richiesta e risposta è gratuita." },
+      { q: "Come mi connetto con un'altra mamma?", a: "Da Esplora, tocca una mamma e poi \"Chiedi di conoscervi\": puoi allegare un messaggio. Lei riceve la richiesta e, quando la accetta, potete scrivervi nella sezione Chat. Ogni richiesta e risposta è gratuita." },
       { q: "Come elimino il mio account?", a: "Vai su Profilo → Impostazioni → Elimina account. La cancellazione rimuove il tuo profilo e tutti i dati collegati." },
       { q: "HeyMama! è gratuita?", a: "Sì: connetterti, scrivere, partecipare agli eventi e usare il marketplace non costa nulla." },
       { q: "Quali notifiche ricevo?", a: "Solo richieste di connessione, richieste accettate, nuovi messaggi ed eventi approvati. Puoi attivarle o disattivarle da Impostazioni; mai pubblicità." },
@@ -32,7 +34,7 @@ const CONTENT: Record<"it" | "en", Content> = {
     faqTitle: "Frequently asked questions",
     faq: [
       { q: "How does HeyMama! work?", a: "HeyMama! is a community for moms: meet other moms nearby, plan playdates, discover family-friendly places, and buy or sell kids' items." },
-      { q: "How do I connect with another mom?", a: "On the map, tap a mom and then \"Connect\": you can attach a note. She receives the request and, once she accepts, you can chat in Messages. Every request and reply is free." },
+      { q: "How do I connect with another mom?", a: "In Explore, tap a mom and then \"Ask to connect\": you can attach a note. She receives the request and, once she accepts, you can talk in Chat. Every request and reply is free." },
       { q: "How do I delete my account?", a: "Go to Profile → Settings → Delete account. Deletion removes your profile and all related data." },
       { q: "Is HeyMama! free?", a: "Yes: connecting, messaging, joining events and using the marketplace cost nothing." },
       { q: "Which notifications will I get?", a: "Only connection requests, accepted requests, new messages and approved events. Turn them on or off in Settings; never marketing." },
@@ -46,52 +48,45 @@ export default function Support() {
   const c = CONTENT[language === "en" ? "en" : "it"];
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-pink-50 to-white pb-20">
-      <header className="bg-white shadow-sm sticky top-0 z-50">
-        <div className="max-w-4xl mx-auto px-4 py-4 flex items-center gap-4">
-          <button
-            onClick={() => window.history.back()}
-            className="p-2 hover:bg-gray-100 rounded-full transition-colors"
-            aria-label={t("back")}
-            data-testid="button-back"
-          >
-            <ArrowLeft className="h-6 w-6" />
-          </button>
-          <h1 className="text-xl font-bold" data-testid="text-support-title">{c.title}</h1>
-        </div>
-      </header>
+    <div className="min-h-screen bg-gray-50 pb-10">
+      <AppHeader title={c.title} right={null} />
 
-      <div className="max-w-4xl mx-auto px-4 py-6 space-y-6">
-        <p className="text-sm text-gray-700 leading-relaxed">{c.intro}</p>
+      <main className="mx-auto max-w-2xl space-y-5 px-5">
+        <p className="px-1 text-[15px] leading-relaxed text-gray-700">{c.intro}</p>
 
-        <div className="rounded-2xl border border-pink-100 bg-white p-5 shadow-sm">
-          <p className="text-sm font-semibold text-gray-900 mb-1">{c.contactLabel}</p>
-          <a
-            href={`mailto:${SUPPORT_EMAIL}`}
-            className="text-pink-600 hover:text-pink-700 font-medium"
-            data-testid="link-support-email"
-          >
-            {SUPPORT_EMAIL}
-          </a>
-        </div>
+        <section className="hero-card flex items-center gap-3.5">
+          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white text-pink-700" aria-hidden="true">
+            <Mail className="h-5 w-5" />
+          </span>
+          <div className="min-w-0">
+            <p className="text-[13px] font-semibold leading-tight text-gray-900">{c.contactLabel}</p>
+            <a
+              href={`mailto:${SUPPORT_EMAIL}`}
+              className="mt-1 inline-flex min-h-8 items-center break-all font-display text-[17px] font-semibold text-pink-700"
+              data-testid="link-support-email"
+            >
+              {SUPPORT_EMAIL}
+            </a>
+          </div>
+        </section>
 
-        <div>
-          <h2 className="text-base font-semibold text-gray-900 mb-3">{c.faqTitle}</h2>
-          <div className="space-y-4">
+        <section className="space-y-2.5" aria-labelledby="support-faq">
+          <h2 id="support-faq" className="section-label font-sans tracking-normal">{c.faqTitle}</h2>
+          <div className="card-float px-4">
             {c.faq.map((item, i) => (
-              <div key={i} className="rounded-2xl bg-white border border-gray-100 p-4 shadow-sm">
-                <p className="text-sm font-semibold text-gray-900 mb-1">{item.q}</p>
-                <p className="text-sm text-gray-600 leading-relaxed">{item.a}</p>
+              <div key={i} className="border-b border-gray-100 py-4 last:border-0">
+                <h3 className="font-sans text-[15px] font-semibold leading-snug tracking-normal text-gray-900">{item.q}</h3>
+                <p className="mt-1.5 text-sm leading-relaxed text-gray-600">{item.a}</p>
               </div>
             ))}
           </div>
-        </div>
+        </section>
 
-        <div className="flex flex-wrap gap-4 text-sm pt-2">
-          <a href="/terms" className="text-muted-foreground underline hover:text-gray-700">Termini · Terms</a>
-          <a href="/privacy" className="text-muted-foreground underline hover:text-gray-700">Privacy</a>
-        </div>
-      </div>
+        <p className="flex flex-wrap justify-center gap-x-5 gap-y-1 text-sm">
+          <Link href="/terms" className="inline-flex min-h-11 items-center font-semibold text-pink-700">{t("termsOfUse")}</Link>
+          <Link href="/privacy" className="inline-flex min-h-11 items-center font-semibold text-pink-700">{t("privacyPolicy")}</Link>
+        </p>
+      </main>
     </div>
   );
 }

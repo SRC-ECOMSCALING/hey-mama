@@ -89,7 +89,9 @@ export function ObjectUploader({
     <div>
       {/* type="button": inside a form the default is "submit" — clicking
           "Carica Foto" would save the form and leave the page. */}
-      <Button type="button" onClick={() => setShowModal(true)} className={buttonClassName}>
+      {/* Pink-tint secondary button: uploading is never the screen's main
+          action, which keeps the magenta fill. */}
+      <Button type="button" variant="secondary" onClick={() => setShowModal(true)} className={buttonClassName}>
         {children}
       </Button>
 

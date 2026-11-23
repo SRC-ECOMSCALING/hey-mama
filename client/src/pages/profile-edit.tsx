@@ -2,24 +2,22 @@ import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link, useLocation } from "wouter";
+import { useLocation } from "wouter";
 import { updateProfileSchema, type UpdateProfile, type Profile } from "@shared/schema";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ObjectUploader } from "@/components/ObjectUploader";
-import { ArrowLeft, Plus, X, Upload, Check, ChevronsUpDown } from "lucide-react";
-import heyMamaLogo from "@assets/logo_gradient_text-min_1757514869714.png";
+import { Plus, X, Upload, Check, ChevronsUpDown } from "lucide-react";
 import { useLanguage } from "@/contexts/LanguageContext";
 import PageSkeleton from "@/components/page-skeleton";
+import AppHeader from "@/components/app-header";
 
 const ITALIAN_PROVINCES = [
   "Agrigento", "Alessandria", "Ancona", "Aosta", "Arezzo", "Ascoli Piceno", "Asti", "Avellino",
@@ -42,6 +40,9 @@ const ITALIAN_PROVINCES = [
 ];
 
 const CURRENT_USER_ID = "current-user";
+
+const SECTION = "card-float space-y-4 p-5";
+const SECTION_LABEL = "section-label font-sans tracking-normal";
 
 export default function ProfileEdit() {
   const [hobbiesInput, setHobbiesInput] = useState("");
@@ -191,483 +192,471 @@ export default function ProfileEdit() {
     );
   }
 
+  const kidsNumber = form.watch("kidsNumber");
+  const kidsAges = form.watch("kidsAges");
+  const kidsGenders = form.watch("kidsGenders");
+  const hobbies = form.watch("hobbies") || [];
+
   // Note: a missing profile is fine here — the form renders with empty
   // defaults and saving creates the profile (legacy accounts without one).
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-pink-50 to-purple-50 px-4 safe-page">
-      <div className="max-w-2xl mx-auto">
-        <Card>
-          <CardHeader className="text-center">
-            <div className="flex items-center justify-between mb-4">
-              <Button 
-                variant="ghost" 
-                size="icon" 
-                className="rounded-full"
-                onClick={() => setLocation("/profile")}
-                data-testid="button-back"
-              >
-                <ArrowLeft className="h-5 w-5 text-gray-600" />
-              </Button>
-              <div className="text-center flex items-center">
-                <img 
-                  src={heyMamaLogo} 
-                  alt="HeyMama" 
-                  className="h-10 w-auto object-contain"
-                />
-              </div>
-              <div className="w-10"></div> {/* Spacer for balance */}
-            </div>
-            <CardTitle className="text-2xl font-bold bg-gradient-to-r from-pink-500 to-purple-600 bg-clip-text text-transparent">
-              {t("editProfileTitle")}
-            </CardTitle>
-            <CardDescription>
-              {t("updateInfo")}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Form {...form}>
-              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-                {/* Professional business info */}
-                {isProfessional && (
-                  <div className="space-y-4">
-                    <h3 className="text-lg font-medium">{t("professionalAccount")}</h3>
-                    <FormField
-                      control={form.control}
-                      name="businessName"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>{t("businessNameLabel")}</FormLabel>
-                          <FormControl>
-                            <Input
-                              placeholder={t("businessNamePlaceholder")}
-                              data-testid="input-businessName"
-                              {...field}
-                              value={field.value ?? ""}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name="professionalCategory"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>{t("professionalCategoryLabel")}</FormLabel>
-                          <FormControl>
-                            <Input
-                              placeholder={t("selectProfessionalCategory")}
-                              data-testid="input-professionalCategory"
-                              {...field}
-                              value={field.value ?? ""}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
+    <div className="min-h-screen bg-gray-50 pb-[calc(2.5rem_+_env(safe-area-inset-bottom))]">
+      <AppHeader title={t("editProfileTitle")} backTo="/profile" right={null} />
+
+      <Form {...form}>
+        <form onSubmit={form.handleSubmit(onSubmit)} className="mx-auto max-w-2xl space-y-5 px-5 pt-1">
+          {/* Professional business info */}
+          {isProfessional && (
+            <section className={SECTION}>
+              <h2 className={SECTION_LABEL}>{t("professionalAccount")}</h2>
+              <FormField
+                control={form.control}
+                name="businessName"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t("businessNameLabel")}</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder={t("businessNamePlaceholder")}
+                        data-testid="input-businessName"
+                        {...field}
+                        value={field.value ?? ""}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
                 )}
+              />
+              <FormField
+                control={form.control}
+                name="professionalCategory"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t("professionalCategoryLabel")}</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder={t("selectProfessionalCategory")}
+                        data-testid="input-professionalCategory"
+                        {...field}
+                        value={field.value ?? ""}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </section>
+          )}
 
-                {/* Basic Info */}
-                <div className="space-y-4">
-                  <h3 className="text-lg font-medium">{isProfessional ? t("referentName") : t("basicInformation")}</h3>
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <FormField
-                      control={form.control}
-                      name="firstName"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>{t("firstName")}</FormLabel>
-                          <FormControl>
-                            <Input placeholder={t("yourFirstName")} data-testid="input-firstName" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
+          {/* Basic Info */}
+          <section className={SECTION}>
+            <h2 className={SECTION_LABEL}>{isProfessional ? t("referentName") : t("basicInformation")}</h2>
 
-                    <FormField
-                      control={form.control}
-                      name="lastName"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>{t("lastName")}</FormLabel>
-                          <FormControl>
-                            <Input placeholder={t("yourLastName")} data-testid="input-lastName" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
+            <div className="grid grid-cols-2 gap-3">
+              <FormField
+                control={form.control}
+                name="firstName"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t("firstName")}</FormLabel>
+                    <FormControl>
+                      <Input placeholder={t("yourFirstName")} data-testid="input-firstName" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <FormField
-                      control={form.control}
-                      name="age"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>{t("age")}</FormLabel>
-                          <FormControl>
-                            <Input
-                              type="number"
-                              min="18"
-                              max="65"
-                              data-testid="input-age"
-                              name={field.name}
-                              ref={field.ref}
-                              onBlur={field.onBlur}
-                              value={field.value ?? ""}
-                              onChange={(e) => field.onChange(e.target.value === "" ? undefined : parseInt(e.target.value))}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
+              <FormField
+                control={form.control}
+                name="lastName"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t("lastName")}</FormLabel>
+                    <FormControl>
+                      <Input placeholder={t("yourLastName")} data-testid="input-lastName" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
 
-                    <FormField
-                      control={form.control}
-                      name="sex"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>{t("gender")}</FormLabel>
-                          <Select onValueChange={field.onChange} defaultValue={field.value ?? undefined} data-testid="select-sex">
-                            <FormControl>
-                              <SelectTrigger>
-                                <SelectValue placeholder={t("selectGender")} />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              <SelectItem value="female">{t("female")}</SelectItem>
-                              <SelectItem value="male">{t("male")}</SelectItem>
-                              <SelectItem value="other">{t("other")}</SelectItem>
-                            </SelectContent>
-                          </Select>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
+            <div className="grid grid-cols-2 gap-3">
+              <FormField
+                control={form.control}
+                name="age"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t("age")}</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        inputMode="numeric"
+                        min="18"
+                        max="65"
+                        data-testid="input-age"
+                        name={field.name}
+                        ref={field.ref}
+                        onBlur={field.onBlur}
+                        value={field.value ?? ""}
+                        onChange={(e) => field.onChange(e.target.value === "" ? undefined : parseInt(e.target.value))}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
-                  <FormField
-                    control={form.control}
-                    name="location"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>{t("province")}</FormLabel>
-                        <Popover open={provinceOpen} onOpenChange={setProvinceOpen}>
-                          <PopoverTrigger asChild>
-                            <FormControl>
-                              <Button
-                                type="button"
-                                variant="outline"
-                                role="combobox"
-                                aria-expanded={provinceOpen}
-                                className="w-full justify-between"
-                                data-testid="select-province"
-                              >
-                                {field.value
-                                  ? ITALIAN_PROVINCES.find((province) => province === field.value)
-                                  : t("selectProvince")}
-                                <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                              </Button>
-                            </FormControl>
-                          </PopoverTrigger>
-                          <PopoverContent className="w-full p-0">
-                            <Command>
-                              <CommandInput placeholder={t("searchProvince")} />
-                              <CommandList>
-                                <CommandEmpty>{t("noProvinceFound")}</CommandEmpty>
-                                <CommandGroup>
-                                  {ITALIAN_PROVINCES.map((province) => (
-                                    <CommandItem
-                                      key={province}
-                                      value={province}
-                                      onSelect={(currentValue) => {
-                                        field.onChange(currentValue === field.value ? "" : currentValue);
-                                        setProvinceOpen(false);
-                                      }}
-                                    >
-                                      <Check
-                                        className={`mr-2 h-4 w-4 ${
-                                          field.value === province ? "opacity-100" : "opacity-0"
-                                        }`}
-                                      />
-                                      {province}
-                                    </CommandItem>
-                                  ))}
-                                </CommandGroup>
-                              </CommandList>
-                            </Command>
-                          </PopoverContent>
-                        </Popover>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="vintedUrl"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>{t("vintedAccountOptional")}</FormLabel>
-                        <FormControl>
-                          <Input
-                            type="url"
-                            placeholder={t("vintedUrlPlaceholder")}
-                            data-testid="input-vinted-url"
-                            {...field}
-                            value={field.value || ""}
-                          />
-                        </FormControl>
-                        <p className="text-sm text-muted-foreground">
-                          {t("linkYourVintedAccount")}
-                        </p>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-
-                {/* Photos */}
-                <div className="space-y-4">
-                  <h3 className="text-lg font-medium">{t("profilePhotos")}</h3>
-                  <p className="text-sm text-muted-foreground">{t("addPhotosMessage")}</p>
-                  
-                  {uploadedPhotos.length > 0 && (
-                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                      {uploadedPhotos.map((photoUrl, index) => (
-                        <div key={index} className="relative group">
-                          <img
-                            src={photoUrl}
-                            alt={`${t("profilePhoto")} ${index + 1}`}
-                            className="w-full h-32 object-cover rounded-lg"
-                          />
-                          <Button
-                            type="button"
-                            variant="destructive"
-                            size="sm"
-                            className="absolute top-2 right-2 h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
-                            onClick={() => removePhoto(index)}
-                            data-testid={`button-remove-photo-${index}`}
-                          >
-                            <X className="h-3 w-3" />
-                          </Button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {uploadedPhotos.length < 5 && (
-                    <ObjectUploader
-                      maxNumberOfFiles={5 - uploadedPhotos.length}
-                      maxFileSize={5 * 1024 * 1024} // 5MB
-                      onGetUploadParameters={handleGetUploadParameters}
-                      onComplete={handleUploadComplete}
-                      buttonClassName="w-full"
-                    >
-                      <Upload className="h-4 w-4 mr-2" />
-                      {t("uploadPhotos")} ({uploadedPhotos.length}/5)
-                    </ObjectUploader>
-                  )}
-                </div>
-
-                {/* Bio */}
-                <FormField
-                  control={form.control}
-                  name="bio"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>{t("aboutYou")}</FormLabel>
+              <FormField
+                control={form.control}
+                name="sex"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t("gender")}</FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value ?? undefined} data-testid="select-sex">
                       <FormControl>
-                        <Textarea
-                          placeholder={t("tellAboutYourself")}
-                          className="min-h-[100px]"
-                          data-testid="textarea-bio"
-                          {...field}
-                        />
+                        <SelectTrigger>
+                          <SelectValue placeholder={t("selectGender")} />
+                        </SelectTrigger>
                       </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                      <SelectContent>
+                        <SelectItem value="female">{t("female")}</SelectItem>
+                        <SelectItem value="male">{t("male")}</SelectItem>
+                        <SelectItem value="other">{t("other")}</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
 
-                {/* Kids Info */}
-                <div className={`space-y-4 ${isProfessional ? "hidden" : ""}`}>
-                  <h3 className="text-lg font-medium">{t("aboutYourKids")}</h3>
-                  
-                  <FormField
-                    control={form.control}
-                    name="kidsNumber"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>{t("numberOfKids")}</FormLabel>
-                        <FormControl>
-                          <Input
-                            type="number"
-                            min="1"
-                            max="10"
-                            data-testid="input-kidsNumber"
-                            {...field}
-                            onChange={(e) => field.onChange(parseInt(e.target.value))}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+            <FormField
+              control={form.control}
+              name="location"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t("province")}</FormLabel>
+                  <Popover open={provinceOpen} onOpenChange={setProvinceOpen}>
+                    <PopoverTrigger asChild>
+                      <FormControl>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          role="combobox"
+                          aria-expanded={provinceOpen}
+                          className={`h-12 w-full justify-between px-4 text-base font-normal ${field.value ? "" : "text-muted-foreground"}`}
+                          data-testid="select-province"
+                        >
+                          {field.value
+                            ? ITALIAN_PROVINCES.find((province) => province === field.value)
+                            : t("selectProvince")}
+                          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                        </Button>
+                      </FormControl>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                      <Command>
+                        <CommandInput placeholder={t("searchProvince")} />
+                        <CommandList>
+                          <CommandEmpty>{t("noProvinceFound")}</CommandEmpty>
+                          <CommandGroup>
+                            {ITALIAN_PROVINCES.map((province) => (
+                              <CommandItem
+                                key={province}
+                                value={province}
+                                onSelect={(currentValue) => {
+                                  field.onChange(currentValue === field.value ? "" : currentValue);
+                                  setProvinceOpen(false);
+                                }}
+                              >
+                                <Check
+                                  className={`mr-2 h-4 w-4 ${
+                                    field.value === province ? "opacity-100" : "opacity-0"
+                                  }`}
+                                />
+                                {province}
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
 
-                  {/* Dynamic age and gender inputs for each kid */}
-                  {(form.watch("kidsNumber") ?? 0) > 0 && (
-                    <div className="space-y-3">
-                      <FormLabel>{t("kidsInformation")}</FormLabel>
-                      <div className="space-y-4">
-                        {Array.from({ length: form.watch("kidsNumber") || 1 }, (_, index) => (
-                          <div key={index} className="p-4 border rounded-lg bg-gray-50">
-                            <h4 className="font-medium mb-3 text-gray-800">{t("kid")} {index + 1}</h4>
-                            <div className="grid grid-cols-2 gap-3">
-                              <FormField
-                                control={form.control}
-                                name={`kidsAges.${index}` as any}
-                                render={({ field }) => (
-                                  <FormItem>
-                                    <FormLabel className="text-sm">{t("age")}</FormLabel>
-                                    <FormControl>
-                                      <Input
-                                        type="number"
-                                        min="0"
-                                        max="18"
-                                        placeholder={t("age")}
-                                        data-testid={`input-kid-age-${index}`}
-                                        value={form.getValues("kidsAges")?.[index] || ""}
-                                        onChange={(e) => {
-                                          const currentAges = form.getValues("kidsAges") || [];
-                                          const newAges = [...currentAges];
-                                          newAges[index] = e.target.value;
-                                          form.setValue("kidsAges", newAges);
-                                        }}
-                                      />
-                                    </FormControl>
-                                    <FormMessage />
-                                  </FormItem>
-                                )}
-                              />
-                              <FormField
-                                control={form.control}
-                                name={`kidsGenders.${index}` as any}
-                                render={({ field }) => (
-                                  <FormItem>
-                                    <FormLabel className="text-sm">{t("gender")}</FormLabel>
-                                    <Select
-                                      onValueChange={(value) => {
+            <FormField
+              control={form.control}
+              name="vintedUrl"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t("vintedAccountOptional")}</FormLabel>
+                  <FormControl>
+                    <Input
+                      type="url"
+                      inputMode="url"
+                      placeholder={t("vintedUrlPlaceholder")}
+                      data-testid="input-vinted-url"
+                      {...field}
+                      value={field.value || ""}
+                    />
+                  </FormControl>
+                  <p className="text-[13px] leading-snug text-gray-600">
+                    {t("linkYourVintedAccount")}
+                  </p>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </section>
+
+          {/* Photos */}
+          <section className={SECTION}>
+            <div className="space-y-2">
+              <h2 className={SECTION_LABEL}>{t("profilePhotos")}</h2>
+              <p className="text-[13px] leading-snug text-gray-600">{t("addPhotosMessage")}</p>
+            </div>
+
+            {uploadedPhotos.length > 0 && (
+              <div className="grid grid-cols-3 gap-3">
+                {uploadedPhotos.map((photoUrl, index) => (
+                  <div key={index} className="relative aspect-square">
+                    <img
+                      src={photoUrl}
+                      alt={`${t("profilePhoto")} ${index + 1}`}
+                      className="h-full w-full rounded-[20px] bg-gray-100 object-cover"
+                    />
+                    <button
+                      type="button"
+                      className="glass absolute right-1.5 top-1.5 flex h-8 w-8 items-center justify-center rounded-full text-gray-900"
+                      onClick={() => removePhoto(index)}
+                      aria-label={t("delete")}
+                      data-testid={`button-remove-photo-${index}`}
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {uploadedPhotos.length < 5 && (
+              <ObjectUploader
+                maxNumberOfFiles={5 - uploadedPhotos.length}
+                maxFileSize={5 * 1024 * 1024} // 5MB
+                onGetUploadParameters={handleGetUploadParameters}
+                onComplete={handleUploadComplete}
+                buttonClassName="h-12 w-full"
+              >
+                <Upload />
+                {t("uploadPhotos")} ({uploadedPhotos.length}/5)
+              </ObjectUploader>
+            )}
+          </section>
+
+          {/* Bio */}
+          <section className={SECTION}>
+            <FormField
+              control={form.control}
+              name="bio"
+              render={({ field }) => (
+                <FormItem className="space-y-3">
+                  <h2 className={SECTION_LABEL} aria-hidden="true">{t("aboutYou")}</h2>
+                  <FormLabel className="sr-only">{t("aboutYou")}</FormLabel>
+                  <FormControl>
+                    <Textarea
+                      placeholder={t("tellAboutYourself")}
+                      className="min-h-[120px]"
+                      data-testid="textarea-bio"
+                      {...field}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </section>
+
+          {/* Kids Info */}
+          <section className={`${SECTION} ${isProfessional ? "hidden" : ""}`}>
+            <h2 className={SECTION_LABEL}>{t("aboutYourKids")}</h2>
+
+            <FormField
+              control={form.control}
+              name="kidsNumber"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t("numberOfKids")}</FormLabel>
+                  <FormControl>
+                    <Input
+                      type="number"
+                      inputMode="numeric"
+                      min="1"
+                      max="10"
+                      data-testid="input-kidsNumber"
+                      {...field}
+                      onChange={(e) => field.onChange(parseInt(e.target.value))}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            {/* Dynamic age and gender inputs for each kid */}
+            {(kidsNumber ?? 0) > 0 && (
+              <div className="space-y-3">
+                {Array.from({ length: kidsNumber || 1 }, (_, index) => {
+                  const gender = kidsGenders?.[index] || "";
+                  return (
+                    <div key={index} className="space-y-3 rounded-[20px] bg-gray-50 p-4">
+                      <h3 className="font-sans text-sm font-semibold tracking-normal text-gray-900">{t("kid")} {index + 1}</h3>
+                      <div className="flex items-end gap-3">
+                        <FormField
+                          control={form.control}
+                          name={`kidsAges.${index}` as any}
+                          render={() => (
+                            <FormItem className="w-24 shrink-0">
+                              <FormLabel>{t("age")}</FormLabel>
+                              <FormControl>
+                                <Input
+                                  type="number"
+                                  inputMode="numeric"
+                                  min="0"
+                                  max="18"
+                                  placeholder={t("age")}
+                                  data-testid={`input-kid-age-${index}`}
+                                  value={kidsAges?.[index] || ""}
+                                  onChange={(e) => {
+                                    const currentAges = form.getValues("kidsAges") || [];
+                                    const newAges = [...currentAges];
+                                    newAges[index] = e.target.value;
+                                    form.setValue("kidsAges", newAges);
+                                  }}
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={form.control}
+                          name={`kidsGenders.${index}` as any}
+                          render={() => (
+                            <FormItem className="min-w-0 flex-1">
+                              <div className="flex flex-wrap gap-2" role="group" aria-label={t("gender")} data-testid={`select-kid-gender-${index}`}>
+                                {([["male", t("kidBoy")], ["female", t("kidGirl")]] as const).map(([value, label]) => {
+                                  const active = gender === value;
+                                  return (
+                                    <button
+                                      key={value}
+                                      type="button"
+                                      className={`chip chip-lg ${active ? "chip-on pl-3" : ""}`}
+                                      aria-pressed={active}
+                                      onClick={() => {
                                         const currentGenders = form.getValues("kidsGenders") || [];
                                         const newGenders = [...currentGenders];
                                         newGenders[index] = value;
                                         form.setValue("kidsGenders", newGenders);
                                       }}
-                                      value={form.getValues("kidsGenders")?.[index] || ""}
-                                      data-testid={`select-kid-gender-${index}`}
+                                      data-testid={`chip-kid-gender-${index}-${value}`}
                                     >
-                                      <FormControl>
-                                        <SelectTrigger>
-                                          <SelectValue placeholder={t("select")} />
-                                        </SelectTrigger>
-                                      </FormControl>
-                                      <SelectContent>
-                                        <SelectItem value="male">{t("boy")}</SelectItem>
-                                        <SelectItem value="female">{t("girl")}</SelectItem>
-                                      </SelectContent>
-                                    </Select>
-                                    <FormMessage />
-                                  </FormItem>
-                                )}
-                              />
-                            </div>
-                          </div>
-                        ))}
+                                      {active && <Check className="h-4 w-4 text-pink-500" strokeWidth={2.6} />}
+                                      {label}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
                       </div>
                     </div>
-                  )}
-                </div>
+                  );
+                })}
+              </div>
+            )}
+          </section>
 
-                {/* Hobbies */}
-                <div className={`space-y-4 ${isProfessional ? "hidden" : ""}`}>
-                  <h3 className="text-lg font-medium">{t("hobbiesInterests")}</h3>
-                  
-                  <div className="flex gap-2">
-                    <Input
-                      placeholder={t("addHobby")}
-                      value={hobbiesInput}
-                      onChange={(e) => setHobbiesInput(e.target.value)}
-                      onKeyPress={(e) => {
-                        if (e.key === "Enter") {
-                          e.preventDefault();
-                          addHobby();
-                        }
-                      }}
-                      data-testid="input-hobby"
-                    />
-                    <Button
+          {/* Hobbies */}
+          <section className={`${SECTION} ${isProfessional ? "hidden" : ""}`}>
+            <h2 className={SECTION_LABEL}>{t("hobbiesInterests")}</h2>
+
+            {hobbies.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {hobbies.map((hobby, index) => (
+                  <span key={index} className="chip chip-lg chip-on pr-1.5">
+                    {hobby}
+                    <button
                       type="button"
-                      variant="outline"
-                      onClick={addHobby}
-                      data-testid="button-add-hobby"
+                      className="flex h-8 w-8 items-center justify-center rounded-full"
+                      onClick={() => removeHobby(hobby)}
+                      aria-label={`${t("delete")} ${hobby}`}
+                      data-testid={`button-remove-hobby-${index}`}
                     >
-                      <Plus className="h-4 w-4" />
-                    </Button>
-                  </div>
+                      <X className="h-4 w-4" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
 
-                  {(form.watch("hobbies")?.length || 0) > 0 && (
-                    <div className="flex flex-wrap gap-2">
-                      {form.watch("hobbies")?.map((hobby, index) => (
-                        <Badge key={index} variant="secondary" className="flex items-center gap-1">
-                          {hobby}
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            className="h-4 w-4 p-0 hover:bg-transparent"
-                            onClick={() => removeHobby(hobby)}
-                            data-testid={`button-remove-hobby-${index}`}
-                          >
-                            <X className="h-3 w-3" />
-                          </Button>
-                        </Badge>
-                      ))}
-                    </div>
-                  )}
-                </div>
+            <div className="flex gap-2">
+              <Input
+                placeholder={t("addHobby")}
+                aria-label={t("addHobby")}
+                value={hobbiesInput}
+                onChange={(e) => setHobbiesInput(e.target.value)}
+                onKeyPress={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    addHobby();
+                  }
+                }}
+                data-testid="input-hobby"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                className="h-12 w-12 shrink-0"
+                onClick={addHobby}
+                aria-label={t("addHobby")}
+                data-testid="button-add-hobby"
+              >
+                <Plus className="h-4 w-4" />
+              </Button>
+            </div>
+          </section>
 
-                <div className="flex gap-4">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="flex-1"
-                    onClick={() => setLocation("/profile")}
-                    data-testid="button-cancel"
-                  >
-                    {t("cancel")}
-                  </Button>
-                  <Button
-                    type="submit"
-                    className="flex-1 bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-600 hover:to-purple-700"
-                    disabled={updateMutation.isPending}
-                    data-testid="button-save"
-                  >
-                    {updateMutation.isPending ? t("saving") : t("saveChanges")}
-                  </Button>
-                </div>
-              </form>
-            </Form>
-          </CardContent>
-        </Card>
-      </div>
+          <div className="flex flex-col gap-2 pt-2">
+            <Button
+              type="submit"
+              size="lg"
+              className="w-full"
+              disabled={updateMutation.isPending}
+              data-testid="button-save"
+            >
+              {updateMutation.isPending ? t("saving") : t("saveChanges")}
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              className="w-full text-gray-600"
+              onClick={() => setLocation("/profile")}
+              data-testid="button-cancel"
+            >
+              {t("cancel")}
+            </Button>
+          </div>
+        </form>
+      </Form>
     </div>
   );
 }

@@ -125,52 +125,55 @@ export default function GooglePlacesAutocomplete({
     <div className={`relative ${className}`}>
       <div className="flex gap-2">
         <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+          <Search className="pointer-events-none absolute left-4 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-gray-500" aria-hidden="true" />
           <Input
             type="text"
             placeholder={placeholder || t("searchPlaceholder")}
             value={input}
             onChange={(e) => handleInputChange(e.target.value)}
             onFocus={() => predictions.length > 0 && setIsOpen(true)}
-            className="pl-10 rounded-full border-gray-200 focus:border-primary-pink focus:ring-primary-pink"
+            className={`pl-11 ${isLoading ? "pr-10" : ""}`}
             data-testid="input-address-search"
           />
           {isLoading && (
-            <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
-              <div className="animate-spin w-4 h-4 border-2 border-pink-500 border-t-transparent rounded-full" />
+            <div className="absolute right-4 top-1/2 -translate-y-1/2">
+              <div className="h-4 w-4 animate-spin rounded-full border-2 border-pink-500 border-t-transparent" />
             </div>
           )}
         </div>
         <Button
+          type="button"
           onClick={handleSearch}
           disabled={predictions.length === 0 || isLoading}
-          className="rounded-full px-6"
-          style={{
-            background: "linear-gradient(to right, var(--primary-pink), var(--accent-coral))"
-          }}
+          className="h-12 shrink-0"
           data-testid="button-search-address"
         >{t("search")}</Button>
       </div>
       {/* Autocomplete Dropdown */}
       {isOpen && predictions.length > 0 && (
-        <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 max-h-60 overflow-y-auto">
+        <div className="absolute left-0 right-0 top-full z-50 mt-2 max-h-64 overflow-y-auto rounded-2xl bg-white p-1.5 shadow-[0_16px_40px_rgba(23,17,31,0.16)]">
           {predictions.map((prediction, index) => (
-            <div
+            <button
+              type="button"
               key={prediction.place_id}
-              className="flex items-center gap-3 p-3 hover:bg-gray-50 cursor-pointer border-b last:border-b-0"
+              className="flex min-h-11 w-full items-center gap-3 rounded-xl px-2.5 py-2 text-left transition-colors hover:bg-gray-50 focus-visible:bg-gray-50 focus-visible:outline-none"
               onClick={() => handlePlaceSelect(prediction)}
               data-testid={`option-address-${index}`}
             >
-              <MapPin className="h-4 w-4 text-gray-400 flex-shrink-0" />
-              <div className="flex-1 min-w-0">
-                <div className="font-medium text-gray-900 truncate">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-purple-50" aria-hidden="true">
+                <MapPin className="h-4 w-4 text-purple-700" />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-semibold text-gray-900">
                   {prediction.structured_formatting?.main_text || prediction.description}
-                </div>
-                <div className="text-sm text-gray-500 truncate">
-                  {prediction.structured_formatting?.secondary_text || ''}
-                </div>
-              </div>
-            </div>
+                </span>
+                {prediction.structured_formatting?.secondary_text && (
+                  <span className="block truncate text-[13px] text-gray-600">
+                    {prediction.structured_formatting.secondary_text}
+                  </span>
+                )}
+              </span>
+            </button>
           ))}
         </div>
       )}

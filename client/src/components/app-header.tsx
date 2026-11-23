@@ -1,74 +1,64 @@
 import type { ReactNode } from "react";
-import { ArrowLeft, Settings } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { useLocation } from "wouter";
-import { Button } from "@/components/ui/button";
 import NotificationIcon from "@/components/notification-icon";
 import { useLanguage } from "@/contexts/LanguageContext";
-import heyMamaLogo from "@assets/logo_gradient_text-min_1757514869714.png";
 
 interface AppHeaderProps {
-  // Left action: back arrow (default), settings gear, or custom node
-  left?: "back" | "settings" | ReactNode;
-  // Back destination (default home)
+  // Page title. Tab roots use the large display title; pushed pages a compact one.
+  title?: string;
+  // Left action: "back" arrow, nothing (tab roots), or a custom node.
+  left?: "back" | "none" | ReactNode;
+  // Back destination (default: previous page, falling back to home)
   backTo?: string;
-  // Right action: defaults to the events calendar icon
+  // Right action: defaults to the notifications bell; pass null to hide it.
   right?: ReactNode;
-  // Floating variant used on top of the map
-  floating?: boolean;
+  // Keep the bar pinned while the page scrolls (default true)
+  sticky?: boolean;
+  className?: string;
 }
 
-// The ONE header shared by every page: glass bar, centered logo, an action on
-// each side. Keeps the app visually consistent from screen to screen.
-export default function AppHeader({ left = "back", backTo = "/", right, floating = false }: AppHeaderProps) {
+// The one header shared by every page. Two shapes:
+//   <AppHeader title="Eventi" left="none" right={…} />   tab root: big title
+//   <AppHeader title="Notifiche" />                      pushed page: back + title
+export default function AppHeader({ title, left = "back", backTo = "history", right, sticky = true, className = "" }: AppHeaderProps) {
   const [, setLocation] = useLocation();
   const { t } = useLanguage();
+  const isRoot = left === "none";
+
+  const goBack = () => {
+    if (backTo !== "history") return setLocation(backTo);
+    if (window.history.length > 1) window.history.back();
+    else setLocation("/");
+  };
 
   const leftNode =
     left === "back" ? (
-      <Button
-        variant="ghost"
-        size="icon"
-        className="rounded-full"
-        aria-label={t("back")}
-        onClick={() => (backTo === "history" ? window.history.back() : setLocation(backTo))}
-        data-testid="button-back"
-      >
-        <ArrowLeft className="h-5 w-5 text-gray-600" />
-      </Button>
-    ) : left === "settings" ? (
-      <Button
-        variant="ghost"
-        size="icon"
-        className="rounded-full"
-        aria-label={t("settingsTitle")}
-        onClick={() => setLocation("/settings")}
-        data-testid="button-settings"
-      >
-        <Settings className="h-5 w-5 text-gray-600" />
-      </Button>
-    ) : (
+      <button type="button" className="icon-btn" aria-label={t("back")} onClick={goBack} data-testid="button-back">
+        <ArrowLeft className="h-5 w-5" />
+      </button>
+    ) : isRoot ? null : (
       left
     );
 
-  const inner = (
-    <div className="flex items-center justify-between p-4">
-      <div className="w-10 flex justify-start">{leftNode}</div>
-      <img src={heyMamaLogo} alt="HeyMama" className="h-10 w-auto object-contain" />
-      <div className="w-10 flex justify-end">{right === undefined ? <NotificationIcon /> : right}</div>
-    </div>
-  );
-
-  if (floating) {
-    return (
-      <header className="absolute left-4 right-4 bg-white/90 backdrop-blur-xl shadow-lg rounded-2xl z-50 top-[calc(1rem_+_env(safe-area-inset-top))]">
-        {inner}
-      </header>
-    );
-  }
-
   return (
-    <header className="bg-white/85 backdrop-blur-xl shadow-sm sticky top-0 z-50">
-      {inner}
+    <header
+      className={`${sticky ? "sticky top-0" : ""} z-40 bg-gray-50/85 px-5 pb-3 backdrop-blur-xl ${className}`}
+      style={{ paddingTop: "calc(0.875rem + env(safe-area-inset-top))" }}
+    >
+      <div className="flex min-h-12 items-center gap-3">
+        {leftNode}
+        {title ? (
+          isRoot ? (
+            <h1 className="page-title min-w-0 flex-1 truncate">{title}</h1>
+          ) : (
+            <h1 className="min-w-0 flex-1 truncate font-display text-2xl font-semibold leading-none tracking-tight text-gray-900">{title}</h1>
+          )
+        ) : (
+          <span className="flex-1" />
+        )}
+        {right === undefined ? <NotificationIcon /> : right}
+      </div>
     </header>
   );
 }

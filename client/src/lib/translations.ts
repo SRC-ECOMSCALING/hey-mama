@@ -1,3 +1,9 @@
+import * as shellI18n from "./i18n/shell";
+import * as chatI18n from "./i18n/chat";
+import * as eventsI18n from "./i18n/events";
+import * as marketI18n from "./i18n/market";
+import * as accountI18n from "./i18n/account";
+
 export type Language = "en" | "it";
 
 export const translations = {
@@ -853,6 +859,12 @@ export const translations = {
     publishService: "Publish service",
     unknownSeller: "Unknown seller",
     deleteItemFailed: "Could not delete the item. Please try again.",
+    // Redesign strings, one file per area (client/src/lib/i18n/*)
+    ...shellI18n.en,
+    ...chatI18n.en,
+    ...eventsI18n.en,
+    ...marketI18n.en,
+    ...accountI18n.en,
   },
   it: {
     noMatchesHint: "Apri la mappa e invia una richiesta a una mamma vicina: ogni richiesta e risposta è gratuita.",
@@ -1706,6 +1718,11 @@ export const translations = {
     publishService: "Pubblica Servizio",
     unknownSeller: "Venditrice sconosciuta",
     deleteItemFailed: "Impossibile eliminare l'annuncio. Riprova.",
+    ...shellI18n.it,
+    ...chatI18n.it,
+    ...eventsI18n.it,
+    ...marketI18n.it,
+    ...accountI18n.it,
   },
 };
 

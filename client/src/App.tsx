@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect } from "react";
-import { Switch, Route, useLocation } from "wouter";
+import { Switch, Route, Redirect, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -22,11 +22,9 @@ import NotFound from "@/pages/not-found";
 // can prefetch them in the background right after startup: first navigation
 // is then instant instead of waiting for the chunk download.
 const pageLoaders = {
-  locations: () => import("@/pages/locations"),
   messages: () => import("@/pages/messages"),
   chat: () => import("@/pages/chat"),
   marketChat: () => import("@/pages/market-chat"),
-  matches: () => import("@/pages/matches"),
   marketplace: () => import("@/pages/marketplace"),
   addProduct: () => import("@/pages/add-product"),
   addService: () => import("@/pages/add-service"),
@@ -42,11 +40,9 @@ const pageLoaders = {
   notifications: () => import("@/pages/notifications"),
 };
 
-const Locations = lazy(pageLoaders.locations);
 const Messages = lazy(pageLoaders.messages);
 const Chat = lazy(pageLoaders.chat);
 const MarketChat = lazy(pageLoaders.marketChat);
-const Matches = lazy(pageLoaders.matches);
 const Marketplace = lazy(pageLoaders.marketplace);
 const AddProduct = lazy(pageLoaders.addProduct);
 const AddService = lazy(pageLoaders.addService);
@@ -62,9 +58,7 @@ const ForgotPassword = lazy(pageLoaders.forgotPassword);
 const Notifications = lazy(pageLoaders.notifications);
 
 // Routes that show the persistent bottom navigation
-const NAV_PATHS = new Set([
-  "/", "/locations", "/matches", "/messages", "/marketplace", "/events", "/profile", "/notifications",
-]);
+const NAV_PATHS = new Set(["/", "/events", "/messages", "/marketplace", "/profile"]);
 
 // Skeleton variant matching the page being loaded, so the placeholder already
 // has the right shape while a chunk downloads.
@@ -174,11 +168,13 @@ function Router() {
         <Switch>
           <Route path="/" component={Discover} />
           <Route path="/admin" component={Admin} />
-          <Route path="/locations" component={Locations} />
+          {/* Places and professionals are layers of Esplora now */}
+          <Route path="/locations"><Redirect to="/?layer=places" replace /></Route>
           <Route path="/messages" component={Messages} />
           <Route path="/chat/:matchId" component={Chat} />
           <Route path="/market-chat/:itemId/:otherUserId" component={MarketChat} />
-          <Route path="/matches" component={Matches} />
+          {/* Connections and messages share one "Chat" page */}
+          <Route path="/matches"><Redirect to="/messages" replace /></Route>
           <Route path="/marketplace" component={Marketplace} />
           <Route path="/marketplace/add" component={AddProduct} />
           <Route path="/services/add" component={AddService} />
@@ -205,7 +201,7 @@ function App() {
       <LanguageProvider>
         <TooltipProvider>
           <Toaster />
-          <div className="max-w-md mx-auto bg-white min-h-screen shadow-2xl relative overflow-hidden">
+          <div className="max-w-md mx-auto bg-background min-h-screen shadow-2xl relative overflow-hidden">
             <Router />
           </div>
         </TooltipProvider>

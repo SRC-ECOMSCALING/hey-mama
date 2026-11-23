@@ -1,11 +1,10 @@
 import { useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { Bell, UserPlus, Heart, MessageCircle, CalendarDays, Users, Sparkles } from "lucide-react";
+import { Bell, CalendarDays, ShoppingBag, ShieldCheck } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { it as itLocale } from "date-fns/locale";
 import AppHeader from "@/components/app-header";
-import { Button } from "@/components/ui/button";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { fill } from "@/lib/format";
@@ -28,7 +27,8 @@ interface NotificationItem {
 function targetFor(n: NotificationItem): string {
   switch (n.type) {
     case "connection_request":
-      return "/matches";
+      // Requests live in the Chat tab
+      return "/messages";
     case "match":
     case "message":
       return n.relatedId ? `/chat/${n.relatedId}` : "/messages";
@@ -44,16 +44,24 @@ function targetFor(n: NotificationItem): string {
   }
 }
 
-const ICONS: Record<string, typeof Bell> = {
-  connection_request: UserPlus,
-  match: Heart,
-  message: MessageCircle,
-  event: CalendarDays,
-  event_approved: CalendarDays,
-  event_rejected: CalendarDays,
-  event_rsvp: Users,
-  new_mom_nearby: Sparkles,
-};
+// Notifications about a thing rather than a person show a violet tile
+// instead of the sender's avatar.
+function tileIconFor(type: string): typeof Bell | null {
+  if (type === "event" || type.startsWith("event_")) return CalendarDays;
+  if (type.startsWith("marketplace")) return ShoppingBag;
+  return null;
+}
+
+type GroupKey = "today" | "week" | "earlier";
+
+function groupFor(createdAt: string, now: Date): GroupKey {
+  const d = new Date(createdAt);
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  if (d >= startOfToday) return "today";
+  const weekAgo = new Date(startOfToday);
+  weekAgo.setDate(weekAgo.getDate() - 6);
+  return d >= weekAgo ? "week" : "earlier";
+}
 
 export default function Notifications() {
   const [, setLocation] = useLocation();
@@ -94,65 +102,114 @@ export default function Notifications() {
     return fill(t(key), { name, province });
   };
 
-  return (
-    <div className="min-h-screen bg-gray-50 pb-nav">
-      <AppHeader right={null} />
-      <div className="px-4 pt-4 flex items-center justify-between">
-        <h1 className="text-xl font-bold text-gray-900">{t("notificationsTitle")}</h1>
-        {items.some((n) => !n.isRead) && (
-          <Button variant="ghost" size="sm" className="text-pink-600" onClick={() => markAll.mutate()} data-testid="button-mark-all-read">
-            {t("markAllRead")}
-          </Button>
-        )}
-      </div>
+  const now = new Date();
+  const groups: { key: GroupKey; label: string; rows: NotificationItem[] }[] = [
+    { key: "today", label: t("notifGroupToday"), rows: [] },
+    { key: "week", label: t("notifGroupThisWeek"), rows: [] },
+    { key: "earlier", label: t("notifGroupEarlier"), rows: [] },
+  ];
+  for (const n of items) {
+    groups.find((g) => g.key === groupFor(n.createdAt, now))?.rows.push(n);
+  }
 
-      <div className="p-4 space-y-2">
+  const avatarFor = (n: NotificationItem) => {
+    const TileIcon = tileIconFor(n.type);
+    if (TileIcon) {
+      return (
+        <span className="flex h-[46px] w-[46px] shrink-0 items-center justify-center rounded-[14px] bg-purple-50" aria-hidden="true">
+          <TileIcon className="h-5 w-5 text-purple-700" strokeWidth={1.9} />
+        </span>
+      );
+    }
+    if (n.sender?.photoUrl) {
+      return <img src={n.sender.photoUrl} alt="" className="h-[46px] w-[46px] shrink-0 rounded-full object-cover" loading="lazy" />;
+    }
+    return (
+      <span
+        className="flex h-[46px] w-[46px] shrink-0 items-center justify-center rounded-full bg-pink-100 font-display text-base font-semibold text-gray-900"
+        aria-hidden="true"
+      >
+        {n.sender?.name?.trim()?.[0]?.toUpperCase() ?? <Bell className="h-5 w-5 text-pink-500" strokeWidth={1.9} />}
+      </span>
+    );
+  };
+
+  const hasUnread = items.some((n) => !n.isRead);
+
+  return (
+    <div className="min-h-screen bg-gray-50 pb-10">
+      <AppHeader
+        title={t("notificationsTitle")}
+        right={
+          hasUnread ? (
+            <button
+              type="button"
+              className="inline-flex min-h-11 shrink-0 items-center whitespace-nowrap px-1 text-[13px] font-semibold text-pink-700"
+              onClick={() => markAll.mutate()}
+              data-testid="button-mark-all-read"
+            >
+              {t("markAsReadShort")}
+            </button>
+          ) : null
+        }
+      />
+
+      <main className="space-y-[22px] px-5 pt-2">
         {isLoading ? (
-          [1, 2, 3].map((i) => <div key={i} className="h-16 rounded-2xl skeleton-shimmer" />)
+          <div className="space-y-2.5">
+            {[1, 2, 3].map((i) => <div key={i} className="h-[74px] rounded-3xl skeleton-shimmer" />)}
+          </div>
         ) : items.length === 0 ? (
-          <div className="text-center py-16">
-            <div className="w-16 h-16 mx-auto rounded-full flex items-center justify-center mb-4" style={{ background: "linear-gradient(135deg, #fce7f3, #fbcfe8)" }}>
-              <Bell className="h-8 w-8" style={{ color: "var(--primary-pink)" }} />
+          <div className="flex flex-col items-center px-6 py-14 text-center">
+            <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-pink-50">
+              <Bell className="h-7 w-7 text-pink-500" aria-hidden="true" />
             </div>
-            <h3 className="font-semibold text-gray-900">{t("noNotifications")}</h3>
-            <p className="text-sm text-gray-500 mt-1 max-w-xs mx-auto">{t("noNotificationsHint")}</p>
+            <h2 className="font-display text-xl font-semibold text-gray-900">{t("noNotifications")}</h2>
+            <p className="mt-1.5 max-w-xs text-sm text-gray-600">{t("noNotificationsHint")}</p>
           </div>
         ) : (
-          items.map((n) => {
-            const Icon = ICONS[n.type] ?? Bell;
-            return (
-              <button
-                key={n.id}
-                onClick={() => setLocation(targetFor(n))}
-                className={`w-full text-left flex items-center gap-3 rounded-2xl p-3 border transition-colors ${
-                  n.isRead ? "bg-white border-gray-100" : "bg-pink-50/60 border-pink-100"
-                }`}
-                data-testid={`notification-${n.id}`}
-              >
-                <div className="relative shrink-0">
-                  {n.sender?.photoUrl ? (
-                    <img src={n.sender.photoUrl} alt="" className="w-11 h-11 rounded-full object-cover" loading="lazy" />
-                  ) : (
-                    <div className="w-11 h-11 rounded-full bg-pink-100 flex items-center justify-center">
-                      <Icon className="h-5 w-5 text-pink-500" />
-                    </div>
-                  )}
-                  <span className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-white shadow flex items-center justify-center">
-                    <Icon className="h-3 w-3 text-pink-500" />
-                  </span>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className={`text-sm ${n.isRead ? "text-gray-700" : "text-gray-900 font-medium"}`}>{textFor(n)}</p>
-                  <p className="text-xs text-gray-400 mt-0.5">
-                    {formatDistanceToNow(new Date(n.createdAt), { addSuffix: true, locale: language === "en" ? undefined : itLocale })}
-                  </p>
-                </div>
-                {!n.isRead && <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: "var(--primary-pink)" }} />}
-              </button>
-            );
-          })
+          groups.filter((g) => g.rows.length > 0).map((g) => (
+            <section key={g.key} className="space-y-2.5" aria-label={g.label}>
+              <h2 className="section-label">{g.label}</h2>
+              <div className="card-float px-4 py-1">
+                {g.rows.map((n) => (
+                  <button
+                    key={n.id}
+                    type="button"
+                    onClick={() => setLocation(targetFor(n))}
+                    className="flex w-full items-center gap-3 border-b border-gray-100 py-3.5 text-left last:border-0"
+                    data-testid={`notification-${n.id}`}
+                  >
+                    {avatarFor(n)}
+                    <span className="flex min-w-0 flex-1 flex-col gap-[5px]">
+                      <span className={`text-sm leading-[1.35] ${n.isRead ? "text-gray-800" : "font-semibold text-gray-900"}`}>
+                        {textFor(n)}
+                      </span>
+                      <span className="text-xs font-medium leading-none text-gray-600">
+                        {formatDistanceToNow(new Date(n.createdAt), { addSuffix: true, locale: language === "en" ? undefined : itLocale })}
+                      </span>
+                    </span>
+                    {n.type === "connection_request" ? (
+                      <span className="inline-flex h-9 shrink-0 items-center rounded-full bg-pink-500 px-3.5 text-[13px] font-semibold text-white">
+                        {t("respond")}
+                      </span>
+                    ) : !n.isRead ? (
+                      <span role="img" aria-label={t("notifUnread")} className="h-2.5 w-2.5 shrink-0 rounded-full bg-pink-500" />
+                    ) : null}
+                  </button>
+                ))}
+              </div>
+            </section>
+          ))
         )}
-      </div>
+
+        {!isLoading && (
+          <p className="flex items-start gap-2.5 text-[13px] leading-[1.45] text-gray-600">
+            <ShieldCheck className="mt-px h-[18px] w-[18px] shrink-0 text-purple-600" aria-hidden="true" />
+            <span>{t("pushNotificationsDescription")}</span>
+          </p>
+        )}
+      </main>
     </div>
   );
 }
