@@ -13,3 +13,6 @@ HeyMama/
 .claude/
 research_notes/
 reports/
+
+# Signed store builds
+store-assets/android-release/
