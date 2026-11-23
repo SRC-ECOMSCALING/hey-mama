@@ -65,6 +65,18 @@ const LOCATION_CATEGORIES = [
   { value: "teatro", label: "🎭 Teatro" }, { value: "altro", label: "📍 Altro" },
 ];
 
+// What a report is about, as shown in the Segnalazioni table
+const REPORT_TYPE_LABELS: Record<string, string> = {
+  profile: "Profilo",
+  marketplace_item: "Annuncio",
+  service: "Servizio",
+  message: "Messaggio",
+  review: "Recensione",
+  event: "Evento",
+  location: "Luogo",
+  connection_request: "Richiesta di connessione",
+};
+
 type SectionKey = "dashboard" | "users" | "admins" | "test" | "locations" | "events" | "marketplace" | "services" | "reports" | "settings";
 const NAV: { key: SectionKey; label: string; icon: typeof Home }[] = [
   { key: "dashboard", label: "Dashboard", icon: BarChart3 },
@@ -887,7 +899,7 @@ export default function Admin() {
                         <TableCell className="hidden md:table-cell">
                           {r.targetType === "user_block"
                             ? <Badge className="bg-red-100 text-red-700">blocco</Badge>
-                            : <Badge variant="outline" className="text-gray-600">{r.targetType}</Badge>}
+                            : <Badge variant="outline" className="text-gray-600">{REPORT_TYPE_LABELS[r.targetType] ?? r.targetType}</Badge>}
                         </TableCell>
                         <TableCell className="text-gray-600">{r.reason}</TableCell>
                         <TableCell className="hidden md:table-cell text-gray-500 truncate max-w-[14rem]">{r.details || "—"}</TableCell>

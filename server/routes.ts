@@ -857,7 +857,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   };
 
-  const REPORT_TARGET_TYPES = ["profile", "marketplace_item", "service", "message", "review", "user_block", "event"];
+  const REPORT_TARGET_TYPES = [
+    "profile", "marketplace_item", "service", "message", "review", "user_block", "event",
+    "location", "connection_request",
+  ];
 
   // Flag objectionable content
   app.post("/api/reports", requireAuth, async (req: any, res) => {
@@ -868,6 +871,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       if (!reason || typeof reason !== "string") {
         return res.status(400).json({ message: "reason is required" });
+      }
+      if (reportedUserId && reportedUserId === req.session.userId) {
+        return res.status(400).json({ message: "You cannot report your own content" });
       }
       const report = await storage.createReport({
         reporterId: req.session.userId,

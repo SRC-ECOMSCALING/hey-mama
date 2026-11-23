@@ -8,6 +8,8 @@ import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { fill } from "@/lib/format";
+import { useAuth } from "@/hooks/useAuth";
+import ReportBlockControls from "@/components/report-block";
 import type { Location, Review } from "@shared/schema";
 import barImage from "@assets/bar_1757514529485.jpg";
 import libraryImage from "@assets/library_1757514529486.jpg";
@@ -46,6 +48,7 @@ export default function LocationModal({ location, onClose }: LocationModalProps)
   const [visitedWith, setVisitedWith] = useState("");
   const { toast } = useToast();
   const { t } = useLanguage();
+  const { user } = useAuth();
 
   const { data: reviews = [], isLoading: reviewsLoading } = useQuery<ReviewWithProfile[]>({
     queryKey: ["/api/locations", location.id, "reviews"],
@@ -191,6 +194,17 @@ export default function LocationModal({ location, onClose }: LocationModalProps)
             {t("openInMaps")}
           </Button>
 
+          {/* Report the place itself (wrong, closed, not suitable…) */}
+          {location.addedByUserId !== user?.id && (
+            <ReportBlockControls
+              targetUserId={location.addedByUserId}
+              targetType="location"
+              targetId={location.id}
+              reportOnly
+              className="mt-2.5"
+            />
+          )}
+
           {/* Reviews */}
           <div className="mt-7">
             <div className="flex items-center justify-between gap-3">
@@ -263,6 +277,17 @@ export default function LocationModal({ location, onClose }: LocationModalProps)
                         )}
                         <p className="mt-1.5 text-sm text-gray-800">{review.comment}</p>
                       </div>
+                      {/* Report a review written by someone else */}
+                      {review.userId !== user?.id && (
+                        <ReportBlockControls
+                          targetUserId={review.userId}
+                          targetType="review"
+                          targetId={review.id}
+                          variant="icons"
+                          reportOnly
+                          className="-mr-2 -mt-2 shrink-0"
+                        />
+                      )}
                     </div>
                   </div>
                 ))

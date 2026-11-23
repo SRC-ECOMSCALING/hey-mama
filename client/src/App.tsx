@@ -38,6 +38,7 @@ const pageLoaders = {
   support: () => import("@/pages/support"),
   forgotPassword: () => import("@/pages/forgot-password"),
   notifications: () => import("@/pages/notifications"),
+  dataDeletion: () => import("@/pages/data-deletion"),
 };
 
 const Messages = lazy(pageLoaders.messages);
@@ -56,6 +57,7 @@ const Terms = lazy(pageLoaders.terms);
 const Support = lazy(pageLoaders.support);
 const ForgotPassword = lazy(pageLoaders.forgotPassword);
 const Notifications = lazy(pageLoaders.notifications);
+const DataDeletion = lazy(pageLoaders.dataDeletion);
 
 // Routes that show the persistent bottom navigation
 const NAV_PATHS = new Set(["/", "/events", "/messages", "/marketplace", "/profile"]);
@@ -143,6 +145,9 @@ function Router() {
           <Route path="/privacy" component={Privacy} />
           <Route path="/terms" component={Terms} />
           <Route path="/support" component={Support} />
+          {/* Store-required public pages: how to delete the account / some data */}
+          <Route path="/delete-account"><DataDeletion mode="account" /></Route>
+          <Route path="/delete-data"><DataDeletion mode="data" /></Route>
           <Route path="/register" component={Register} />
           <Route path="/forgot-password" component={ForgotPassword} />
           <Route path="/login" component={Login} />
@@ -186,6 +191,8 @@ function Router() {
           <Route path="/privacy" component={Privacy} />
           <Route path="/terms" component={Terms} />
           <Route path="/support" component={Support} />
+          <Route path="/delete-account"><DataDeletion mode="account" /></Route>
+          <Route path="/delete-data"><DataDeletion mode="data" /></Route>
           <Route component={NotFound} />
         </Switch>
         </div>

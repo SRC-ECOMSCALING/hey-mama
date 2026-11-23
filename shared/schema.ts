@@ -491,7 +491,7 @@ export const reports = pgTable("reports", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   reporterId: varchar("reporter_id").notNull(),
   reportedUserId: varchar("reported_user_id"), // user the content belongs to, if known
-  targetType: varchar("target_type").notNull(), // 'profile' | 'marketplace_item' | 'service' | 'message' | 'review' | 'user_block'
+  targetType: varchar("target_type").notNull(), // 'profile' | 'marketplace_item' | 'service' | 'message' | 'review' | 'event' | 'location' | 'connection_request' | 'user_block'
   targetId: varchar("target_id"), // id of the reported content, if any
   reason: varchar("reason").notNull(), // 'inappropriate' | 'spam' | 'harassment' | 'scam' | 'other' | 'blocked'
   details: text("details"),

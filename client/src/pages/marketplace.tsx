@@ -850,6 +850,14 @@ export default function Marketplace() {
                         </div>
                         {renderServiceTags(service.serviceType, service.ageGroups)}
                         <p className="mt-3 line-clamp-2 text-sm leading-relaxed text-gray-600">{service.description}</p>
+                        {/* Report / block the provider (App Store 1.2) */}
+                        <ReportBlockControls
+                          targetUserId={service.providerId}
+                          targetType="service"
+                          targetId={service.id}
+                          variant="icons"
+                          className="-ml-2.5 mt-1"
+                        />
                         <div className="mt-3.5 flex items-center justify-between gap-3">
                           <p className="flex min-w-0 items-center gap-1.5 text-xs text-gray-600">
                             <MapPin className="h-3.5 w-3.5 shrink-0" />

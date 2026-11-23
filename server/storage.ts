@@ -10,6 +10,7 @@ import {
   messages,
   swipes,
   locations,
+  uploadedImages,
   reviews,
   marketplaceItems,
   marketplaceMessages,
@@ -1130,6 +1131,15 @@ export class DatabaseStorage implements IStorage {
   async deleteUserCompletely(userId: string): Promise<void> {
     // Remove all data owned by / referencing the user, then the user itself.
     // No FK constraints in this schema, so order is not critical.
+    // Photos she uploaded (profile pictures, listing pictures): remember their
+    // ids now, delete the files once nothing else points at them.
+    const [ownProfile] = await this.db.select({ photoUrls: profiles.photoUrls }).from(profiles).where(eq(profiles.userId, userId));
+    const ownItems = await this.db.select({ imageUrls: marketplaceItems.imageUrls }).from(marketplaceItems).where(eq(marketplaceItems.sellerId, userId));
+    const uploadIds = Array.from(new Set(
+      [...(ownProfile?.photoUrls ?? []), ...ownItems.flatMap((i) => i.imageUrls ?? [])]
+        .map((url) => /\/uploads\/([0-9a-fA-F-]{36})/.exec(url)?.[1])
+        .filter((id): id is string => !!id),
+    ));
     await this.db.delete(notifications).where(or(eq(notifications.recipientId, userId), eq(notifications.senderId, userId)));
     await this.db.delete(savedItems).where(eq(savedItems.userId, userId));
     await this.db.delete(reviews).where(eq(reviews.userId, userId));
@@ -1153,7 +1163,26 @@ export class DatabaseStorage implements IStorage {
     await this.db.delete(connectionDeclines).where(or(eq(connectionDeclines.userId, userId), eq(connectionDeclines.declinedUserId, userId)));
     await this.db.delete(pushTokens).where(eq(pushTokens.userId, userId));
     await this.db.delete(profiles).where(eq(profiles.userId, userId));
+    // Approved places she suggested stay on the map, without a link to her
+    await this.db.update(locations).set({ addedByUserId: null }).where(eq(locations.addedByUserId, userId));
     await this.db.delete(users).where(eq(users.id, userId));
+
+    // Uploaded pictures, unless another profile or listing still shows the same file
+    for (const id of uploadIds) {
+      try {
+        const like = `%${id}%`;
+        const [stillUsed] = await this.db.select({ id: profiles.id }).from(profiles)
+          .where(sql`array_to_string(${profiles.photoUrls}, ',') like ${like}`).limit(1);
+        const [stillListed] = await this.db.select({ id: marketplaceItems.id }).from(marketplaceItems)
+          .where(sql`array_to_string(${marketplaceItems.imageUrls}, ',') like ${like}`).limit(1);
+        if (!stillUsed && !stillListed) {
+          await this.db.delete(uploadedImages).where(eq(uploadedImages.id, id));
+        }
+      } catch (error) {
+        // The account is already gone: a leftover picture must not fail the request
+        console.error("Uploaded image cleanup failed:", id, error);
+      }
+    }
   }
 
   async getServicesByType(serviceType: string): Promise<Service[]> {

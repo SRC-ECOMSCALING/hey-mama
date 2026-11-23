@@ -12,11 +12,20 @@ import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useLanguage } from "@/contexts/LanguageContext";
 
-export type ReportTargetType = "profile" | "marketplace_item" | "service" | "message" | "review" | "event";
+export type ReportTargetType =
+  | "profile"
+  | "marketplace_item"
+  | "service"
+  | "message"
+  | "review"
+  | "event"
+  | "location"
+  | "connection_request";
 
 interface ReportBlockControlsProps {
-  // The user the content belongs to (and who gets blocked)
-  targetUserId: string;
+  // The user the content belongs to (and who gets blocked). When unknown
+  // (e.g. a place imported by the team) only "report" is offered.
+  targetUserId?: string | null;
   targetType: ReportTargetType;
   // Id of the specific content being reported (item id, match id, …)
   targetId?: string;
@@ -24,6 +33,8 @@ interface ReportBlockControlsProps {
   onBlocked?: () => void;
   // "buttons" = full-width outline buttons; "icons" = compact icon buttons for headers
   variant?: "buttons" | "icons";
+  // Offer only "report", without "block" (reviews, places)
+  reportOnly?: boolean;
   className?: string;
 }
 
@@ -35,6 +46,7 @@ export default function ReportBlockControls({
   targetId,
   onBlocked,
   variant = "buttons",
+  reportOnly = false,
   className = "",
 }: ReportBlockControlsProps) {
   const { t } = useLanguage();
@@ -44,13 +56,14 @@ export default function ReportBlockControls({
   const [blockOpen, setBlockOpen] = useState(false);
   const [reason, setReason] = useState("inappropriate");
   const [details, setDetails] = useState("");
+  const canBlock = !reportOnly && !!targetUserId;
 
   const reportMutation = useMutation({
     mutationFn: async () => {
       const res = await apiRequest("POST", "/api/reports", {
         targetType,
         targetId,
-        reportedUserId: targetUserId,
+        reportedUserId: targetUserId || undefined,
         reason,
         details,
       });
@@ -106,17 +119,19 @@ export default function ReportBlockControls({
           >
             <Flag strokeWidth={1.9} />
           </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="text-destructive [&_svg]:size-5"
-            onClick={() => setBlockOpen(true)}
-            title={t("blockUserAction")}
-            aria-label={t("blockUserAction")}
-            data-testid="button-block"
-          >
-            <Ban strokeWidth={1.9} />
-          </Button>
+          {canBlock && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="text-destructive [&_svg]:size-5"
+              onClick={() => setBlockOpen(true)}
+              title={t("blockUserAction")}
+              aria-label={t("blockUserAction")}
+              data-testid="button-block"
+            >
+              <Ban strokeWidth={1.9} />
+            </Button>
+          )}
         </div>
       ) : (
         <div className={`flex gap-2.5 ${className}`}>
@@ -129,15 +144,17 @@ export default function ReportBlockControls({
             <Flag strokeWidth={1.9} />
             <span className="truncate">{t("reportContentAction")}</span>
           </Button>
-          <Button
-            variant="outline"
-            className="min-w-0 flex-1 px-3 text-destructive"
-            onClick={() => setBlockOpen(true)}
-            data-testid="button-block"
-          >
-            <Ban strokeWidth={1.9} />
-            <span className="truncate">{t("blockUserAction")}</span>
-          </Button>
+          {canBlock && (
+            <Button
+              variant="outline"
+              className="min-w-0 flex-1 px-3 text-destructive"
+              onClick={() => setBlockOpen(true)}
+              data-testid="button-block"
+            >
+              <Ban strokeWidth={1.9} />
+              <span className="truncate">{t("blockUserAction")}</span>
+            </Button>
+          )}
         </div>
       )}
 

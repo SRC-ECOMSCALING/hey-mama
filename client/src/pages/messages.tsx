@@ -299,6 +299,16 @@ export default function Messages() {
                         {details && <p className="truncate text-[13px] leading-tight text-gray-600">{details}</p>}
                         <ActivityBadge isOnline={req.profile?.isOnline} activityBand={req.profile?.activityBand} variant="text" />
                       </div>
+                      {/* Report / block whoever sent the request (App Store 1.2) */}
+                      {req.profile && (
+                        <ReportBlockControls
+                          targetUserId={req.profile.userId}
+                          targetType="connection_request"
+                          targetId={req.id}
+                          variant="icons"
+                          className="-mr-2 shrink-0 self-start"
+                        />
+                      )}
                     </div>
                     {req.message && (
                       <p
