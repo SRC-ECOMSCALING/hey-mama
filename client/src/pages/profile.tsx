@@ -11,7 +11,7 @@ import { fill } from "@/lib/format";
 import PageSkeleton from "@/components/page-skeleton";
 import AppHeader from "@/components/app-header";
 import PhotoCarousel from "@/components/photo-carousel";
-import InstagramLink from "@/components/instagram-link";
+import ProfileLinks from "@/components/profile-links";
 
 const CURRENT_USER_ID = "current-user";
 
@@ -277,7 +277,7 @@ export default function Profile() {
               )}
 
               {profile.bio && <p className="mt-4 whitespace-pre-line px-1 text-[15px] leading-relaxed text-gray-800">{profile.bio}</p>}
-              {profile.instagramUrl && <InstagramLink url={profile.instagramUrl} className="mt-4" />}
+              <ProfileLinks vintedUrl={profile.vintedUrl} instagramUrl={profile.instagramUrl} className="mt-4" />
 
               <p className="mt-6 px-1 text-center text-[13px] leading-snug text-gray-600">{t("profilePreviewHint")}</p>
             </div>
