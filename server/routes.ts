@@ -20,6 +20,7 @@ import connectPgSimple from "connect-pg-simple";
 import cookieSignature from "cookie-signature";
 import { emailService } from "./emailService";
 import { importOsmParks } from "./osmImport";
+import { normalizeInstagramUrl } from "@shared/instagram";
 import { pool } from "./db";
 import multer from "multer";
 import { parse } from "csv-parse/sync";
@@ -1059,7 +1060,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (userId !== req.session.userId) {
         return res.status(403).json({ message: "Unauthorized to update this profile" });
       }
-      
+
+      if (updateData.instagramUrl !== undefined) {
+        const instagramUrl = normalizeInstagramUrl(updateData.instagramUrl);
+        if (instagramUrl === null) {
+          return res.status(400).json({ message: "Invalid Instagram profile", code: "invalid_instagram" });
+        }
+        updateData.instagramUrl = instagramUrl || null;
+      }
+
       const updatedProfile = await storage.updateProfile(userId, updateData);
       if (!updatedProfile) {
         // Legacy account with no profile row: create it from the provided data

@@ -59,6 +59,7 @@ export const profiles = pgTable("profiles", {
   kidsGenders: text("kids_genders").array(),
   hobbies: text("hobbies").array().notNull(), // Renamed from interests to match requirement
   vintedUrl: text("vinted_url"), // Vinted account URL
+  instagramUrl: text("instagram_url"), // Canonical Instagram profile URL (shared/instagram.ts)
   distanceAway: text("distance_away").notNull(),
   dailySwipesUsed: integer("daily_swipes_used").default(0).notNull(),
   lastSwipeResetDate: text("last_swipe_reset_date").default("").notNull(),

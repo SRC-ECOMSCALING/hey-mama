@@ -4,6 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { updateProfileSchema, type UpdateProfile, type Profile } from "@shared/schema";
+import { normalizeInstagramUrl } from "@shared/instagram";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
@@ -73,6 +74,7 @@ export default function ProfileEdit() {
       kidsGenders: profile?.kidsGenders || [],
       hobbies: profile?.hobbies || [],
       vintedUrl: profile?.vintedUrl || "",
+      instagramUrl: profile?.instagramUrl || "",
       businessName: profile?.businessName || "",
       professionalCategory: profile?.professionalCategory || "",
     },
@@ -96,6 +98,7 @@ export default function ProfileEdit() {
         kidsGenders: profile.kidsGenders,
         hobbies: profile.hobbies,
         vintedUrl: profile.vintedUrl,
+        instagramUrl: profile.instagramUrl || "",
         businessName: profile.businessName || "",
         professionalCategory: profile.professionalCategory || "",
       });
@@ -180,8 +183,14 @@ export default function ProfileEdit() {
   };
 
   const onSubmit = (data: UpdateProfile) => {
+    const instagramUrl = normalizeInstagramUrl(data.instagramUrl);
+    if (instagramUrl === null) {
+      form.setError("instagramUrl", { message: t("instagramInvalid") });
+      return;
+    }
     updateMutation.mutate({
       ...data,
+      instagramUrl: instagramUrl || null,
       photoUrls: uploadedPhotos,
     });
   };
@@ -408,6 +417,31 @@ export default function ProfileEdit() {
                   </FormControl>
                   <p className="text-[13px] leading-snug text-gray-600">
                     {t("linkYourVintedAccount")}
+                  </p>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="instagramUrl"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t("instagramLabel")}</FormLabel>
+                  <FormControl>
+                    <Input
+                      autoCapitalize="none"
+                      autoCorrect="off"
+                      spellCheck={false}
+                      placeholder={t("instagramPlaceholder")}
+                      data-testid="input-instagram-url"
+                      {...field}
+                      value={field.value || ""}
+                    />
+                  </FormControl>
+                  <p className="text-[13px] leading-snug text-gray-600">
+                    {t("instagramHint")}
                   </p>
                   <FormMessage />
                 </FormItem>

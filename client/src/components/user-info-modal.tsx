@@ -1,12 +1,13 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { MapPin, ExternalLink } from "lucide-react";
+import { MapPin, ExternalLink, Instagram } from "lucide-react";
 import type { Profile } from "@shared/schema";
 import { useLanguage } from "@/contexts/LanguageContext";
 import ReportBlockControls from "@/components/report-block";
 import PhotoCarousel from "@/components/photo-carousel";
 import ActivityBadge from "@/components/activity-badge";
 import type { PublicProfile } from "@shared/schema";
+import { instagramHandle } from "@shared/instagram";
 
 interface UserInfoModalProps {
   open: boolean;
@@ -118,6 +119,31 @@ export default function UserInfoModal({ open, onOpenChange, profile }: UserInfoM
               >
                 <span>{t("viewVintedProfile")}</span>
                 <ExternalLink className="h-4 w-4" />
+              </Button>
+            </div>
+          )}
+
+          {/* Instagram */}
+          {profile.instagramUrl && (
+            <div>
+              <h3 className="section-label font-sans tracking-normal">Instagram</h3>
+              <Button
+                asChild
+                variant="outline"
+                className="mt-2.5 w-full justify-between"
+              >
+                <a
+                  href={profile.instagramUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  data-testid="link-instagram"
+                >
+                  <span className="flex min-w-0 items-center gap-2">
+                    <Instagram className="h-4 w-4 shrink-0" />
+                    <span className="truncate">{instagramHandle(profile.instagramUrl)}</span>
+                  </span>
+                  <ExternalLink className="h-4 w-4" />
+                </a>
               </Button>
             </div>
           )}

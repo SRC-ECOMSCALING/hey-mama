@@ -1,15 +1,17 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ExternalLink, Eye, MapPin, Pencil, ShoppingBag, SlidersHorizontal, UserRound, X } from "lucide-react";
+import { ExternalLink, Eye, Instagram, MapPin, Pencil, ShoppingBag, SlidersHorizontal, UserRound, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Drawer, DrawerContent, DrawerDescription, DrawerTitle } from "@/components/ui/drawer";
 import { Link, useLocation } from "wouter";
 import type { Profile } from "@shared/schema";
+import { instagramHandle } from "@shared/instagram";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { fill } from "@/lib/format";
 import PageSkeleton from "@/components/page-skeleton";
 import AppHeader from "@/components/app-header";
 import PhotoCarousel from "@/components/photo-carousel";
+import InstagramLink from "@/components/instagram-link";
 
 const CURRENT_USER_ID = "current-user";
 
@@ -206,6 +208,23 @@ export default function Profile() {
             <ExternalLink className="h-[18px] w-[18px] shrink-0 text-gray-500" />
           </button>
         )}
+
+        {profile.instagramUrl && (
+          <a
+            href={profile.instagramUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="card-float flex h-[60px] w-full items-center gap-3 px-4 text-left"
+            data-testid="link-instagram-profile"
+          >
+            <Instagram className="h-5 w-5 shrink-0 text-gray-900" strokeWidth={1.9} />
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-[15px] font-semibold leading-tight text-gray-900">{instagramHandle(profile.instagramUrl)}</span>
+            </span>
+            <span className="text-sm font-medium text-gray-600">{t("instagramOpen")}</span>
+            <ExternalLink className="h-[18px] w-[18px] shrink-0 text-gray-500" />
+          </a>
+        )}
       </main>
 
       {/* The profile as other moms see it on the map */}
@@ -258,6 +277,7 @@ export default function Profile() {
               )}
 
               {profile.bio && <p className="mt-4 whitespace-pre-line px-1 text-[15px] leading-relaxed text-gray-800">{profile.bio}</p>}
+              {profile.instagramUrl && <InstagramLink url={profile.instagramUrl} className="mt-4" />}
 
               <p className="mt-6 px-1 text-center text-[13px] leading-snug text-gray-600">{t("profilePreviewHint")}</p>
             </div>

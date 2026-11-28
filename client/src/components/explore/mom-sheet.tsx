@@ -7,6 +7,7 @@ import ActivityBadge from "@/components/activity-badge";
 import PhotoCarousel from "@/components/photo-carousel";
 import PhotoOrInitial from "@/components/photo-or-initial";
 import ReportBlockControls from "@/components/report-block";
+import InstagramLink from "@/components/instagram-link";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { fill } from "@/lib/format";
 import type { TranslationKey } from "@/lib/translations";
@@ -186,6 +187,7 @@ export default function MomSheet({ profile, me, state, incoming, isSending, onCl
               )}
 
               {p.bio && <p className="mt-4 px-1 text-[15px] leading-relaxed text-gray-800">{p.bio}</p>}
+              {p.instagramUrl && <InstagramLink url={p.instagramUrl} className="mt-4" />}
             </div>
 
             <div className="px-5 pb-[calc(1.25rem_+_env(safe-area-inset-bottom))] pt-2">

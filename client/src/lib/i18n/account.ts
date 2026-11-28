@@ -39,6 +39,12 @@ export const en = {
   profilePreviewHint: "This is how other moms see you on the map.",
   profileMissingTitle: "Your profile is still empty",
   profileMissingHint: "Add a few details so the other moms can find you.",
+  // Instagram link
+  instagramLabel: "Instagram profile (optional)",
+  instagramPlaceholder: "@yourname or profile link",
+  instagramHint: "Other moms can open your Instagram profile from yours.",
+  instagramInvalid: "Enter a valid Instagram username or profile link.",
+  instagramOpen: "Open on Instagram",
   // Settings
   settingsGroupNotifications: "Notifications and presence",
   settingsGroupPreferences: "Preferences",
@@ -89,6 +95,12 @@ export const it: typeof en = {
   profilePreviewHint: "Così ti vedono le altre mamme sulla mappa.",
   profileMissingTitle: "Il tuo profilo è ancora vuoto",
   profileMissingHint: "Aggiungi qualche dato per farti trovare dalle altre mamme.",
+  // Link Instagram
+  instagramLabel: "Profilo Instagram (opzionale)",
+  instagramPlaceholder: "@tuonome oppure link al profilo",
+  instagramHint: "Le altre mamme potranno aprire il tuo profilo Instagram dal tuo.",
+  instagramInvalid: "Inserisci un nome utente o un link Instagram valido.",
+  instagramOpen: "Apri su Instagram",
   // Impostazioni
   settingsGroupNotifications: "Notifiche e presenza",
   settingsGroupPreferences: "Preferenze",
